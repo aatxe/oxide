@@ -1,7 +1,7 @@
 # Rust1 - the heap
 
-Rust1 is an extension of Rust0 that adds access to the heap. This makes it possible to write some of
-the typical functional programs.
+Rust1 is an extension of Rust0 that adds access to the heap via the type `Box<T>`. This makes it
+possible to write more typical functional programs and data structures.
 
 ## Examples
 
