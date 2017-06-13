@@ -21,3 +21,30 @@ impl<T> Option<T> {
     }
 }
 ```
+
+### An example using associated types
+
+```rust
+trait Eq<Rhs = Self> {
+    fn eq(&self, other: &Rhs) -> bool;
+
+    fn ne(&self, other: &Rhs) -> bool {
+        !self.eq(other)
+    }
+}
+
+struct Foo;
+struct Bar;
+
+impl Eq for Foo {
+    fn eq(&self, _: &Foo) -> bool {
+        true
+    }
+}
+
+impl Eq<Bar> for Foo {
+    fn eq(&self, _: &Bar) -> bool {
+        false
+    }
+}
+```
