@@ -48,3 +48,54 @@ impl Eq<Bar> for Foo {
     }
 }
 ```
+
+### Sorting for fixed-size arrays
+
+```rust
+trait Cmp {
+    fn leq(&self, rhs: &Self) -> bool;
+}
+
+fn sort<T>(data: &mut [T]) where T: Cmp {
+    for i in 1 .. data.len() {
+        let mut j = i;
+        while j > 0 && !(data[j - 1].leq(&data[j])) {
+            data.swap(j, j - 1);
+            j -= 1;
+        }
+    }
+}
+
+#[derive(Debug)]
+enum Thing {
+    A,
+    B,
+    C,
+    D,
+    E,
+}
+
+impl Cmp for Thing {
+    fn leq(&self, rhs: &Thing) -> bool {
+        match self {
+            &Thing::A => true,
+            &Thing::B => match rhs {
+                &Thing::A => false,
+                _ => true,
+            },
+            &Thing::C => match rhs {
+                &Thing::A | &Thing::B => false,
+                _ => true,
+            },
+            &Thing::D => match rhs {
+                &Thing::A | &Thing::B | &Thing::C => false,
+                _ => true,
+            },
+            &Thing::E => match rhs {
+                &Thing::A | &Thing::B | &Thing::C | &Thing::D => false,
+                _ => true,
+            }
+        }
+    }
+}
+```
