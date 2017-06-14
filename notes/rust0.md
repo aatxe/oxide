@@ -22,6 +22,15 @@ impl<T> Option<T> {
 }
 ```
 
+### An example of higher-order functions
+
+```rust
+fn map_tup<A, B, F>(tup: (A, A, A), func: F) -> (B, B, B) where F: Fn(A) -> B {
+    let (a, b, c) = tup;
+    (func(a), func(b), func(c))
+}
+```
+
 ### An example using associated types
 
 ```rust
