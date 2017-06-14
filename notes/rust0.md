@@ -6,7 +6,7 @@ Rust0 is the safe core of the Rust language.
 
 n.b. this is currently a work-in-progress.
 
-```rust
+```
 id ::= identifiers
 SN ::= struct names
 CN ::= constructor names
@@ -36,11 +36,12 @@ arg ::= id: T
 s ::= struct SN<T_1, ..., T_n> { arg* }
     | type T = V
     | fn<T_1, ..., T_n> id(arg*) -> T where T_1: bound, ..., T_n: bound { e }
-    | enum SN<T_1, ..., T_n> { CN(id*)* }
+    | enum SN<T_1, ..., T_n> where T_1: bound, ..., T_n: bound { CN(id*)* }
 
 tl ::= s
-     | impl<T_1, ..., T_n) SN where T_1: bound, ..., T_n: bound
-     | impl<T_1, ..., T_n) TN for SN where T_1: bound, ..., T_n: bound
+     | impl<T_1, ..., T_n) SN where T_1: bound, ..., T_n: bound { s* }
+     | impl<T_1, ..., T_n) TN for SN where T_1: bound, ..., T_n: bound { s* }
+     | trait TN<T_1, ... T_n> where T_1: bound, ..., T_n: bound { s* }
 ```
 
 ## Examples
