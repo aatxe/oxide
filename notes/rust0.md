@@ -66,7 +66,6 @@ fn sort<T>(data: &mut [T]) where T: Cmp {
     }
 }
 
-#[derive(Debug)]
 enum Thing {
     A,
     B,
