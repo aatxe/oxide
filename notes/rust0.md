@@ -2,6 +2,47 @@
 
 Rust0 is the safe core of the Rust language.
 
+## Syntax
+
+n.b. this is currently a work-in-progress.
+
+```rust
+id ::= identifiers
+SN ::= struct names
+CN ::= constructor names
+TN ::= trait names
+T_i ::= type variables
+
+T, V ::= SN
+       | &T
+       | (T_1, ..., T_n)
+
+pat ::= id
+      | CN(id*)
+
+arm ::= pat => e
+
+e ::= SN
+    | SN::CN(e*)
+    | e_1; e_2
+    | { e }
+    | let id = e
+    | (e_1, e_2, ..., e_n)
+    | (e)
+    | match e { arm* }
+
+arg ::= id: T
+
+s ::= struct SN<T_1, ..., T_n> { arg* }
+    | type T = V
+    | fn<T_1, ..., T_n> id(arg*) -> T where T_1: bound, ..., T_n: bound { e }
+    | enum SN<T_1, ..., T_n> { CN(id*)* }
+
+tl ::= s
+     | impl<T_1, ..., T_n) SN where T_1: bound, ..., T_n: bound
+     | impl<T_1, ..., T_n) TN for SN where T_1: bound, ..., T_n: bound
+```
+
 ## Examples
 
 ### A type for optional values
