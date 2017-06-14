@@ -24,6 +24,8 @@ arm ::= pat => e
 
 e ::= SN
     | SN::CN(e*)
+    | id
+    | e_1.id(e*)
     | e_1; e_2
     | { e }
     | let id = e
