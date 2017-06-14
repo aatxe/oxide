@@ -25,6 +25,8 @@ e ::= SN
     | id
     | e_1.id(e*)
     | id(e*)
+    | *e
+    | &e
     | e_1; e_2
     | { e }
     | let id = e
