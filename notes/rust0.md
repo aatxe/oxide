@@ -4,8 +4,6 @@ Rust0 is the safe core of the Rust language.
 
 ## Syntax
 
-n.b. this is currently a work-in-progress.
-
 ```
 id ::= identifiers
 SN ::= struct names
