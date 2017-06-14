@@ -99,3 +99,23 @@ impl Cmp for Thing {
     }
 }
 ```
+
+### An example using explicit lifetime annotations.
+
+```rust
+struct RefPair<'a, 'b, L, R>(&'a L, &'b R) where L: 'a, R: 'b;
+
+impl<'a, 'b, L, R> RefPair<'a, 'b, L, R> {
+    fn new(left: &'a L, right: &'b R) -> RefPair<'a, 'b, L, R> {
+        RefPair(left, right)
+    }
+
+    fn left(&self) -> &'a L {
+        self.0
+    }
+
+    fn right(&self) -> &'b R {
+        self.1
+    }
+}
+```
