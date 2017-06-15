@@ -5,7 +5,7 @@ possible to write programs that mutate in several places.
 
 ## Examples
 
-### A Peano number counter with interior mutability.
+### A Peano number counter with interior mutability
 
 ```rust
 enum Num {
