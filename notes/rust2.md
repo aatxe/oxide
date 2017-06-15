@@ -5,6 +5,8 @@ possible for multiple structures to reference the same data simultaneously.
 
 ## Examples
 
+### A duplicatable counter with `usize`.
+
 ```rust
 struct Counter(Rc<usize>);
 
