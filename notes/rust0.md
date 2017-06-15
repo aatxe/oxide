@@ -20,7 +20,9 @@ pat ::= id
 
 arm ::= pat => e
 
-e ::= SN
+kv ::= id: e
+
+e ::= SN { kv* }
     | SN::CN(e*)
     | id
     | e_1.id(e*)
