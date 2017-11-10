@@ -42,15 +42,13 @@
   (x ::= variable-not-otherwise-mentioned))
 
 ;; syntactic tests
-(test-equal (redex-match Core e (term (λ (x) x)))
-            #f)
-(test-equal (length (redex-match Core e (term (λ (x unit) x))))
-            1)
-(test-equal (length (redex-match Core e (term
-                                         (if (∨ (= 0 x) (= 255 x))
-                                             (λ (x num) x)
-                                             (λ (x num) (+ x 1))))))
-            1)
+(redex-chk
+ #:lang Core
+ #:f #:m e (λ (x) x)
+ #:m e (λ (x unit) x)
+ #:m e (if (∨ (= 0 x) (= 255 x))
+         (λ (x num) x)
+         (λ (x num) (+ x 1))))
 
 (define-extended-language Core-Ev Core
   (E ::=
