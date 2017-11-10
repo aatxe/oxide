@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require redex)
+(require redex
+         redex-chk)
 
 (define-language Core
   ;; expressions
@@ -11,7 +12,6 @@
      (e e)
      ;; identifiers
      x
-
      ;; branching
      (if e e e)
 
@@ -51,3 +51,108 @@
                                              (λ (x num) x)
                                              (λ (x num) (+ x 1))))))
             1)
+
+(define-extended-language Core-Ev Core
+  (E ::=
+     ;; application
+     (v E)
+     (E e)
+     ;; branching
+     (if E e e)
+
+     ;; primitive ops
+     (+ v E)
+     (+ E e)
+     (= v E)
+     (= E e)
+     (- E)
+     (∧ v E)
+     (∧ E e)
+     (∨ v E)
+     (∨ E e)
+     (¬ E)
+
+     hole)
+
+  (n ::= number)
+  (b ::=
+     true
+     false)
+
+  (v ::=
+     (λ (x t) e)
+     unit
+     number
+     true
+     false))
+
+(define-metafunction Core-Ev
+  Σ : number ... -> number
+  [(Σ number ...) ,(apply + (term (number ...)))])
+
+(define-metafunction Core-Ev
+  negative : number -> number
+  [(negative number) ,(- (term number))])
+
+(define -->Core
+  (reduction-relation
+   Core-Ev
+   #:domain e
+
+   (--> (in-hole E ((λ (x t) e) v))
+        (in-hole E (substitute e x v))
+        "E-App")
+
+   (--> (in-hole E (if true e_1 e_2))
+        (in-hole E e_1)
+        "E-IfTrue")
+   (--> (in-hole E (if false e_1 e_2))
+        (in-hole E e_2)
+        "E-IfFalse")
+
+   (--> (in-hole E (+ n_1 n_2))
+        (in-hole E (Σ n_1 n_2))
+        "E-Add")
+   (--> (in-hole E (= v v))
+        (in-hole E true)
+        "E-EqTrue")
+   (--> (in-hole E (= v_!_1 v_!_1))
+        (in-hole E false)
+        "E-EqFalse")
+   (--> (in-hole E (- n))
+        (in-hole E (negative n))
+        "E-Negative")
+
+   (--> (in-hole E (∧ true true))
+        (in-hole E true)
+        "E-TrueAndTrue")
+   (--> (in-hole E (∧ false b))
+        (in-hole E false)
+        "E-FalseAnd")
+   (--> (in-hole E (∧ true false))
+        (in-hole E false)
+        "E-TrueAndFalse")
+   (--> (in-hole E (∨ true b))
+        (in-hole E true)
+        "E-TrueOr")
+   (--> (in-hole E (∨ false true))
+        (in-hole E true)
+        "E-FalseOrTrue")
+   (--> (in-hole E (∨ false false))
+        (in-hole E false)
+        "E-FalseOrFalse")
+   (--> (in-hole E (¬ true))
+        (in-hole E false)
+        "E-NegTrue")
+   (--> (in-hole E (¬ false))
+        (in-hole E true)
+        "E-NegFalse")))
+
+(define-metafunction Core-Ev
+  eval : e -> v
+  [(eval e) ,(car (apply-reduction-relation* -->Core (term e)))])
+
+(redex-chk
+ (eval (∧ true true)) true
+ (eval ((λ (x num) (+ 1 x)) 3)) 4
+ (eval ((λ (x bool) (if x 1 0)) true)) 1)
