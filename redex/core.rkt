@@ -20,6 +20,12 @@
      ;; product projection (proj n (tup ...))
      (proj e e)
 
+     ;; sums
+     (inl e)
+     (inr e)
+     ;; sum elimination
+     (case e (inl x e) (inr x e))
+
      ;; base values
      number
      true
@@ -51,6 +57,11 @@
  #:f #:m e (λ (x) x)
  #:m e (λ (x (tup)) x)
  #:m e (tup)
+ #:m e (inl (tup))
+ #:m e (inr (tup))
+ #:m e (case (inl (tup))
+         (inl x x)
+         (inr x x))
  #:m e (if (∨ (= 0 x) (= 255 x))
          (λ (x num) x)
          (λ (x num) (+ x 1))))
@@ -68,6 +79,12 @@
      ;; product projection
      (proj E e)
      (proj v E)
+
+     ;; sums
+     (inl E)
+     (inr E)
+     ;; sum elimination
+     (case E (inl x e) (inr x e))
 
      ;; primitive ops
      (+ v E)
@@ -91,6 +108,8 @@
   (v ::=
      (λ (x t) e)
      (tup v ...)
+     (inl v)
+     (inr v)
      number
      true
      false))
@@ -130,6 +149,13 @@
    (--> (in-hole E (proj n (tup v ...)))
         (in-hole E (project n (tup v ...)))
         "E-ProjN")
+
+   (--> (in-hole E (case (inl v) (inl x_1 e_1) (inr x_2 e_2)))
+        (in-hole E (substitute e_1 x_1 v))
+        "E-CaseInl")
+   (--> (in-hole E (case (inr v) (inl x_1 e_1) (inr x_2 e_2)))
+        (in-hole E (substitute e_2 x_2 v))
+        "E-CaseInr")
 
    (--> (in-hole E (+ n_1 n_2))
         (in-hole E (Σ n_1 n_2))
@@ -177,4 +203,6 @@
  (eval (∧ true true)) true
  (eval ((λ (x num) (+ 1 x)) 3)) 4
  (eval ((λ (x bool) (if x 1 0)) true)) 1
- (eval (proj 2 (tup (if true 1 2) (if false 1 3)))) 3)
+ (eval (proj 2 (tup (if true 1 2) (if false 1 3)))) 3
+ (eval (case (inl (+ 1 1)) (inl x (+ x 1)) (inr x (+ x 2)))) 3
+ (eval (case (inr (+ 1 1)) (inl x (+ x 1)) (inr x (+ x 2)))) 4)
