@@ -21,7 +21,6 @@
      (proj e e)
 
      ;; base values
-     unit
      number
      true
      false
@@ -41,7 +40,6 @@
   (t ::=
      (→ t t)
      (tup t ...)
-     unit
      num
      bool)
 
@@ -51,7 +49,7 @@
 (redex-chk
  #:lang Core
  #:f #:m e (λ (x) x)
- #:m e (λ (x unit) x)
+ #:m e (λ (x (tup)) x)
  #:m e (tup)
  #:m e (if (∨ (= 0 x) (= 255 x))
          (λ (x num) x)
@@ -93,7 +91,6 @@
   (v ::=
      (λ (x t) e)
      (tup v ...)
-     unit
      number
      true
      false))
