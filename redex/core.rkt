@@ -15,6 +15,11 @@
      ;; branching
      (if e e e)
 
+     ;; products
+     (tup e ...)
+     ;; product projection (proj n (tup ...))
+     (proj e e)
+
      ;; base values
      unit
      number
@@ -35,6 +40,7 @@
   ;; types
   (t ::=
      (→ t t)
+     (tup t ...)
      unit
      num
      bool)
@@ -46,6 +52,7 @@
  #:lang Core
  #:f #:m e (λ (x) x)
  #:m e (λ (x unit) x)
+ #:m e (tup)
  #:m e (if (∨ (= 0 x) (= 255 x))
          (λ (x num) x)
          (λ (x num) (+ x 1))))
@@ -57,6 +64,12 @@
      (E e)
      ;; branching
      (if E e e)
+
+     ;; products
+     (tup v ... E e ...)
+     ;; product projection
+     (proj E e)
+     (proj v E)
 
      ;; primitive ops
      (+ v E)
@@ -79,6 +92,7 @@
 
   (v ::=
      (λ (x t) e)
+     (tup v ...)
      unit
      number
      true
@@ -91,6 +105,14 @@
 (define-metafunction Core-Ev
   negative : number -> number
   [(negative number) ,(- (term number))])
+
+(define-metafunction Core-Ev
+  project : number v -> v
+  [(project number (tup v ...)) ,(list-ref (term (v ...)) (- (term number) 1))])
+
+(redex-chk
+ (project 2 (tup 1 2 3 4)) 2
+ (project 3 (tup 1 2 3)) 3)
 
 (define -->Core
   (reduction-relation
@@ -107,6 +129,10 @@
    (--> (in-hole E (if false e_1 e_2))
         (in-hole E e_2)
         "E-IfFalse")
+
+   (--> (in-hole E (proj n (tup v ...)))
+        (in-hole E (project n (tup v ...)))
+        "E-ProjN")
 
    (--> (in-hole E (+ n_1 n_2))
         (in-hole E (Σ n_1 n_2))
@@ -153,4 +179,5 @@
 (redex-chk
  (eval (∧ true true)) true
  (eval ((λ (x num) (+ 1 x)) 3)) 4
- (eval ((λ (x bool) (if x 1 0)) true)) 1)
+ (eval ((λ (x bool) (if x 1 0)) true)) 1
+ (eval (proj 2 (tup (if true 1 2) (if false 1 3)))) 3)
