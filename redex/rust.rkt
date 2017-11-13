@@ -245,8 +245,8 @@
         (exec (tup) (env (flag_1 x_1 v_1) ... (mut x_t v_t) (flag_2 x_2 v_2) ...) κ prog)
         "E-Assign")
 
-   (--> (exec x (env (flag_1 x_1 v_1) ... (flag x v) (flag_2 x_2 v_2) ...) κ prog)
-        (exec v (env (flag_1 x_1 v_1) ... (flag x v) (flag_2 x_2 v_2) ...) κ prog)
+   (--> (exec (in-hole E x) (env (flag_1 x_1 v_1) ... (flag x v) (flag_2 x_2 v_2) ...) κ prog)
+        (exec (in-hole E v) (env (flag_1 x_1 v_1) ... (flag x v) (flag_2 x_2 v_2) ...) κ prog)
         "E-Id")
 
    (--> (exec (block st ...) ρ κ prog)
@@ -259,7 +259,7 @@
         (exec cv ρ κ prog)
         "E-EndBlock")
 
-   (--> (exec (abort!) ρ κ prog)
+   (--> (exec (in-hole E abort!) ρ κ prog)
         (exec (abort!) ρ (halt) prog)
         "E-Abort")
 
@@ -343,5 +343,5 @@
   [(eval prog) ,(car (apply-reduction-relation* -->Rust0 (term (exec · (env) start prog))))])
 
 (redex-chk
- (eval ((fn main [] () { (let mut (x num) = (1 + 2)) (x = 6) x }))) 6
+ (eval ((fn main [] () { (let mut (x num) = (1 + 2)) (x = 6) (1 + x) }))) 7
  (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10)
