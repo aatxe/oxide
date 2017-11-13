@@ -112,8 +112,8 @@
 
  ;; valid programs
  #:m prog ((enum Option [T] { (None) (Some T) })
-           (fn unwrap [T] ((opt (Option T))) { (match opt { ((None) => (abort!))
-                                                            ((Some x) => x) }) }))
+           (fn unwrap [T] ((opt (Option T))) { (match opt { ((Option::None) => (abort!))
+                                                            ((Option::Some x) => x) }) }))
 
  ;; valid top-level statements
  #:m tls (struct Point [] { (x num)
