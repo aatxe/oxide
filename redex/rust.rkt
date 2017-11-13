@@ -78,11 +78,6 @@
   (binop ::= + = ∧ ∨)
   (unop ::= - ¬)
 
-  ;; type parameters
-  (typaram ::=
-           α
-           (lft ι))
-
   ;; types
   (t ::=
      ;; type variables
