@@ -63,8 +63,16 @@
 
   ;; patterns
   (pat ::=
-       ;; enum variant application
-       (sid x ...))
+       ;; wildcard pattern
+       _
+       ;; variable pattern
+       x
+       ;; enum variant pattern
+       (sid pat ...)
+       ;; tuple pattern
+       (tup pat ...)
+       ;; reference pattern
+       (ref pat))
 
   ;; operators
   (binop ::= + = ∧ ∨)
