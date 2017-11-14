@@ -1,7 +1,8 @@
 #lang racket/base
 
 (require redex
-         redex-chk)
+         redex-chk
+         racket/list)
 
 (define-language Rust0
   ;; programs
@@ -55,6 +56,8 @@
 
       ;; base values
       const
+      ;; references
+      (ref ι rv)
 
       ;; abort (errors) -- in real Rust, there's multiple options here with messages, etc.
       (abort!)
@@ -72,7 +75,7 @@
   ;; patterns
   (pat ::=
        ;; wildcard pattern
-       _
+       underscore
        ;; variable pattern
        x
        ;; enum variant pattern
@@ -203,6 +206,8 @@
 
      ;; function calls
      (f [(lft ι) ... t ...] (v ... E rv ...))
+     ;; pattern matching
+     (match E {(pat => rv) ...})
 
      ;; simple evaluation contextx (from core.rkt)
 
@@ -253,14 +258,19 @@
         (exec (in-hole E v) (env (flag_1 x_1 v_1) ... (flag x v) (flag_2 x_2 v_2) ...) κ prog)
         "E-Id")
 
-   (--> (exec (in-hole E (f [] (v ...))) ρ κ prog)
+   (--> (exec (in-hole E (f [any ...] (v ...))) ρ κ prog)
         (exec st_0 (env (imm x v) ...) (block st_1 ... (fun x_f (in-hole E x_f) ρ κ)) prog)
-        (where (fn f [] ((x t) ...) { st_0 st_1 ... }) (lookup-fn prog f))
+        (where (fn f [(lft ι) ... α ...] ((x t) ...) { st_0 st_1 ... }) (lookup-fn prog f))
         (fresh x_f)
         "E-App")
    (--> (exec v_1 _ (fun x_1 st (env (flag_2 x_2 v_2) ...) κ) prog)
         (exec st (env (imm x_1 v_1) (flag_2 x_2 v_2) ...) κ prog)
         "E-Return")
+
+   (--> (exec (in-hole E (match v_m {(pat => rv) ...})) (env (flag x v) ...) κ prog)
+        (exec (in-hole E rv_m) (env (imm x_n v_n) ... (flag x v) ...) κ prog)
+        (where (rv_m (x_n v_n) ...) (first-match v_m ((pat => rv) ...)) )
+        "E-Match")
 
    (--> (exec (block st ...) ρ κ prog)
         (exec · ρ (block st ... κ) prog)
@@ -329,6 +339,15 @@
         (in-hole E true)
         "E-NegFalse")))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Helper functions for metafunctions ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (group n lst)
+  (if (empty? lst)
+      '()
+      (cons (take lst n) (group n (drop lst n)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Rust0-Machine metafunctions ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -338,6 +357,13 @@
   [(lookup-fn (_ ... (fn f_0 [(lft ι) ... α ...] ((x t) ...) { st ... }) _ ...) f_0)
    (fn f_0 [(lft ι) ... α ...] ((x t) ...) { st ... })]
   [(lookup-fn prog f) ,(error "lookup-fn: function with name not found:" (term f))])
+
+(redex-chk
+ (lookup-fn ((enum Option [T] { (None) (Some T) })
+             (fn unwrap [T] ((opt (Option T))) { (match opt { ((Option::None) => (abort!))
+                                                              ((Option::Some x) => x) }) }))
+            unwrap) (fn unwrap [T] ((opt (Option T))) { (match opt { ((Option::None) => (abort!))
+                                                                     ((Option::Some x) => x) }) }))
 
 (define-metafunction Rust0-Machine
   Σ : number ... -> number
@@ -352,6 +378,30 @@
   [(project number (tup v ...)) ,(list-ref (term (v ...)) (- (term number) 1))])
 
 (define-metafunction Rust0-Machine
+  match-pat : pat v -> any
+  [(match-pat x v) ((x v))]
+  [(match-pat (vid pat ...) (vid v ...)) ,(group 2 (flatten (term ((match-pat pat v) ...))))]
+  [(match-pat ((name expected vid_!_1) _ ...) ((name found vid_!_1) _ ...)) (failed)]
+  [(match-pat (vid pat ...) v) (failed)]
+  [(match-pat (tup pat ...) (tup pat ...)) ,(group 2 (flatten (term ((match-pat pat v) ...))))]
+  [(match-pat underscore _) ()])
+
+(redex-chk
+ (match-pat (Foo (Bar x) (Bar y) z) (Foo (Bar 13) (Bar 15) 8)) ((x 13) (y 15) (z 8)))
+
+(define-metafunction Rust0-Machine
+  first-match : v ((pat => rv) ...) -> any
+  [(first-match v ((pat => rv) (pat_2 => rv_2) ...)) ,(let ([binds (term (match-pat pat v))])
+                                      (if (not (member (term failed) binds))
+                                          (cons (term rv) binds)
+                                          (term (first-match v ((pat_2 => rv_2) ...)))))]
+  [(first-match v ()) ,(error "failed to find match for value:" (term v))])
+
+(redex-chk
+ (first-match 3 (((Foo) => 1) (x => 2) (x => 4))) (2 (x 3))
+ (first-match (Foo 1 2) (((Foo x y) => (x + y)))) ((x + y) (x 1) (y 2)))
+
+(define-metafunction Rust0-Machine
   eval : prog -> any
   [(eval prog) ,(car (apply-reduction-relation* -->Rust0 (term (exec · (env) start prog))))])
 
@@ -362,4 +412,9 @@
  (eval ((fn main [] () { (sum_to [] ((2 + 3))) })
         (fn sum_to [] ((x num)) { (if (x = 0)
                                      0
-                                     (x + (sum_to [] ((x + -1))))) }))) 15)
+                                     (x + (sum_to [] ((x + -1))))) }))) 15
+ (eval ((enum Option [T] { (None) (Some T) })
+        (fn unwrap [T] ((opt (Option T))) { (match opt { ((Option::None) => (abort!))
+                                                         ((Option::Some x) => x) }) })
+        (fn main [] () { (let (x (Option num)) = (Option::Some 2))
+                         (unwrap [num] (x)) }))) 2)
