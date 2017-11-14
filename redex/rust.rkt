@@ -174,6 +174,7 @@
   ;; control values
   (cv ::=
       ·
+      (abort!)
       v)
 
   ;; variable environment
@@ -240,8 +241,8 @@
         (exec st_0 ρ (block st_1 ... halt) prog)
         (where (fn main [] () { st_0 st_1 ... }) (lookup-fn prog main))
         "E-StartMain")
-   (--> (exec v ρ halt prog)
-        v
+   (--> (exec cv ρ halt prog)
+        cv
         "E-HaltProgram")
 
    (--> (exec (let (x_1 t) = v_1) (env (flag x v) ...) κ prog)
@@ -283,8 +284,11 @@
         "E-EndBlock")
 
    (--> (exec (in-hole E abort!) ρ κ prog)
-        (exec (abort!) ρ (halt) prog)
+        (exec (abort!) ρ κ prog)
         "E-Abort")
+   (--> (exec (abort!) ρ κ prog)
+        (exec (abort!) ρ halt prog)
+        "E-AbortKillsStack")
 
    ;; rules for evaluating rvalues that are simple expressions (as in core.rkt)
    (--> (in-hole E (if true rv_1 rv_2))
@@ -417,4 +421,9 @@
         (fn unwrap [T] ((opt (Option T))) { (match opt { ((Option::None) => (abort!))
                                                          ((Option::Some x) => x) }) })
         (fn main [] () { (let (x (Option num)) = (Option::Some 2))
-                         (unwrap [num] (x)) }))) 2)
+                         (unwrap [num] (x)) }))) 2
+(eval ((enum Option [T] { (None) (Some T) })
+       (fn unwrap [T] ((opt (Option T))) { (match opt { ((Option::None) => (abort!))
+                                                        ((Option::Some x) => x) }) })
+       (fn main [] () { (let (x (Option num)) = (Option::None))
+                        (unwrap [num] (x)) }))) (abort!))
