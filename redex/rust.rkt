@@ -19,7 +19,7 @@
       (let (lv t) = rv)
       (let mut (lv t) = rv)
       ;; assignment (only for mutable bindings)
-      (lv = rv)
+      (lv := rv)
 
       ;; expressions (rvalues)
       rv)
@@ -182,6 +182,8 @@
      halt
      ;; special start continuation indicating main should be called
      start
+     ;; function call continuation
+     (fun x st ρ κ)
      ;; continuation representing a block of statements to execute before continuing to κ
      (block st ... κ))
 
@@ -194,32 +196,35 @@
      hole
      (let (lv t) = E)
      (let mut (lv t) = E)
-     (lv = E)
+     (lv := E)
 
      ;; enum variants
      (vid v ... E e ...)
 
+     ;; function calls
+     (f [(lft ι) ... t ...] (v ... E rv ...))
+
      ;; simple evaluation contextx (from core.rkt)
 
      ;; branching
-     (if E e e)
+     (if E rv rv)
 
      ;; products
-     (tup v ... E e ...)
+     (tup v ... E rv ...)
      ;; product projection
-     (proj E e)
+     (proj E rv)
      (proj v E)
 
      ;; primitive ops
      (v + E)
-     (E + e)
+     (E + rv)
      (v = E)
-     (E = e)
+     (E = rv)
      (- E)
      (v ∧ E)
-     (E ∧ e)
+     (E ∧ rv)
      (v ∨ E)
-     (E ∨ e)
+     (E ∨ rv)
      (¬ E)))
 
 (define -->Rust0
@@ -234,20 +239,28 @@
         v
         "E-HaltProgram")
 
-
    (--> (exec (let (x_1 t) = v_1) (env (flag x v) ...) κ prog)
         (exec (tup) (env (imm x_1 v_1)(flag x v) ...) κ prog)
         "E-ImmBinding")
    (--> (exec (let mut (x_1 t) = v_1) (env (flag x v) ...) κ prog)
         (exec (tup) (env (mut x_1 v_1)(flag x v) ...) κ prog)
         "E-MutBinding")
-   (--> (exec (x_t = v_t) (env (flag_1 x_1 v_1) ... (mut x_t v_old) (flag_2 x_2 v_2) ...) κ prog)
+   (--> (exec (x_t := v_t) (env (flag_1 x_1 v_1) ... (mut x_t v_old) (flag_2 x_2 v_2) ...) κ prog)
         (exec (tup) (env (flag_1 x_1 v_1) ... (mut x_t v_t) (flag_2 x_2 v_2) ...) κ prog)
         "E-Assign")
 
    (--> (exec (in-hole E x) (env (flag_1 x_1 v_1) ... (flag x v) (flag_2 x_2 v_2) ...) κ prog)
         (exec (in-hole E v) (env (flag_1 x_1 v_1) ... (flag x v) (flag_2 x_2 v_2) ...) κ prog)
         "E-Id")
+
+   (--> (exec (in-hole E (f [] (v ...))) ρ κ prog)
+        (exec st_0 (env (imm x v) ...) (block st_1 ... (fun x_f (in-hole E x_f) ρ κ)) prog)
+        (where (fn f [] ((x t) ...) { st_0 st_1 ... }) (lookup-fn prog f))
+        (fresh x_f)
+        "E-App")
+   (--> (exec v_1 _ (fun x_1 st (env (flag_2 x_2 v_2) ...) κ) prog)
+        (exec st (env (imm x_1 v_1) (flag_2 x_2 v_2) ...) κ prog)
+        "E-Return")
 
    (--> (exec (block st ...) ρ κ prog)
         (exec · ρ (block st ... κ) prog)
@@ -343,5 +356,10 @@
   [(eval prog) ,(car (apply-reduction-relation* -->Rust0 (term (exec · (env) start prog))))])
 
 (redex-chk
- (eval ((fn main [] () { (let mut (x num) = (1 + 2)) (x = 6) (1 + x) }))) 7
- (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10)
+ (eval ((fn main [] () { (let mut (x num) = (1 + 2)) (x := 6) (1 + x) }))) 7
+ (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
+
+ (eval ((fn main [] () { (sum_to [] ((2 + 3))) })
+        (fn sum_to [] ((x num)) { (if (x = 0)
+                                     0
+                                     (x + (sum_to [] ((x + -1))))) }))) 15)
