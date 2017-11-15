@@ -31,6 +31,8 @@
       x
       ;; pointer dereference
       (* lv)
+      ;; projecting a field from a struct variable
+      (proj x x)
       ;; lvalue products
       (tup lv ...))
 
@@ -46,6 +48,8 @@
       (proj rv rv)
       ;; enum variant construction
       (vid rv ...)
+      ;; struct construction
+      (sid {(x rv) ...})
 
       ;; function calls
       (f [(lft ι) ... t ...] (rv ...))
@@ -114,7 +118,9 @@
      ;; tuples of values
      (tup v ...)
      ;; enum variants of values
-     (vid v ...))
+     (vid v ...)
+     ;; struct of values
+     (sid {(x v) ...}))
 
   ;; shorthand for numbers
   (n ::= number)
@@ -203,7 +209,9 @@
      (lv := E)
 
      ;; enum variants
-     (vid v ... E e ...)
+     (vid v ... E rv ...)
+     ;; struct instances
+     (sid {(x v) ... (x E) (x rv) ...})
 
      ;; function calls
      (f [(lft ι) ... t ...] (v ... E rv ...))
@@ -304,6 +312,9 @@
    (--> (in-hole E (proj n (vid v ...)))
         (in-hole E (project n (vid v ...)))
         "E-ProjNEnumVariant")
+   (--> (in-hole E (proj x_f (sid {(x_1 v_1) ... (x_f v_f) (x_2 v_2) ...})))
+        (in-hole E v_f)
+        "E-ProjStructField")
 
    (--> (in-hole E (n_1 + n_2))
         (in-hole E (Σ n_1 n_2))
@@ -412,6 +423,7 @@
 (redex-chk
  (eval ((fn main [] () { (let mut (x num) = (1 + 2)) (x := 6) (1 + x) }))) 7
  (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
+ (eval ((fn main [] () { (proj x (Point { (x 0) (y 1) })) }))) 0
 
  (eval ((fn main [] () { (sum_to [] ((2 + 3))) })
         (fn sum_to [] ((x num)) { (if (x = 0)
