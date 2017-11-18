@@ -227,3 +227,99 @@
  (eval (let [(prod cp v) ((,lrswap (new x)) y)]
          (let [(pack ρ res) (free cp)]
            res))) y)
+
+(define-extended-language L3-statics L3
+  (res ::=
+       ✓
+       ✗)
+
+  ;; location contexts
+  (Δ ::=
+     •
+     (Δ ρ))
+
+  ;; value contexts
+  (Γ ::=
+     •
+     (Γ (x τ))))
+
+;; written in paper as either x ∈ dom(Γ) or x ∉ dom(Γ) depending on result
+;; determines whether or not x is in Γ
+(define-judgment-form L3-statics
+  #:mode (in I I I O)
+  #:contract (in Γ x = res)
+
+  [-------------
+   (in • x = ✗)]
+
+  [---------------------
+   (in (Γ (x τ)) x = ✓)]
+
+  [(in Γ x = res)
+   ----------------------------------------
+   (in (Γ (x_!_1 τ)) (name x x_!_1) = res)])
+
+;; written in paper as Γ ⊞ Γ
+(define-judgment-form L3-statics
+  #:mode (box I I I O)
+  #:contract (box Γ Γ = Γ)
+
+  [--------------
+   (box • • = •)]
+
+  [(box Γ_1 Γ_2 = Γ_3)
+   (in Γ_2 x = ✗)
+   ------------------------------------
+   (box (Γ_1 (x τ)) Γ_2 = (Γ_3 (x τ)))]
+
+  [(box Γ_1 Γ_2 = Γ_3)
+   (in Γ_1 x = ✗)
+   ------------------------------------
+   (box Γ_1 (Γ_2 (x τ)) = (Γ_3 (x τ)))])
+
+;; returns whether or not the given type is an of-course type
+(define-judgment-form L3-statics
+  #:mode (!? I I O)
+  #:contract (!? τ = res)
+
+  [--------------
+   (!? unit = ✗)]
+
+  [--------------------------
+   (!? (tensor τ_1 τ_2) = ✗)]
+
+  [---------------------------
+   (!? (lolipop τ_1 τ_2) = ✗)]
+
+  [-----------------
+   (!? (ptr τ) = ✗)]
+
+  [-------------------
+   (!? (cap η τ) = ✗)]
+
+  [-----------------
+   (!? (∀ ρ τ) = ✗)]
+
+  [-----------------
+   (!? (∃ ρ τ) = ✗)]
+
+  [---------------
+   (!? (! τ) = ✓)])
+
+;; written in paper as |Γ|
+;; computes Γ with all of-course typed variables removed
+(define-judgment-form L3-statics
+  #:mode (bars I I O)
+  #:contract (bars Γ = Γ)
+
+  [-------------
+   (bars • = •)]
+
+  [(bars Γ_1 = Γ_2)
+   -----------------------------
+   (bars (Γ_1 (x (! τ))) = Γ_2)]
+
+  [(bars Γ_1 = Γ_2)
+   (!? τ = ✗)
+   -------------------------
+   (bars (Γ_1 (x τ)) = Γ_2)])
