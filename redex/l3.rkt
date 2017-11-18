@@ -14,14 +14,14 @@
   (τ ::=
      unit
      ;; tensor product
-     (tensor τ τ)
+     (⊗ τ τ)
      ;; linear function
      (lolipop τ τ)
 
      ;; of-course (non-linear) type
      (! τ)
      ;; pointer type
-     (ptr τ)
+     (ptr η)
      ;; capability type
      (cap η τ)
 
@@ -233,6 +233,10 @@
        ✓
        ✗)
 
+  (τ-res ::=
+         τ
+         ✗)
+
   ;; location contexts
   (Δ ::=
      •
@@ -243,39 +247,56 @@
      •
      (Γ (x τ))))
 
+;; TODO: define fresh-loc function that yields unique identifiers for ρ
+
+;; determines whether or not ρ is in Δ
+(define-judgment-form L3-statics
+  #:mode (live I I I O)
+  #:contract (live Δ ρ = res)
+
+  [---------------
+   (live • ρ = ✗)]
+
+  [-------------------
+   (live (Δ ρ) ρ = ✓)]
+
+  [(live Δ ρ = res)
+   --------------------------------------
+   (live (Δ ρ_!_1) (name ρ ρ_!_1) = res)])
+
 ;; written in paper as either x ∈ dom(Γ) or x ∉ dom(Γ) depending on result
 ;; determines whether or not x is in Γ
 (define-judgment-form L3-statics
   #:mode (in I I I O)
-  #:contract (in Γ x = res)
+  #:contract (in Γ x = τ-res)
 
   [-------------
    (in • x = ✗)]
 
   [---------------------
-   (in (Γ (x τ)) x = ✓)]
+   (in (Γ (x τ)) x = τ)]
 
-  [(in Γ x = res)
-   ----------------------------------------
-   (in (Γ (x_!_1 τ)) (name x x_!_1) = res)])
+  [(in Γ x = τ-res)
+   ------------------------------------------
+   (in (Γ (x_!_1 τ)) (name x x_!_1) = τ-res)])
 
 ;; written in paper as Γ ⊞ Γ
 (define-judgment-form L3-statics
-  #:mode (box I I I O)
-  #:contract (box Γ Γ = Γ)
+  #:mode (⊞ O O I I)
+  #:contract (⊞ Γ Γ = Γ)
 
   [--------------
-   (box • • = •)]
+   (⊞ • • = •)]
 
-  [(box Γ_1 Γ_2 = Γ_3)
+  [(⊞ Γ_1 Γ_2 = Γ_3)
    (in Γ_2 x = ✗)
    ------------------------------------
-   (box (Γ_1 (x τ)) Γ_2 = (Γ_3 (x τ)))]
+   (⊞ (Γ_1 (x τ)) Γ_2 = (Γ_3 (x τ)))]
 
-  [(box Γ_1 Γ_2 = Γ_3)
+  [(⊞ Γ_1 Γ_2 = Γ_3)
    (in Γ_1 x = ✗)
    ------------------------------------
-   (box Γ_1 (Γ_2 (x τ)) = (Γ_3 (x τ)))])
+   (⊞ Γ_1 (Γ_2 (x τ)) = (Γ_3 (x τ)))])
 
 ;; returns whether or not the given type is an of-course type
 (define-judgment-form L3-statics
@@ -323,3 +344,117 @@
    (!? τ = ✗)
    -------------------------
    (bars (Γ_1 (x τ)) = Γ_2)])
+
+;; written in the paper Δ; Γ ⊢ e : τ
+;; computes the type of the expression e under the environments Δ and Γ
+(define-judgment-form L3-statics
+  #:mode (type? I I I I I O)
+  #:contract (type? Δ Γ ⊢ e : τ)
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; rules from the L3 paper ;;
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  [(type? Δ Γ ⊢ v : τ)
+   (bars Γ = •)
+   ---------------------------- "Bang"
+   (type? Δ Γ ⊢ (! v) : (! τ))]
+
+  [(⊞ Γ_1 Γ_2 = Γ)
+   (type? Δ Γ_1 ⊢ e_1 : τ_1)
+   (type? Δ (Γ_2 (x τ_1)) ⊢ e_2 : τ_2)
+   ------------------------------------------ "Let-Bang"
+   (type? Δ Γ ⊢ (let [(! x) e_1] e_2) : τ_2)]
+
+  [(type? Δ Γ ⊢ e : (! τ))
+   ------------------------------------------- "Dup"
+   (type? Δ Γ ⊢ (dup e) : (⊗ (! τ) (! τ)))]
+
+  [(type? Δ Γ ⊢ e : (! τ))
+   ------------------------------ "Drop"
+   (type? Δ Γ ⊢ (drop e) : unit)]
+
+  [(type? Δ Γ ⊢ e : τ)
+   (where ρ (fresh-loc))
+   ----------------------------------------------------------- "New"
+   (type? Δ Γ ⊢ (new e) : (∃ ρ (⊗ (cap ρ τ) (! (ptr ρ)))))]
+
+  [(type? Δ Γ ⊢ e : (∃ ρ (⊗ (cap ρ τ) (! (ptr ρ)))))
+   ---------------------------------------------------- "Free"
+   (type? Δ Γ ⊢ (free e) : (∃ ρ τ))                   ]
+
+  [(⊞ Γ_1 Γ_2 = Γ)
+   (type? Δ Γ_1 ⊢ e_1 : (ptr ρ))
+   (type? Δ Γ_2 ⊢ e_2 : (⊗ (cap ρ τ_1) τ_2))
+   ------------------------------------------------------ "Swap"
+   (type? Δ Γ ⊢ (swap e_1 e_2) : (⊗ (cap ρ τ_2) τ_1))]
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; everything after this is not in the paper ;;
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  [------------------------ "Unit"
+   (type? Δ Γ ⊢ () : unit)]
+
+  [(⊞ Γ_1 Γ_2 = Γ)
+   (type? Δ Γ_1 ⊢ e_1 : unit)
+   (type? Δ Γ_2 ⊢ e_2 : τ_2)
+   --------------------------------------- "Let-Unit"
+   (type? Δ Γ ⊢ (let [() e_1] e_2) : τ_2)]
+
+  [(⊞ Γ_1 Γ_2 = Γ)
+   (type? Δ Γ_1 ⊢ e_1 : τ_1)
+   (type? Δ Γ_2 ⊢ e_2 : τ_2)
+   ---------------------------------------------- "Prod"
+   (type? Δ Γ ⊢ (prod e_1 e_2) : (⊗ τ_1 τ_2))]
+
+  [(⊞ Γ_1 Γ_2 = Γ)
+   (type? Δ Γ_1 ⊢ e_1 : (⊗ τ_1_1 τ_1_2))
+   (type? Δ Γ_2 ⊢ e_2 : τ_2)
+   ----------------------------------------------- "Let-Prod"
+   (type? Δ Γ ⊢ (let [(prod x y) e_1] e_2) : τ_2)]
+
+  [(in Γ x = τ)
+   -------------------- "Var"
+   (type? Δ Γ ⊢ x : τ)]
+
+  ;; FIXME: current syntax form for lambda doesn't have type annotations
+  [(type? Δ (Γ (x τ_1)) ⊢ e : τ_2)
+   ------------------------------------------------ "Lambda"
+   (type? Δ Γ ⊢ (λ (x τ_1) e) : (lolipop τ_1 τ_2))]
+
+  [(⊞ Γ_1 Γ_2 = Γ)
+   (type? Δ Γ_1 ⊢ e_3 : (lolipop τ_1 τ_2))
+   (type? Δ Γ_2 ⊢ e_1 : τ_1)
+   ------------------------------ "App"
+   (type? Δ Γ ⊢ (e_3 e_1) : τ_2)]
+
+  [-------------------------------- "Ptr"
+   (type? Δ Γ ⊢ (ptr l) : (ptr l))]
+
+  ;; FIXME: where does the τ come from in the type?
+  ;; can probably infer, but we can probably just add an extra environment instead.
+  ;; [---------------------------------- "Cap"
+  ;;  (type? Δ Γ ⊢ (cap l) : (cap l τ))]
+
+  ;; FIXME: add the condition that τ is well-formed with ρ added?
+  [(type? (Δ ρ) Γ ⊢ e : τ)
+   -------------------------------- "Univ"
+   (type? Δ Γ ⊢ (Λ ρ e) : (∀ ρ τ))]
+
+  [(type? Δ Γ ⊢ e : (∀ ρ τ))
+   ------------------------------------------- "UnivApp"
+   (type? Δ Γ ⊢ (e [η]) : (substitute τ ρ η))]
+
+  ;; FIXME: is there another well-formedness condition I need here?
+  ;; FIXME: this rule might just be completely wrong because I'm making it up as I go
+  [(where ρ (fresh-loc))
+   (type? Δ Γ ⊢ e : τ)
+   ---------------------------------------------------- "Pack"
+   (type? Δ Γ ⊢ (pack η e) : (∃ ρ (substitute τ η ρ)))]
+
+  ;; FIXME: this rule, like the one above it, is probably wrong
+  [(type? Δ Γ ⊢ e_1 : (∃ ρ_1 τ_1))
+   (type? (Δ ρ_2) (Γ (x (substitute τ_1 ρ_1 ρ_2))) ⊢ e_2 : τ_2)
+   ------------------------------------------------------------ "Let-Pack"
+   (type? Δ Γ ⊢ (let [(pack ρ_2 x) e_1] e_2) : τ_2)           ])
