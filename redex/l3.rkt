@@ -34,12 +34,12 @@
      ;; unit
      ()
      ;; destructing let for unit
-     (let () = e in e)
+     (let [() e] e)
 
      ;; tensor product
      (prod e e)
      ;; destructuring let for products
-     (let (prod x x) = e in e)
+     (let [(prod x x) e] e)
 
      ;; variables
      x
@@ -51,7 +51,7 @@
      ;; of-course values
      (! v)
      ;; destructuring let for of-course values
-     (let (! x) = e in e)
+     (let [(! x) e] e)
      ;; weaking for of-course values
      (dup e)
      ;; contraction for of-course values
@@ -75,7 +75,7 @@
      ;; pack with location
      (pack η e)
      ;; unpack
-     (let (pack ρ x) = e in e))
+     (let [(pack ρ x) e] e))
 
   (v ::=
      ;; unit
@@ -114,20 +114,20 @@
      hole
 
      ;; destructing let for unit
-     (let () = E in e)
+     (let [() E] e)
 
      ;; tensor product
      (prod E e)
      (prod v E)
      ;; destructuring let for products
-     (let (prod x x) = E in e)
+     (let [(prod x x) E] e)
 
      ;; function application
      (E e)
      (v E)
 
      ;; destructuring let for of-course values
-     (let (! x) = E in e)
+     (let [(! x) E] e)
      ;; weaking for of-course values
      (dup E)
      ;; contraction for of-course values
@@ -146,7 +146,7 @@
      ;; pack with location
      (pack η E)
      ;; unpack
-     (let (pack ρ x) = E in e)))
+     (let [(pack ρ x) E] e)))
 
 (define -->L3
   (reduction-relation
@@ -158,7 +158,7 @@
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
    ;; rules for of-course values
-   (--> (σ (in-hole E (let (! x) = (! v) in e)))
+   (--> (σ (in-hole E (let [(! x) (! v)] e)))
         (σ (in-hole E (substitute e x v)))
         "let-bang")
    (--> (σ (in-hole E (dup (! v))))
@@ -185,13 +185,13 @@
    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
    ;; destructuring lets for everything that's not of-course values
-   (--> (σ (in-hole E (let () = () in e)))
+   (--> (σ (in-hole E (let [() ()] e)))
         (σ (in-hole E e))
         "let-unit")
-   (--> (σ (in-hole E (let (prod x_1 x_2) = (prod v_1 v_2) in e)))
+   (--> (σ (in-hole E (let [(prod x_1 x_2) (prod v_1 v_2)] e)))
         (σ (in-hole E (substitute (substitute e x_1 v_1) x_2 v_2)))
         "let-prod")
-   (--> (σ (in-hole E (let (pack ρ x) = (pack η v) in e)))
+   (--> (σ (in-hole E (let [(pack ρ x) (pack η v)] e)))
         (σ (in-hole E (substitute (substitute e ρ η) x v)))
         "let-pack")
 
@@ -205,5 +205,25 @@
         "loc-app")))
 
 (define-metafunction L3-dynamics
-  eval : e -> any
-  [(eval e) ,(cadr (apply-reduction-relation* -->L3 (term (σ e))))])
+  eval : e -> v
+  [(eval e) ,(cadar (apply-reduction-relation* -->L3 (term ((env) e))))])
+
+;; lrswap example from the paper
+(define lrswap
+  (term
+   (λ r
+     (λ x
+       (let [(pack ρ cp) r]
+         (let [(prod c0 p0) cp]
+           (let [(prod p1 p2) (dup p0)]
+             (let [(! p2-prime) p2]
+               (let [(prod c1 y) (swap p2-prime (prod c0 x))]
+                 (prod (pack ρ (prod c1 p1))
+                       y))))))))))
+
+(redex-chk
+ (eval x) x
+ (eval ((λ x x) y)) y
+ (eval (let [(prod cp v) ((,lrswap (new x)) y)]
+         (let [(pack ρ res) (free cp)]
+           res))) y)
