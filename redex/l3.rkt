@@ -16,7 +16,7 @@
      ;; tensor product
      (⊗ τ τ)
      ;; linear function
-     (lolipop τ τ)
+     (⊸ τ τ)
 
      ;; of-course (non-linear) type
      (! τ)
@@ -310,7 +310,7 @@
    (!? (tensor τ_1 τ_2) = ✗)]
 
   [---------------------------
-   (!? (lolipop τ_1 τ_2) = ✗)]
+   (!? (⊸ τ_1 τ_2) = ✗)]
 
   [-----------------
    (!? (ptr τ) = ✗)]
@@ -421,10 +421,10 @@
   ;; FIXME: current syntax form for lambda doesn't have type annotations
   [(type? Δ (Γ (x τ_1)) ⊢ e : τ_2)
    ------------------------------------------------ "Lambda"
-   (type? Δ Γ ⊢ (λ (x τ_1) e) : (lolipop τ_1 τ_2))]
+   (type? Δ Γ ⊢ (λ (x τ_1) e) : (⊸ τ_1 τ_2))]
 
   [(⊞ Γ_1 Γ_2 = Γ)
-   (type? Δ Γ_1 ⊢ e_3 : (lolipop τ_1 τ_2))
+   (type? Δ Γ_1 ⊢ e_3 : (⊸ τ_1 τ_2))
    (type? Δ Γ_2 ⊢ e_1 : τ_1)
    ------------------------------ "App"
    (type? Δ Γ ⊢ (e_3 e_1) : τ_2)]
