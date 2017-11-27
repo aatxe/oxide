@@ -44,7 +44,7 @@
      ;; variables
      x
      ;; functions
-     (λ x e)
+     (λ (x τ) e)
      ;; function application
      (e e)
 
@@ -85,7 +85,7 @@
      ;; variables
      x
      ;; functions
-     (λ x e)
+     (λ (x τ) e)
      ;; of-course values
      (! v)
      ;; pointers
@@ -196,7 +196,7 @@
         "let-pack")
 
    ;; function application
-   (--> (σ (in-hole E ((λ x e) v)))
+   (--> (σ (in-hole E ((λ (x τ) e) v)))
         (σ (in-hole E (substitute e x v)))
         "app")
    ;; location application
@@ -209,10 +209,11 @@
   [(eval e) ,(cadar (apply-reduction-relation* -->L3 (term ((env) e))))])
 
 ;; lrswap example from the paper
+;; specialized to τ = (⊗ unit unit) and τ' = unit
 (define lrswap
   (term
-   (λ r
-     (λ x
+   (λ (r (∃ ρ (⊗ (cap ρ (⊗ unit unit)) (! (ptr ρ)))))
+     (λ (x unit)
        (let [(pack ρ cp) r]
          (let [(prod c0 p0) cp]
            (let [(prod p1 p2) (dup p0)]
@@ -223,7 +224,7 @@
 
 (redex-chk
  (eval x) x
- (eval ((λ x x) y)) y
+ (eval ((λ (x unit) x) y)) y
  (eval (let [(prod cp v) ((,lrswap (new x)) y)]
          (let [(pack ρ res) (free cp)]
            res))) y)
@@ -418,7 +419,6 @@
    -------------------- "Var"
    (type? Δ Γ ⊢ x : τ)]
 
-  ;; FIXME: current syntax form for lambda doesn't have type annotations
   [(type? Δ (Γ (x τ_1)) ⊢ e : τ_2)
    ------------------------------------------------ "Lambda"
    (type? Δ Γ ⊢ (λ (x τ_1) e) : (⊸ τ_1 τ_2))]
