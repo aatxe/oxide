@@ -437,7 +437,6 @@
   ;; [---------------------------------- "Cap"
   ;;  (type? Δ Γ ⊢ (cap l) : (cap l τ))]
 
-  ;; FIXME: add the condition that τ is well-formed with ρ added?
   [(type? (Δ ρ) Γ ⊢ e : τ)
    -------------------------------- "Univ"
    (type? Δ Γ ⊢ (Λ ρ e) : (∀ ρ τ))]
@@ -446,12 +445,10 @@
    ------------------------------------------- "UnivApp"
    (type? Δ Γ ⊢ (e [η]) : (substitute τ ρ η))]
 
-  ;; FIXME: is there another well-formedness condition I need here?
-  ;; FIXME: this rule might just be completely wrong because I'm making it up as I go
   [(where ρ (fresh-loc))
-   (type? Δ Γ ⊢ e : τ)
-   ---------------------------------------------------- "Pack"
-   (type? Δ Γ ⊢ (pack η e) : (∃ ρ (substitute τ η ρ)))]
+   (type? Δ Γ ⊢ e : (substitute τ η ρ))
+   ------------------------------------- "Pack"
+   (type? Δ Γ ⊢ (pack η e) : (∃ ρ τ))  ]
 
   ;; FIXME: this rule, like the one above it, is probably wrong
   [(type? Δ Γ ⊢ e_1 : (∃ ρ_1 τ_1))
