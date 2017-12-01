@@ -10,9 +10,9 @@
 
   ;; top-level statements
   (tls ::=
-       (struct sid [(lft ι) ... α ...] {(x t) ...})
-       (enum sid [(lft ι) ... α ...] {(vid t ...) ...})
-       (fn f [(lft ι) ... α ...] ((x t) ...) { st ... }))
+       (struct sid [(lft ι) ... T ...] {(x t) ...})
+       (enum sid [(lft ι) ... T ...] {(vid t ...) ...})
+       (fn f [(lft ι) ... T ...] ((x t) ...) { st ... }))
 
   ;; statements
   (st ::=
@@ -96,7 +96,7 @@
   ;; types
   (t ::=
      ;; type variables
-     α
+     T
      ;; references (&'a t)
      (ref ι t)
      ;; tuple types
@@ -128,7 +128,7 @@
   ;; variables
   (x ::= variable-not-otherwise-mentioned)
   ;; type variables
-  (α ::= variable-not-otherwise-mentioned)
+  (T ::= variable-not-otherwise-mentioned)
   ;; lifetime variables
   (ι ::= variable-not-otherwise-mentioned)
   ;; function identifiers
@@ -269,7 +269,7 @@
 
    (--> (exec (in-hole E (f [any ...] (v ...))) ρ κ prog)
         (exec st_0 (env (imm x v) ...) (block st_1 ... (fun x_f (in-hole E x_f) ρ κ)) prog)
-        (where (fn f [(lft ι) ... α ...] ((x t) ...) { st_0 st_1 ... }) (lookup-fn prog f))
+        (where (fn f [(lft ι) ... T ...] ((x t) ...) { st_0 st_1 ... }) (lookup-fn prog f))
         (fresh x_f)
         "E-App")
    (--> (exec v_1 _ (fun x_1 st (env (flag_2 x_2 v_2) ...) κ) prog)
@@ -369,8 +369,8 @@
 
 (define-metafunction Rust0-Machine
   lookup-fn : prog f -> tls
-  [(lookup-fn (_ ... (fn f_0 [(lft ι) ... α ...] ((x t) ...) { st ... }) _ ...) f_0)
-   (fn f_0 [(lft ι) ... α ...] ((x t) ...) { st ... })]
+  [(lookup-fn (_ ... (fn f_0 [(lft ι) ... T ...] ((x t) ...) { st ... }) _ ...) f_0)
+   (fn f_0 [(lft ι) ... T ...] ((x t) ...) { st ... })]
   [(lookup-fn prog f) ,(error "lookup-fn: function with name not found:" (term f))])
 
 (redex-chk
