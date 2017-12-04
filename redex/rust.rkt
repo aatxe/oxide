@@ -183,8 +183,12 @@
       (abort!)
       v)
 
+  ;; addresses
+  (α ::= variable-not-otherwise-mentioned)
+
   ;; variable environment
-  (ρ ::= (env (flag x v) ...))
+  (ρ ::= (env (flag x α) ...))
+  (ψ ::= (mem (α v) ...))
 
   ;; continuations
   (κ ::=
@@ -199,8 +203,8 @@
 
   ;; evaluation contexts
   (E ::=
-     ;; top-level evaluation contexts (format: CEK + prog)
-     (exec E ρ κ prog)
+     ;; top-level evaluation contexts (format: control string, variable-to-address map, mem, call stack, whole program)
+     (exec E ρ ψ κ prog)
 
      ;; other evaluation contexts
      hole
@@ -245,57 +249,86 @@
   (reduction-relation
    Rust0-Machine
 
-   (--> (exec · ρ start prog)
-        (exec st_0 ρ (block st_1 ... halt) prog)
+   (--> (exec · ρ ψ start prog)
+        (exec st_0 ρ ψ (block st_1 ... halt) prog)
         (where (fn main [] () { st_0 st_1 ... }) (lookup-fn prog main))
         "E-StartMain")
-   (--> (exec cv ρ halt prog)
+   (--> (exec cv ρ ψ halt prog)
         cv
         "E-HaltProgram")
 
-   (--> (exec (let (x_1 t) = v_1) (env (flag x v) ...) κ prog)
-        (exec (tup) (env (imm x_1 v_1)(flag x v) ...) κ prog)
+   (--> (exec (let (x t) = v) (env (flag x_e α_e) ...) (mem (α_m v_m) ...) κ prog)
+        (exec (tup) (env (imm x α) (flag x_e α_e) ...) (mem (α v) (α_m v_m) ...) κ prog)
+        (fresh α)
         "E-ImmBinding")
-   (--> (exec (let mut (x_1 t) = v_1) (env (flag x v) ...) κ prog)
-        (exec (tup) (env (mut x_1 v_1)(flag x v) ...) κ prog)
+   (--> (exec (let mut (x t) = v) (env (flag x_e α_e) ...) (mem (α_m v_m) ...) κ prog)
+        (exec (tup) (env (mut x α) (flag x_e α_e) ...) (mem (α v) (α_m v_m) ...) κ prog)
+        (fresh α)
         "E-MutBinding")
-   (--> (exec (x_t := v_t) (env (flag_1 x_1 v_1) ... (mut x_t v_old) (flag_2 x_2 v_2) ...) κ prog)
-        (exec (tup) (env (flag_1 x_1 v_1) ... (mut x_t v_t) (flag_2 x_2 v_2) ...) κ prog)
+   (--> (exec (x_t := v_t)
+              (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 v_2) ...)
+              (mem (α_3 v_3) ... (α_t v_old) (α_4 v_4) ...)
+              κ prog)
+        (exec (tup)
+              (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 v_2) ...)
+              (mem (α_3 v_3) ... (α_t v_t) (α_4 v_4) ...)
+              κ prog)
         "E-Assign")
 
-   (--> (exec (in-hole E x) (env (flag_1 x_1 v_1) ... (flag x v) (flag_2 x_2 v_2) ...) κ prog)
-        (exec (in-hole E v) (env (flag_1 x_1 v_1) ... (flag x v) (flag_2 x_2 v_2) ...) κ prog)
+   (--> (exec (in-hole E x)
+              (env (flag_1 x_1 α_1) ... (flag x α) (flag_2 x_2 α_2) ...)
+              (mem (α_3 v_3) ... (α v) (α_4 v_4) ...)
+              κ prog)
+        (exec (in-hole E v)
+              (env (flag_1 x_1 α_1) ... (flag x α) (flag_2 x_2 α_2) ...)
+              (mem (α_3 v_3) ... (α v) (α_4 v_4) ...)
+              κ prog)
         "E-Id")
 
-   (--> (exec (in-hole E (f [any ...] (v ...))) ρ κ prog)
-        (exec st_0 (env (imm x v) ...) (block st_1 ... (fun x_f (in-hole E x_f) ρ κ)) prog)
-        (where (fn f [(lft ι) ... T ...] ((x t) ...) { st_0 st_1 ... }) (lookup-fn prog f))
-        (fresh x_f)
+   (--> (exec (in-hole E (f [any ...] (v ...))) ρ
+              (mem (α_m v_m) ...)
+              κ prog)
+        (exec st_0
+              (env (imm x α) ...)
+              (mem (α v) ... (α_m v_m) ...)
+              (block st_1 ... (fun x_f (in-hole E x_f) ρ κ)) prog)
+        (where (fn f [(lft ι) ... T ...] ((x t) ...) { st_0 st_1 ... })
+               (lookup-fn prog f))
+        (fresh x_f α)
         "E-App")
-   (--> (exec v_1 _ (fun x_1 st (env (flag_2 x_2 v_2) ...) κ) prog)
-        (exec st (env (imm x_1 v_1) (flag_2 x_2 v_2) ...) κ prog)
+   ;; TODO: return should de-allocate memory that is no longer accessible (equivalent of calling drop)
+   (--> (exec v_1 _ (mem (α_m v_m) ...) (fun x_1 st (env (flag_2 x_2 α_2) ...) κ) prog)
+        (exec st (env (imm x_1 α_1) (flag_2 x_2 α_2) ...) (mem (α_1 v_1) (α_m v_m) ...) κ prog)
+        (fresh α_m)
         "E-Return")
 
-   (--> (exec (in-hole E (match v_m {(pat => rv) ...})) (env (flag x v) ...) κ prog)
-        (exec (in-hole E rv_m) (env (imm x_n v_n) ... (flag x v) ...) κ prog)
-        (where (rv_m (x_n v_n) ...) (first-match v_m ((pat => rv) ...)) )
+   (--> (exec (in-hole E (match v_match {(pat => rv) ...}))
+              (env (flag x α) ...)
+              (mem (α_m v_m) ...)
+              κ prog)
+        (exec (in-hole E rv_m)
+              (env (imm x_n α_n) ... (flag x α) ...)
+              (mem (α_n v_n) ... (α_m v_m) ...)
+              κ prog)
+        (where (rv_m (x_n v_n) ...) (first-match v_match ((pat => rv) ...)) )
+        (fresh α_n)
         "E-Match")
 
-   (--> (exec (block st ...) ρ κ prog)
-        (exec · ρ (block st ... κ) prog)
+   (--> (exec (block st ...) ρ ψ κ prog)
+        (exec · ρ ψ (block st ... κ) prog)
         "E-StartBlock")
-   (--> (exec cv ρ (block st_0 st_1 ... κ) prog)
-        (exec st_0 ρ (block st_1 ... κ) prog)
+   (--> (exec cv ρ ψ (block st_0 st_1 ... κ) prog)
+        (exec st_0 ρ ψ (block st_1 ... κ) prog)
         "E-AdvanceBlock")
-   (--> (exec cv ρ (block κ) prog)
-        (exec cv ρ κ prog)
+   (--> (exec cv ρ ψ (block κ) prog)
+        (exec cv ρ ψ κ prog)
         "E-EndBlock")
 
-   (--> (exec (in-hole E abort!) ρ κ prog)
-        (exec (abort!) ρ κ prog)
+   (--> (exec (in-hole E abort!) ρ ψ κ prog)
+        (exec (abort!) ρ ψ κ prog)
         "E-Abort")
-   (--> (exec (abort!) ρ κ prog)
-        (exec (abort!) ρ halt prog)
+   (--> (exec (abort!) ρ ψ κ prog)
+        (exec (abort!) ρ ψ halt prog)
         "E-AbortKillsStack")
 
    ;; rules for evaluating rvalues that are simple expressions (as in core.rkt)
@@ -418,12 +451,15 @@
 
 (define-metafunction Rust0-Machine
   eval : prog -> any
-  [(eval prog) ,(car (apply-reduction-relation* -->Rust0 (term (exec · (env) start prog))))])
+  [(eval prog) ,(car (apply-reduction-relation* -->Rust0 (term (exec · (env) (mem) start prog))))])
 
 (redex-chk
  (eval ((fn main [] () { (let mut (x num) = (1 + 2)) (x := 6) (1 + x) }))) 7
  (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
  (eval ((fn main [] () { (proj x (Point { (x 0) (y 1) })) }))) 0
+
+ (eval ((fn main [] () { (add_doubles [] (2 3)) })
+        (fn add_doubles [] ((x num) (y num)) { ((x + x) + (y + y)) }))) 10
 
  (eval ((fn main [] () { (sum_to [] ((2 + 3))) })
         (fn sum_to [] ((x num)) { (if (x = 0)
