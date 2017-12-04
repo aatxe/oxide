@@ -17,8 +17,8 @@
   ;; statements
   (st ::=
       ;; let bindings (immutable and mutable)
-      (let (lv t) = rv)
-      (let mut (lv t) = rv)
+      (let (pat t) = rv)
+      (let mut (pat t) = rv)
       ;; assignment (only for mutable bindings)
       (lv := rv)
 
@@ -208,8 +208,8 @@
 
      ;; other evaluation contexts
      hole
-     (let (lv t) = E)
-     (let mut (lv t) = E)
+     (let (pat t) = E)
+     (let mut (pat t) = E)
      (lv := E)
 
      ;; enum variants
