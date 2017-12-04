@@ -177,11 +177,6 @@
      ·
      st)
 
-  (rv ::=
-     ....
-     ;; pointer to an address (runtime value for references)
-     (ptr α))
-
   (v ::=
      ....
      ;; pointer to an address (runtime value for references)
@@ -295,6 +290,19 @@
               (mem (α_3 v_3) ... (α_t v_t) (α_4 v_4) ...)
               κ prog)
         "E-AssignId")
+   (--> (exec ((deref lv) := v_t)
+              ;; NOTE: because we require a mutable binding to appear to this address, we actually
+              ;; operationally enforce that you can't mutate through references to immutable things
+              ;; we could remove this requirement if we desired by replacing the next line with ρ
+              (name ρ (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 α_2) ...))
+              (name ψ (mem (α_3 v_3) ... (α_t v_old) (α_4 v_4) ...))
+              κ prog)
+        (exec (tup)
+              (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 α_2) ...)
+              (mem (α_3 v_3) ... (α_t v_t) (α_4 v_4) ...)
+              κ prog)
+        (where (ptr α_t) (eval-simple-expr-in lv ρ ψ))
+        "E-AssignDeref")
 
    (--> (exec (in-hole E x)
               (env (flag_1 x_1 α_1) ... (flag x α) (flag_2 x_2 α_2) ...)
@@ -490,6 +498,14 @@
  (first-match (Foo 1 2) (((Foo x y) => (x + y)))) ((x + y) (x 1) (y 2)))
 
 (define-metafunction Rust0-Machine
+  eval-simple-expr-in : lv ρ ψ -> v
+  [(eval-simple-expr-in lv ρ ψ)
+   ,(car (apply-reduction-relation* -->Rust0 (term (exec lv ρ ψ halt ()))))])
+
+(redex-chk
+ (eval-simple-expr-in y (env (mut y y1) (imm x x1)) (mem (y1 (ptr x1)) (x1 5))) (ptr x1))
+
+(define-metafunction Rust0-Machine
   eval : prog -> any
   [(eval prog) ,(car (apply-reduction-relation* -->Rust0 (term (exec · (env) (mem) start prog))))])
 
@@ -517,6 +533,11 @@
                          (let (z num) = (deref y))
                          (x := 5)
                          (x + z) }))) 8
+
+ (eval ((fn main [] () { (let mut (x num) = 5)
+                         (let mut (y (ref ι num)) = (ref ι x))
+                         ((deref y) := 4)
+                         x }))) 4
 
  (eval ((fn main [] () { (add_doubles [] (2 3)) })
         (fn add_doubles [] ((x num) (y num)) { ((x + x) + (y + y)) }))) 10
