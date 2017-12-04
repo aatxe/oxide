@@ -30,7 +30,7 @@
       ;; variable
       x
       ;; pointer dereference
-      (* lv)
+      (deref lv)
       ;; projecting a field from a struct variable
       (proj x x)
       ;; lvalue products
@@ -91,7 +91,7 @@
 
   ;; operators
   (binop ::= + = ∧ ∨)
-  (unop ::= - ¬)
+  (unop ::= deref - ¬)
 
   ;; types
   (t ::=
@@ -177,6 +177,16 @@
      ·
      st)
 
+  (rv ::=
+     ....
+     ;; pointer to an address (runtime value for references)
+     (ptr α))
+
+  (v ::=
+     ....
+     ;; pointer to an address (runtime value for references)
+     (ptr α))
+
   ;; control values
   (cv ::=
       ·
@@ -222,7 +232,7 @@
      ;; pattern matching
      (match E {(pat => rv) ...})
 
-     ;; simple evaluation contextx (from core.rkt)
+     ;; simple evaluation context (from core.rkt)
 
      ;; branching
      (if E rv rv)
@@ -243,7 +253,8 @@
      (E ∧ rv)
      (v ∨ E)
      (E ∨ rv)
-     (¬ E)))
+     (¬ E)
+     (deref E)))
 
 (define -->Rust0
   (reduction-relation
@@ -263,7 +274,8 @@
               (mem (α_n v_n) ... (α_m v_m) ...)
               κ prog)
         (where ((x_n v_n) ...) (match-pat-or-err pat v))
-        (where (α_n ...) ,(variables-not-in (term (α_e ... α_m ...)) (term (x_n ...))))
+        (where (α_n ...) ,(variables-not-in (term (x_e ... x_n ... α_e ... α_m ...))
+                                            (term (x_n ...))))
         "E-ImmBinding")
    (--> (exec (let mut (pat t) = v) (env (flag x_e α_e) ...) (mem (α_m v_m) ...) κ prog)
         (exec (tup)
@@ -271,7 +283,8 @@
               (mem (α_n v_n) ... (α_m v_m) ...)
               κ prog)
         (where ((x_n v_n) ...) (match-pat-or-err pat v))
-        (where (α_n ...) ,(variables-not-in (term (α_e ... α_m ...)) (term (x_n ...))))
+        (where (α_n ...) ,(variables-not-in (term (x_e ... x_n ... α_e ... α_m ...))
+                                            (term (x_n ...))))
         "E-MutBinding")
    (--> (exec (x_t := v_t)
               (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 v_2) ...)
@@ -281,7 +294,7 @@
               (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 v_2) ...)
               (mem (α_3 v_3) ... (α_t v_t) (α_4 v_4) ...)
               κ prog)
-        "E-Assign")
+        "E-AssignId")
 
    (--> (exec (in-hole E x)
               (env (flag_1 x_1 α_1) ... (flag x α) (flag_2 x_2 α_2) ...)
@@ -322,6 +335,17 @@
         (where (rv_m (x_n v_n) ...) (first-match v_match ((pat => rv) ...)) )
         (where (α_n ...) ,(variables-not-in (term (α_m ...)) (term (x_n ...))))
         "E-Match")
+
+   (--> (exec (in-hole E (deref (ptr α))) ρ (mem (α_1 v_1) ... (α v) (α_2 v_2) ...) κ prog)
+        (exec (in-hole E v) ρ (mem (α_1 v_1) ... (α v) (α_2 v_2) ...) κ prog)
+        "E-Deref")
+   (--> (exec (in-hole E (ref ι x))
+              (env (flag_1 x_1 α_1) ... (flag x α) (flag_2 x_2 α_2) ...)
+              ψ κ prog)
+        (exec (in-hole E (ptr α))
+              (env (flag_1 x_1 α_1) ... (flag x α) (flag_2 x_2 α_2) ...)
+              ψ κ prog)
+        "E-RefId")
 
    (--> (exec (block st ...) ρ ψ κ prog)
         (exec · ρ ψ (block st ... κ) prog)
@@ -471,10 +495,28 @@
 
 (redex-chk
  (eval ((fn main [] () { (let mut (x num) = (1 + 2)) (x := 6) (1 + x) }))) 7
+ (eval ((fn main [] () { (let mut (x num) = (1 + 2))
+                         (let mut (unused num) = 5)
+                         (x := 6)
+                         (1 + x) }))) 7
+ (eval ((fn main [] () { (let mut (unused num) = 5)
+                         (let mut (x num) = (1 + 2))
+                         (x := 6)
+                         (1 + x) }))) 7
  (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
  (eval ((fn main [] () { (proj x (Point { (x 0) (y 1) })) }))) 0
  (eval ((fn main [] () { (let ((tup x y) (tup num num)) = (tup 4 5))
                          (x + y) }))) 9
+ (eval ((fn main [] () { (let (x num) = 3)
+                         (let (y (ref ι num)) = (ref ι x))
+                         (let mut (z num) = (deref y))
+                         (z := 5)
+                         (x + z) }))) 8
+ (eval ((fn main [] () { (let mut (x num) = 3)
+                         (let (y (ref ι num)) = (ref ι x))
+                         (let (z num) = (deref y))
+                         (x := 5)
+                         (x + z) }))) 8
 
  (eval ((fn main [] () { (add_doubles [] (2 3)) })
         (fn add_doubles [] ((x num) (y num)) { ((x + x) + (y + y)) }))) 10
