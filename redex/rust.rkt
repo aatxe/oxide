@@ -257,13 +257,21 @@
         cv
         "E-HaltProgram")
 
-   (--> (exec (let (x t) = v) (env (flag x_e α_e) ...) (mem (α_m v_m) ...) κ prog)
-        (exec (tup) (env (imm x α) (flag x_e α_e) ...) (mem (α v) (α_m v_m) ...) κ prog)
-        (fresh α)
+   (--> (exec (let (pat t) = v) (env (flag x_e α_e) ...) (mem (α_m v_m) ...) κ prog)
+        (exec (tup)
+              (env (imm x_n α_n) ... (flag x_e α_e) ...)
+              (mem (α_n v_n) ... (α_m v_m) ...)
+              κ prog)
+        (where ((x_n v_n) ...) (match-pat-or-err pat v))
+        (where (α_n ...) ,(variables-not-in (term (α_e ... α_m ...)) (term (x_n ...))))
         "E-ImmBinding")
-   (--> (exec (let mut (x t) = v) (env (flag x_e α_e) ...) (mem (α_m v_m) ...) κ prog)
-        (exec (tup) (env (mut x α) (flag x_e α_e) ...) (mem (α v) (α_m v_m) ...) κ prog)
-        (fresh α)
+   (--> (exec (let mut (pat t) = v) (env (flag x_e α_e) ...) (mem (α_m v_m) ...) κ prog)
+        (exec (tup)
+              (env (mut x_n α_n) ... (flag x_e α_e) ...)
+              (mem (α_n v_n) ... (α_m v_m) ...)
+              κ prog)
+        (where ((x_n v_n) ...) (match-pat-or-err pat v))
+        (where (α_n ...) ,(variables-not-in (term (α_e ... α_m ...)) (term (x_n ...))))
         "E-MutBinding")
    (--> (exec (x_t := v_t)
               (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 v_2) ...)
@@ -294,12 +302,13 @@
               (block st_1 ... (fun x_f (in-hole E x_f) ρ κ)) prog)
         (where (fn f [(lft ι) ... T ...] ((x t) ...) { st_0 st_1 ... })
                (lookup-fn prog f))
-        (fresh x_f α)
+        (where (α ...) ,(variables-not-in (term (α_m ...)) (term (x ...))))
+        (fresh x_f)
         "E-App")
    ;; TODO: return should de-allocate memory that is no longer accessible (equivalent of calling drop)
    (--> (exec v_1 _ (mem (α_m v_m) ...) (fun x_1 st (env (flag_2 x_2 α_2) ...) κ) prog)
         (exec st (env (imm x_1 α_1) (flag_2 x_2 α_2) ...) (mem (α_1 v_1) (α_m v_m) ...) κ prog)
-        (fresh α_m)
+        (fresh α_1)
         "E-Return")
 
    (--> (exec (in-hole E (match v_match {(pat => rv) ...}))
@@ -311,7 +320,7 @@
               (mem (α_n v_n) ... (α_m v_m) ...)
               κ prog)
         (where (rv_m (x_n v_n) ...) (first-match v_match ((pat => rv) ...)) )
-        (fresh α_n)
+        (where (α_n ...) ,(variables-not-in (term (α_m ...)) (term (x_n ...))))
         "E-Match")
 
    (--> (exec (block st ...) ρ ψ κ prog)
@@ -431,11 +440,18 @@
   [(match-pat (vid pat ...) (vid v ...)) ,(group 2 (flatten (term ((match-pat pat v) ...))))]
   [(match-pat ((name expected vid_!_1) _ ...) ((name found vid_!_1) _ ...)) (failed)]
   [(match-pat (vid pat ...) v) (failed)]
-  [(match-pat (tup pat ...) (tup pat ...)) ,(group 2 (flatten (term ((match-pat pat v) ...))))]
+  [(match-pat (tup pat ...) (tup v ...)) ,(group 2 (flatten (term ((match-pat pat v) ...))))]
   [(match-pat underscore _) ()])
 
 (redex-chk
  (match-pat (Foo (Bar x) (Bar y) z) (Foo (Bar 13) (Bar 15) 8)) ((x 13) (y 15) (z 8)))
+
+(define-metafunction Rust0-Machine
+  match-pat-or-err : pat v -> any
+  [(match-pat-or-err pat v) ,(let ([binds (term (match-pat pat v))])
+                               (if (not (member (term failed) binds))
+                                   binds
+                                   (error "failed to match pattern " (term pat) " against " (term v))))])
 
 (define-metafunction Rust0-Machine
   first-match : v ((pat => rv) ...) -> any
@@ -457,6 +473,8 @@
  (eval ((fn main [] () { (let mut (x num) = (1 + 2)) (x := 6) (1 + x) }))) 7
  (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
  (eval ((fn main [] () { (proj x (Point { (x 0) (y 1) })) }))) 0
+ (eval ((fn main [] () { (let ((tup x y) (tup num num)) = (tup 4 5))
+                         (x + y) }))) 9
 
  (eval ((fn main [] () { (add_doubles [] (2 3)) })
         (fn add_doubles [] ((x num) (y num)) { ((x + x) + (y + y)) }))) 10
