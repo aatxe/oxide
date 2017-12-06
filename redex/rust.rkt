@@ -111,17 +111,6 @@
      num
      bool)
 
-  ;; values
-  (v ::=
-     ;; constants
-     const
-     ;; tuples of values
-     (tup v ...)
-     ;; enum variants of values
-     (vid v ...)
-     ;; struct of values
-     (sid {(x v) ...}))
-
   ;; shorthand for numbers
   (n ::= number)
 
@@ -177,16 +166,34 @@
      ·
      st)
 
-  (v ::=
-     ....
+  ;; base values
+  (bv ::=
+     ;; constants
+     const
      ;; pointer to an address (runtime value for references)
-     (ptr α))
+     (ptr α)
+     ;; tuples of addresses (pointing to values)
+     (tup α ...)
+     ;; enum variants of addresses
+     (vid α ...)
+     ;; runtime struct values
+     (sid {(x α) ...}))
 
-  ;; control values
+  (v ::=
+     ;; bare address (used in pattern matching and stuff)
+     α
+     ;; base values
+     bv)
+
+  ;; control values (normal values with indirection removed + abort + ·)
   (cv ::=
       ·
       (abort!)
-      v)
+      (ptr α)
+      const
+      (tup cv ...)
+      (vid cv ...)
+      (sid {(x cv) ...}))
 
   ;; addresses
   (α ::= variable-not-otherwise-mentioned)
@@ -263,21 +270,27 @@
         cv
         "E-HaltProgram")
 
-   (--> (exec (let (pat t) = v) (env (flag x_e α_e) ...) (mem (α_m v_m) ...) κ prog)
+   (--> (exec (let (pat t) = v)
+              (env (flag x_e α_e) ...)
+              (name ψ (mem (α_m v_m) ...))
+              κ prog)
         (exec (tup)
               (env (imm x_n α_n) ... (flag x_e α_e) ...)
               (mem (α_n v_n) ... (α_m v_m) ...)
               κ prog)
-        (where ((x_n v_n) ...) (match-pat-or-err pat v))
+        (where ((x_n v_n) ...) (match-pat-or-err pat v ψ))
         (where (α_n ...) ,(variables-not-in (term (x_e ... x_n ... α_e ... α_m ...))
                                             (term (x_n ...))))
         "E-ImmBinding")
-   (--> (exec (let mut (pat t) = v) (env (flag x_e α_e) ...) (mem (α_m v_m) ...) κ prog)
+   (--> (exec (let mut (pat t) = v)
+              (env (flag x_e α_e) ...)
+              (name ψ (mem (α_m v_m) ...))
+              κ prog)
         (exec (tup)
               (env (mut x_n α_n) ... (flag x_e α_e) ...)
               (mem (α_n v_n) ... (α_m v_m) ...)
               κ prog)
-        (where ((x_n v_n) ...) (match-pat-or-err pat v))
+        (where ((x_n v_n) ...) (match-pat-or-err pat v ψ))
         (where (α_n ...) ,(variables-not-in (term (x_e ... x_n ... α_e ... α_m ...))
                                             (term (x_n ...))))
         "E-MutBinding")
@@ -314,16 +327,40 @@
               κ prog)
         "E-Id")
 
-   (--> (exec (in-hole E (f [any ...] (v ...))) ρ
+   (--> (exec (in-hole E (tup cv_n ...))
+              (env (flag x α) ...)
               (mem (α_m v_m) ...)
+              κ prog)
+        (exec (in-hole E (tup α_n ...))
+              (env (flag x α) ...)
+              (mem (α_n cv_n) ... (α_m v_m) ...)
+              κ prog)
+        (where (α_n ...) ,(variables-not-in (term (x ... α ... α_m ... v_m ...))
+                                            (map (lambda (x) (gensym)) (term (cv_n ...)))))
+        "E-AllocTup")
+   (--> (exec (in-hole E (vid cv_n ...))
+              (env (flag x α) ...)
+              (mem (α_m v_m) ...)
+              κ prog)
+        (exec (in-hole E (vid α_n ...))
+              (env (flag x α) ...)
+              (mem (α_n cv_n) ... (α_m v_m) ...)
+              κ prog)
+        (where (α_n ...) ,(variables-not-in (term (x ... α ... α_m ... v_m ...))
+                                            (map (lambda (x) (gensym)) (term (cv_n ...)))))
+        "E-AllocEnumVariant")
+
+   (--> (exec (in-hole E (f [any ...] (bv ...))) ρ
+              (name ψ (mem (α_m v_m) ...))
               κ prog)
         (exec st_0
               (env (imm x α) ...)
-              (mem (α v) ... (α_m v_m) ...)
+              (mem (α bv) ... (α_m v_m) ...)
               (block st_1 ... (fun x_f (in-hole E x_f) ρ κ)) prog)
         (where (fn f [(lft ι) ... T ...] ((x t) ...) { st_0 st_1 ... })
                (lookup-fn prog f))
-        (where (α ...) ,(variables-not-in (term (α_m ...)) (term (x ...))))
+        (where _ ,(println (term κ)))
+        (where (α ...) ,(variables-not-in (term (x_f x ... bv ... α_m ... v_m ...)) (term (x ...))))
         (fresh x_f)
         "E-App")
    ;; TODO: return should de-allocate memory that is no longer accessible (equivalent of calling drop)
@@ -332,15 +369,15 @@
         (fresh α_1)
         "E-Return")
 
-   (--> (exec (in-hole E (match v_match {(pat => rv) ...}))
+   (--> (exec (in-hole E (match bv_match {(pat => rv) ...}))
               (env (flag x α) ...)
-              (mem (α_m v_m) ...)
+              (name ψ (mem (α_m v_m) ...))
               κ prog)
         (exec (in-hole E rv_m)
               (env (imm x_n α_n) ... (flag x α) ...)
               (mem (α_n v_n) ... (α_m v_m) ...)
               κ prog)
-        (where (rv_m (x_n v_n) ...) (first-match v_match ((pat => rv) ...)) )
+        (where (rv_m (x_n v_n) ...) (first-match ψ bv_match ((pat => rv) ...)) )
         (where (α_n ...) ,(variables-not-in (term (α_m ...)) (term (x_n ...))))
         "E-Match")
 
@@ -393,10 +430,10 @@
    (--> (in-hole E (n_1 + n_2))
         (in-hole E (Σ n_1 n_2))
         "E-Add")
-   (--> (in-hole E (v = v))
+   (--> (in-hole E (bv = bv))
         (in-hole E true)
         "E-EqTrue")
-   (--> (in-hole E (v_!_1 = v_!_1))
+   (--> (in-hole E (bv_!_1 = bv_!_1))
         (in-hole E false)
         "E-EqFalse")
    (--> (in-hole E (- n))
@@ -453,6 +490,16 @@
                                                               ((Option::Some x) => x) }) }))
             unwrap) (fn unwrap [T] ((opt (Option T))) { (match opt { ((Option::None) => (abort!))
                                                                      ((Option::Some x) => x) }) }))
+(define-metafunction Rust0-Machine
+  lookup-addr : ψ α -> v
+  [(lookup-addr (mem (α_!_1 v_1) ... ((name α α_!_1) v_2) (α_!_1 v_3) ...) α) v_2]
+  [(lookup-addr (name ψ (mem (α_!_1 v) ...)) (name α α_!_1))
+   ,(error "failed to look up address " (term α) " in " (term ψ))])
+
+(redex-chk
+ (lookup-addr (mem (α1 3) (α2 5) (α3 6)) α2) 5
+ (lookup-addr (mem (α1 3) (α2 5) (α3 6)) α1) 3
+ (lookup-addr (mem (α1 3) (α2 5) (α3 6)) α3) 6)
 
 (define-metafunction Rust0-Machine
   Σ : number ... -> number
@@ -467,38 +514,66 @@
   [(project number (tup v ...)) ,(list-ref (term (v ...)) (- (term number) 1))])
 
 (define-metafunction Rust0-Machine
-  match-pat : pat v -> any
-  [(match-pat x v) ((x v))]
-  [(match-pat (vid pat ...) (vid v ...)) ,(group 2 (flatten (term ((match-pat pat v) ...))))]
-  [(match-pat ((name expected vid_!_1) _ ...) ((name found vid_!_1) _ ...)) (failed)]
-  [(match-pat (vid pat ...) v) (failed)]
-  [(match-pat (tup pat ...) (tup v ...)) ,(group 2 (flatten (term ((match-pat pat v) ...))))]
-  [(match-pat underscore _) ()])
+  match-pat : pat v ψ -> any
+  ;; matching against an address directly will dereference it
+  [(match-pat x α ψ) ((x (lookup-addr ψ α)))]
+  ;; trivial variable patterns produce a binding
+  [(match-pat x v ψ) ((x v))]
+
+  ;; tuple patterns recursively match against the components of the tuple
+  [(match-pat (tup pat ...) (tup α ...) ψ)
+   ,(group 2 (flatten (term ((match-pat pat (lookup-addr ψ α) ψ) ...))))]
+  ;; matching a tuple against anything else will fail
+  [(match-pat (tup pat ...) v ψ) (failed)]
+
+  ;; enum variant patterns recursively match against the fields of the variant
+  [(match-pat (vid pat ...) (vid α ...) ψ)
+   ,(group 2 (flatten (term ((match-pat pat (lookup-addr ψ α) ψ) ...))))]
+  ;; if there's a name mismatch, the enum variants don't match
+  [(match-pat ((name expected vid_!_1) _ ...) ((name found vid_!_1) _ ...) ψ) (failed)]
+  ;; matching an enum variant pattern with anything else will fail
+  [(match-pat (vid pat ...) v ψ) (failed)]
+
+  ;; wildcard pattern matches everything, but binds nothing
+  [(match-pat underscore _ ψ) ()])
 
 (redex-chk
- (match-pat (Foo (Bar x) (Bar y) z) (Foo (Bar 13) (Bar 15) 8)) ((x 13) (y 15) (z 8)))
+ (match-pat x 5 (mem)) ((x 5))
+ (match-pat x α (mem (α 7))) ((x 7))
+
+ (match-pat (Foo x y)
+            (Foo α1 α2)
+            (mem (α2 5) (α1 17)))
+ ((x 17) (y 5))
+
+ (match-pat (Foo (Bar x) (Bar y) z)
+            (Foo α1 α2 α3)
+            (mem (α5 13) (α4 15) (α3 8) (α2 (Bar α4)) (α1 (Bar α5))))
+ ((x 13) (y 15) (z 8)))
 
 (define-metafunction Rust0-Machine
-  match-pat-or-err : pat v -> any
-  [(match-pat-or-err pat v) ,(let ([binds (term (match-pat pat v))])
-                               (if (not (member (term failed) binds))
-                                   binds
-                                   (error "failed to match pattern " (term pat) " against " (term v))))])
+  match-pat-or-err : pat v ψ -> any
+  [(match-pat-or-err pat v ψ) ,(let ([binds (term (match-pat pat v ψ))])
+                                 (if (not (member (term failed) binds))
+                                     binds
+                                     (error "failed to match pattern " (term pat)
+                                            " against " (term v))))])
 
 (define-metafunction Rust0-Machine
-  first-match : v ((pat => rv) ...) -> any
-  [(first-match v ((pat => rv) (pat_2 => rv_2) ...)) ,(let ([binds (term (match-pat pat v))])
-                                      (if (not (member (term failed) binds))
-                                          (cons (term rv) binds)
-                                          (term (first-match v ((pat_2 => rv_2) ...)))))]
-  [(first-match v ()) ,(error "failed to find match for value:" (term v))])
+  first-match : ψ v ((pat => rv) ...) -> any
+  [(first-match ψ v ((pat => rv) (pat_2 => rv_2) ...))
+   ,(let ([binds (term (match-pat pat v ψ))])
+      (if (not (member (term failed) binds))
+          (cons (term rv) binds)
+          (term (first-match ψ v ((pat_2 => rv_2) ...)))))]
+  [(first-match ψ v ()) ,(error "failed to find match for value:" (term v))])
 
 (redex-chk
- (first-match 3 (((Foo) => 1) (x => 2) (x => 4))) (2 (x 3))
- (first-match (Foo 1 2) (((Foo x y) => (x + y)))) ((x + y) (x 1) (y 2)))
+ (first-match (mem) 3 (((Foo) => 1) (x => 2) (x => 4))) (2 (x 3))
+ (first-match (mem (α2 2) (α1 1)) (Foo α1 α2) (((Foo x y) => (x + y)))) ((x + y) (x 1) (y 2)))
 
 (define-metafunction Rust0-Machine
-  eval-simple-expr-in : lv ρ ψ -> v
+  eval-simple-expr-in : lv ρ ψ -> cv
   [(eval-simple-expr-in lv ρ ψ)
    ,(car (apply-reduction-relation* -->Rust0 (term (exec lv ρ ψ halt ()))))])
 
@@ -559,8 +634,8 @@
                                                          ((Option::Some x) => x) }) })
         (fn main [] () { (let (x (Option num)) = (Option::Some 2))
                          (unwrap [num] (x)) }))) 2
-(eval ((enum Option [T] { (None) (Some T) })
-       (fn unwrap [T] ((opt (Option T))) { (match opt { ((Option::None) => (abort!))
-                                                        ((Option::Some x) => x) }) })
-       (fn main [] () { (let (x (Option num)) = (Option::None))
-                        (unwrap [num] (x)) }))) (abort!))
+ (eval ((enum Option [T] { (None) (Some T) })
+        (fn unwrap [T] ((opt (Option T))) { (match opt { ((Option::None) => (abort!))
+                                                         ((Option::Some x) => x) }) })
+        (fn main [] () { (let (x (Option num)) = (Option::None))
+                         (unwrap [num] (x)) }))) (abort!))
