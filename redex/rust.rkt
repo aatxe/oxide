@@ -538,6 +538,14 @@
                          (let mut (y (ref ι num)) = (ref ι x))
                          ((deref y) := 4)
                          x }))) 4
+ (eval ((fn main [] () { (let mut (n num) = 5)
+                         (let mut (x (ref ι num)) = (ref ι n))
+                         (let mut (y (ref ι (ref ι num))) = (ref ι x))
+                         (let mut (m num) = 3)
+                         (let mut (z (ref ι num)) = (ref ι m))
+                         ((deref y) := z)
+                         ((deref (deref y)) := 9)
+                         (m + n) }))) 14
 
  (eval ((fn main [] () { (add_doubles [] (2 3)) })
         (fn add_doubles [] ((x num) (y num)) { ((x + x) + (y + y)) }))) 10
