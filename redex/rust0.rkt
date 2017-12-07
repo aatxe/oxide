@@ -11,7 +11,7 @@
   ;; top-level statements
   (tls ::=
        (struct sid [(lft ι) ... T ...] {(x t) ...})
-       (enum sid [(lft ι) ... T ...] {(vid t ...) ...})
+       (enum sid [(lft ι) ... T ...] {dt ...})
        (fn f [(lft ι) ... T ...] ((x t) ...) { st ... }))
 
   ;; statements
@@ -36,6 +36,19 @@
       ;; lvalue products
       (tup lv ...))
 
+  ;; data structures - struct and variant kinds
+  (d ::=
+     ;; named tuple - a kind of struct and enum variant
+     (sid e ...)
+     ;; named record - a kind of struct and enum variant
+     (sid {(x e) ...}))
+
+  ;; data structure typeforms - struct and variant kinds with types
+  ;; n.b. these are not an actual kind of type, but are used in definitions
+  (dt ::=
+      (sid t ...)
+      (sid {(x t) ...}))
+
   ;; expressions
   (e ::=
      ;; variables
@@ -44,19 +57,17 @@
      (if e e e)
      ;; tuples
      (tup e ...)
+     ;; data structures
+     d
      ;; project the first arg from the second arg
      (proj e e)
-     ;; named tuple - a kind of struct and enum variant
-     (sid e ...)
-     ;; named record - a kind of struct and enum variant
-     (sid {(x e) ...})
 
      ;; function calls
      (f [(lft ι) ... t ...] (e ...))
-     ;; blocks - sequence of statements, takes value of last statement which is unit if not an expression
+     ;; blocks - sequence of statements, takes value of last expression or unit if statement
      (block st ...)
      ;; pattern matching
-     (match rv {(pat => e) ...})
+     (match e {(pat => e) ...})
 
      ;; base values
      const
@@ -129,3 +140,31 @@
   (f ::= variable-not-otherwise-mentioned)
   ;; struct and enum identifiers
   (sid ::= variable-not-otherwise-mentioned))
+
+;; syntax tests
+(redex-chk
+ #:lang Rust0
+
+ ;; valid programs
+ #:m prog ((enum Option [T] { (None) (Some T) })
+           (fn unwrap [T] ((opt (Option [T]))) { (match opt { ((Option::None) => (abort!))
+                                                            ((Option::Some x) => x) }) }))
+ #:m prog ((fn main [] () { (tup) }))
+
+ ;; valid top-level statements
+ #:m tls (struct Point [] { (x num)
+                            (y num) })
+ #:m tls (struct Ref [(lft α) T] { (inner (ref α T)) })
+ #:m tls (enum Option [T] { (None)
+                            (Some T) })
+ #:m tls (enum WeirdOption [T] { (None)
+                                 (Some T)
+                                 (Double T T) })
+ #:m tls (fn main [] () { (tup) (tup) (tup) })
+ #:m tls (fn main [] () { (let [(tup x y) (tup num num)] = (tup 1 2)) })
+ #:m tls (fn sum_to [] ((x num)) { (if (x = 0)
+                                       1
+                                       (x + (sum_to [] ((x + -1))))) })
+
+ ;; invalid top-level statements
+ #:f #:m tls (fn main [] () { (let [(tup 1 2) (tup num num)] = (tup 3 4)) }))
