@@ -212,7 +212,7 @@
       (ptr α)
       const
       (tup cv ...)
-      (vid cv ...)
+      (sid cv ...)
       (sid {(x cv) ...}))
 
   ;; continuations
