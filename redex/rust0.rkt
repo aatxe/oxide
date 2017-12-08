@@ -40,12 +40,12 @@
   ;; data structures - struct and variant kinds
   (d ::=
      ;; named tuple - a kind of struct and enum variant
-     (sid e ...)
+     (sid [(lft ι) ... t ...] e ...)
      ;; named record - a kind of struct and enum variant
-     (sid {(x e) ...}))
+     (sid [(lft ι) ... t ...] {(x e) ...}))
 
   ;; data structure typeforms - struct and variant kinds with types
-  ;; n.b. these are not an actual kind of type, but are used in definitions
+  ;; n.b. these are not an actual kind of type, but are used in definitions for enums
   (dt ::=
       (sid t ...)
       (sid {(x t) ...}))
@@ -149,7 +149,7 @@
  ;; valid programs
  #:m prog ((enum Option [T] { (None) (Some T) })
            (fn unwrap [T] ((opt (Option [T]))) { (match opt { ((Option::None) => (abort!))
-                                                            ((Option::Some x) => x) }) }))
+                                                              ((Option::Some x) => x) }) }))
  #:m prog ((fn main [] () { (tup) }))
  #:m prog ((fn main [] () { 7 }))
 
@@ -194,9 +194,9 @@
      ;; allocated tuple (tuple with addresses)
      (tup α ...)
      ;; allocated named-tuple
-     (sid α ...)
+     (sid [(lft ι) ... t ...] α ...)
      ;; allocated named-record
-     (sid {(x α) ...}))
+     (sid [(lft ι) ... t ...] {(x α) ...}))
 
   ;; control strings
   (c ::=
@@ -212,8 +212,8 @@
       (ptr α)
       const
       (tup cv ...)
-      (sid cv ...)
-      (sid {(x cv) ...}))
+      (sid [(lft ι) ... t ...] cv ...)
+      (sid [(lft ι) ... t ...] {(x cv) ...}))
 
   ;; continuations
   (κ ::=
@@ -240,8 +240,8 @@
      (lv := E)
 
      ;; data structures (enum variants and structs)
-     (sid v ... E e ...)
-     (sid {(x v) ... (x E) (x e) ...})
+     (sid [(lft ι) ... t ...] v ... E e ...)
+     (sid [(lft ι) ... t ...] {(x v) ... (x E) (x e) ...})
 
      ;; function calls
      (f [(lft ι) ... t ...] (v ... E e ...))
@@ -325,11 +325,11 @@
                             (not (eq? (car (term κ)) (term fun)))))
         "E-DeallocTup")
 
-   (--> ((in-hole E (sid cv_n ...))
+   (--> ((in-hole E (sid [(lft ι) ... t ...] cv_n ...))
          (env (flag x α) ...)
          (mem (α_m v_m) ...)
          κ prog)
-        ((in-hole E (sid α_n ...))
+        ((in-hole E (sid [(lft ι) ... t ...] α_n ...))
          (env (flag x α) ...)
          (mem (α_n cv_n) ... (α_m v_m) ...)
          κ prog)
@@ -342,9 +342,9 @@
         (where (α_n ...) ,(variables-not-in (term (x ... α ... α_m ... v_m ...))
                                             (map (lambda (x) (gensym)) (term (cv_n ...)))))
         "E-AllocNamedTup")
-   (--> ((sid α_t ...) ρ ψ κ prog)
+   (--> ((sid [(lft ι) ... t ...] α_t ...) ρ ψ κ prog)
         ;; TODO: actually remove every α_t from ψ
-        ((sid (lookup-addr ψ α_t) ...) ρ ψ κ prog)
+        ((sid [(lft ι) ... t ...] (lookup-addr ψ α_t) ...) ρ ψ κ prog)
         ;; dealloc only when we're not returning from a function
         (side-condition (or (not (pair? (term κ)))
                             (not (eq? (car (term κ)) (term fun)))))
@@ -551,7 +551,7 @@
   [(match-pat (tup pat ...) v ψ) (failed)]
 
   ;; named tuple patterns recursively match against the fields of the variant
-  [(match-pat (sid pat ...) (sid α ...) ψ)
+  [(match-pat (sid pat ...) (sid [_ ...] α ...) ψ)
    ,(group 2 (flatten (term ((match-pat pat (lookup-addr ψ α) ψ) ...))))]
   ;; if there's a name mismatch, the named tuples don't match
   [(match-pat ((name expected sid_!_1) _ ...) ((name found sid_!_1) _ ...) ψ) (failed)]
@@ -566,13 +566,13 @@
  (match-pat x α (mem (α 7))) ((x 7))
 
  (match-pat (Foo x y)
-            (Foo α1 α2)
+            (Foo [] α1 α2)
             (mem (α2 5) (α1 17)))
  ((x 17) (y 5))
 
  (match-pat (Foo (Bar x) (Bar y) z)
-            (Foo α1 α2 α3)
-            (mem (α5 13) (α4 15) (α3 8) (α2 (Bar α4)) (α1 (Bar α5))))
+            (Foo [] α1 α2 α3)
+            (mem (α5 13) (α4 15) (α3 8) (α2 (Bar [] α4)) (α1 (Bar [] α5))))
  ((x 13) (y 15) (z 8)))
 
 (define-metafunction Rust0-Machine
@@ -594,7 +594,7 @@
 
 (redex-chk
  (first-match (mem) 3 (((Foo) => 1) (x => 2) (x => 4))) (2 (x 3))
- (first-match (mem (α2 2) (α1 1)) (Foo α1 α2) (((Foo x y) => (x + y)))) ((x + y) (x 1) (y 2)))
+ (first-match (mem (α2 2) (α1 1)) (Foo [] α1 α2) (((Foo x y) => (x + y)))) ((x + y) (x 1) (y 2)))
 
 (define-metafunction Rust0-Machine
   Σ : number ... -> number
@@ -624,8 +624,8 @@
  (eval ((fn main [] () { (let (x (tup num num)) = (tup 5 9))
                          x }))) (tup 5 9)
  (eval ((struct Point [] num num)
-        (fn main [] () { (let (x Point) = (Point 1 9))
-                         x }))) (Point 1 9)
+        (fn main [] () { (let (x Point) = (Point [] 1 9))
+                         x }))) (Point [] 1 9)
  (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
 
  ;; Simple non-recursive functions
@@ -644,12 +644,12 @@
  (eval ((enum Option [T] { (None) (Some T) })
         (fn unwrap [T] ((opt (Option [T]))) { (match opt { ((Option::None) => (abort!))
                                                          ((Option::Some x) => x) }) })
-        (fn main [] () { (let (x (Option [num])) = (Option::Some 2))
+        (fn main [] () { (let (x (Option [num])) = (Option::Some [] 2))
                          (unwrap [num] (x)) }))) 2
 (eval ((enum Option [T] { (None) (Some T) })
        (fn unwrap [T] ((opt (Option [T]))) { (match opt { ((Option::None) => (abort!))
                                                           ((Option::Some x) => x) }) })
-       (fn main [] () { (let (x (Option [num])) = (Option::None))
+       (fn main [] () { (let (x (Option [num])) = (Option::None []))
                         (unwrap [num] (x)) }))) (abort!)
 
  ;; Straight line code with references
