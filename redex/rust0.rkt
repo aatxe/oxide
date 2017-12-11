@@ -301,13 +301,13 @@
         ((abort!) ρ ψ halt prog)
         "E-AbortKillsStack")
 
-   (--> ((in-hole E (tup cv_n ...))
+   (--> ((in-hole E (tup v_n ...))
          (env (flag x α) ...)
          (mem (α_m v_m) ...)
          κ prog)
         ((in-hole E (tup α_n ...))
          (env (flag x α) ...)
-         (mem (α_n cv_n) ... (α_m v_m) ...)
+         (mem (α_n v_n) ... (α_m v_m) ...)
          κ prog)
         ;; NOTE: rather than these alloc/dealloc constraints, I think I could just add (ret cv κ)?
         ;; allocate if it's not a bare expression
@@ -315,8 +315,8 @@
                             ;; or if it is a bare expression and we're returning from a function
                             (and (pair? (term κ))
                                  (eq? (car (term κ)) (term fun)))))
-        (where (α_n ...) ,(variables-not-in (term (x ... α ... α_m ... v_m ...))
-                                            (map (lambda (x) (gensym)) (term (cv_n ...)))))
+        (where (α_n ...) ,(variables-not-in (term (v_n ... x ... α ... α_m ... v_m ...))
+                                            (map (lambda (x) (gensym)) (term (v_n ...)))))
         "E-AllocTup")
    (--> ((tup α_t ...) ρ ψ κ prog)
         ;; TODO: actually remove every α_t from ψ
@@ -326,13 +326,13 @@
                             (not (eq? (car (term κ)) (term fun)))))
         "E-DeallocTup")
 
-   (--> ((in-hole E (sid [(lft ι) ... t ...] cv_n ...))
+   (--> ((in-hole E (sid [(lft ι) ... t ...] v_n ...))
          (env (flag x α) ...)
          (mem (α_m v_m) ...)
          κ prog)
         ((in-hole E (sid [(lft ι) ... t ...] α_n ...))
          (env (flag x α) ...)
-         (mem (α_n cv_n) ... (α_m v_m) ...)
+         (mem (α_n v_n) ... (α_m v_m) ...)
          κ prog)
         ;; NOTE: rather than these alloc/dealloc constraints, I think I could just add (ret cv κ)?
         ;; allocate if it's not a bare expression
@@ -340,8 +340,8 @@
                             ;; or if it is a bare expression and we're returning from a function
                             (and (pair? (term κ))
                                  (eq? (car (term κ)) (term fun)))))
-        (where (α_n ...) ,(variables-not-in (term (x ... α ... α_m ... v_m ...))
-                                            (map (lambda (x) (gensym)) (term (cv_n ...)))))
+        (where (α_n ...) ,(variables-not-in (term (v_n ... x ... α ... α_m ... v_m ...))
+                                            (map (lambda (x) (gensym)) (term (v_n ...)))))
         "E-AllocNamedTup")
    (--> ((sid [(lft ι) ... t ...] α_t ...) ρ ψ κ prog)
         ;; TODO: actually remove every α_t from ψ
@@ -350,13 +350,13 @@
         (side-condition (or (not (pair? (term κ)))
                             (not (eq? (car (term κ)) (term fun)))))
         "E-DeallocNamedTup")
-   (--> ((in-hole E (sid [(lft ι) ... t ...] { (x_n cv_n) ... }))
+   (--> ((in-hole E (sid [(lft ι) ... t ...] { (x_n v_n) ... }))
          (env (flag x α) ...)
          (mem (α_m v_m) ...)
          κ prog)
         ((in-hole E (sid [(lft ι) ... t ...] { (x_n α_n) ... }))
          (env (flag x α) ...)
-         (mem (α_n cv_n) ... (α_m v_m) ...)
+         (mem (α_n v_n) ... (α_m v_m) ...)
          κ prog)
         ;; NOTE: rather than these alloc/dealloc constraints, I think I could just add (ret cv κ)?
         ;; allocate if it's not a bare expression
@@ -364,7 +364,7 @@
                             ;; or if it is a bare expression and we're returning from a function
                             (and (pair? (term κ))
                                  (eq? (car (term κ)) (term fun)))))
-        (where (α_n ...) ,(variables-not-in (term (x ... α ... x_n ... α_m ... v_m ...))
+        (where (α_n ...) ,(variables-not-in (term (v_n ... x ... α ... x_n ... α_m ... v_m ...))
                                             (term (x_n ...))))
         "E-AllocNamedRecord")
    (--> ((sid [(lft ι) ... t ...] { (x_t α_t) ... }) ρ ψ κ prog)
@@ -685,6 +685,9 @@
  (eval ((struct Point [] { (x num) (y num) })
         (fn main [] () { (let (p Point) = (Point [] { (x 1) (y 9)}))
                          ((proj x p) + (proj y p)) }))) 10
+ (eval ((struct Foo [] { (x (tup num num)) (y (tup num num)) })
+        (fn main [] () { (let (p Foo) = (Foo [] { (x (tup 1 2)) (y (tup 3 4)) }))
+                         (proj x p) }))) (tup 1 2)
  (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
 
  ;; Simple non-recursive functions
