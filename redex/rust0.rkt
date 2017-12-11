@@ -350,6 +350,29 @@
         (side-condition (or (not (pair? (term κ)))
                             (not (eq? (car (term κ)) (term fun)))))
         "E-DeallocNamedTup")
+   (--> ((in-hole E (sid [(lft ι) ... t ...] { (x_n cv_n) ... }))
+         (env (flag x α) ...)
+         (mem (α_m v_m) ...)
+         κ prog)
+        ((in-hole E (sid [(lft ι) ... t ...] { (x_n α_n) ... }))
+         (env (flag x α) ...)
+         (mem (α_n cv_n) ... (α_m v_m) ...)
+         κ prog)
+        ;; NOTE: rather than these alloc/dealloc constraints, I think I could just add (ret cv κ)?
+        ;; allocate if it's not a bare expression
+        (side-condition (or (not (eq? (term E) (term hole)))
+                            ;; or if it is a bare expression and we're returning from a function
+                            (and (pair? (term κ))
+                                 (eq? (car (term κ)) (term fun)))))
+        (where (α_n ...) ,(variables-not-in (term (x ... α ... x_n ... α_m ... v_m ...))
+                                            (term (x_n ...))))
+        "E-AllocNamedRecord")
+   (--> ((sid [(lft ι) ... t ...] { (x_t α_t) ... }) ρ ψ κ prog)
+        ((sid [(lft ι) ... t ...] { (x_t (lookup-addr ψ α_t)) ... }) ρ ψ κ prog)
+        ;; dealloc only when we're not returning from a function
+        (side-condition (or (not (pair? (term κ)))
+                            (not (eq? (car (term κ)) (term fun)))))
+        "E-DeallocNamedRecord")
 
    (--> ((let (pat t) = v)
          (env (flag x_e α_e) ...)
@@ -625,7 +648,6 @@
   [(proj-rec x (sid [] { (x_1 α_1) ... (x α) (x_2 α_2) ... })) α]
   [(proj-rec (name x x_!_1) (name v (sid [] { (x_!_1 α) ... }))) ,(error "failed to find field " (term x)
                                                                          " in " (term v))])
-
 (define-metafunction Rust0-Machine
   negative : number -> number
   [(negative number) ,(- (term number))])
@@ -657,6 +679,9 @@
  (eval ((struct Point [] num num)
         (fn main [] () { (let (x Point) = (Point [] 1 9))
                          ((proj 1 x) + (proj 2 x)) }))) 10
+ (eval ((struct Point [] { (x num) (y num) })
+        (fn main [] () { (let (p Point) = (Point [] { (x 1) (y 9)}))
+                         p }))) (Point [] { (x 1) (y 9) })
  (eval ((struct Point [] { (x num) (y num) })
         (fn main [] () { (let (p Point) = (Point [] { (x 1) (y 9)}))
                          ((proj x p) + (proj y p)) }))) 10
