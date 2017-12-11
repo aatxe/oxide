@@ -102,7 +102,7 @@
        (sid {(x pat) ...}))
 
   ;; operators
-  (binop ::= + = ∧ ∨)
+  (binop ::= + * = ∧ ∨)
   (unop ::= deref - ¬)
 
   ;; types
@@ -275,6 +275,8 @@
      ;; primitive ops
      (v + E)
      (E + e)
+     (v * E)
+     (E * e)
      (v = E)
      (E = e)
      (- E)
@@ -547,6 +549,9 @@
    (--> (in-hole E (n_1 + n_2))
         (in-hole E (Σ n_1 n_2))
         "E-Add")
+   (--> (in-hole E (n_1 * n_2))
+        (in-hole E (Π n_1 n_2))
+        "E-Mult")
    (--> (in-hole E (v = v))
         (in-hole E true)
         "E-EqTrue")
@@ -677,6 +682,10 @@
   [(Σ number ...) ,(apply + (term (number ...)))])
 
 (define-metafunction Rust0-Machine
+  Π : number ... -> number
+  [(Π number ...) ,(apply * (term (number ...)))])
+
+(define-metafunction Rust0-Machine
   proj-tup : number v -> α
   [(proj-tup number (tup α ...)) ,(list-ref (term (α ...)) (- (term number) 1))]
   [(proj-tup number (sid [] α ...)) ,(list-ref (term (α ...)) (- (term number) 1))])
@@ -706,6 +715,7 @@
  ;; Straight line code
  (eval ((fn main [] () { 7 }))) 7
  (eval ((fn main [] () { 3 2 }))) 2
+ (eval ((fn main [] () { ((3 + 2) * 6) }))) 30
  (eval ((fn main [] () { (block 4 5) }))) 5
  (eval ((fn main [] () { (tup 1 2) }))) (tup 1 2)
  (eval ((fn main [] () { (let (x (tup num num)) = (tup 5 9))
