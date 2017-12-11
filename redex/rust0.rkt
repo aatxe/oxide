@@ -242,6 +242,8 @@
      ;; data structures (enum variants and structs)
      (sid [(lft ι) ... t ...] v ... E e ...)
      (sid [(lft ι) ... t ...] {(x v) ... (x E) (x e) ...})
+     ;; record projection
+     (proj x E)
 
      ;; function calls
      (f [(lft ι) ... t ...] (v ... E e ...))
@@ -254,8 +256,7 @@
      ;; products
      (tup v ... E e ...)
      ;; product projection
-     (proj E e)
-     (proj v E)
+     (proj n E)
 
      ;; primitive ops
      (v + E)
@@ -424,6 +425,20 @@
    (--> ((in-hole E (deref (ptr α))) ρ (mem (α_1 v_1) ... (α v) (α_2 v_2) ...) κ prog)
         ((in-hole E v) ρ (mem (α_1 v_1) ... (α v) (α_2 v_2) ...) κ prog)
         "E-Deref")
+   ;; projections are a kind of dereference
+   (--> ((in-hole E (proj n (tup α ...))) ρ (mem (α_1 v_1) ... (α_t v_t) (α_2 v_2) ... ) κ prog)
+        ((in-hole E v_t) ρ (mem (α_1 v_1) ... (α_t v_t) (α_2 v_2) ...) κ prog)
+        (where α_t (proj-tup n (tup α ...)))
+        "E-ProjTup")
+   (--> ((in-hole E (proj n (sid [] α ...))) ρ (mem (α_1 v_1) ... (α_t v_t) (α_2 v_2) ... ) κ prog)
+        ((in-hole E v_t) ρ (mem (α_1 v_1) ... (α_t v_t) (α_2 v_2) ...) κ prog)
+        (where α_t (proj-tup n (sid [] α ...)))
+        "E-ProjNamedTup")
+   (--> ((in-hole E (proj x_t (sid [] { (x α) ... }))) ρ (mem (α_1 v_1) ... (α_t v_t) (α_2 v_2) ...) κ prog)
+        ((in-hole E v_t) ρ (mem (α_1 v_1) ... (α_t v_t) (α_2 v_2) ...) κ prog)
+        (where α_t (proj-rec x_t (sid [] { (x α) ... })))
+        "E-ProjNamedRec")
+
    (--> ((in-hole E (ref ι x))
          (env (flag_1 x_1 α_1) ... (flag x α) (flag_2 x_2 α_2) ...)
          ψ κ prog)
@@ -601,6 +616,17 @@
   [(Σ number ...) ,(apply + (term (number ...)))])
 
 (define-metafunction Rust0-Machine
+  proj-tup : number v -> α
+  [(proj-tup number (tup α ...)) ,(list-ref (term (α ...)) (- (term number) 1))]
+  [(proj-tup number (sid [] α ...)) ,(list-ref (term (α ...)) (- (term number) 1))])
+
+(define-metafunction Rust0-Machine
+  proj-rec : x v -> α
+  [(proj-rec x (sid [] { (x_1 α_1) ... (x α) (x_2 α_2) ... })) α]
+  [(proj-rec (name x x_!_1) (name v (sid [] { (x_!_1 α) ... }))) ,(error "failed to find field " (term x)
+                                                                         " in " (term v))])
+
+(define-metafunction Rust0-Machine
   negative : number -> number
   [(negative number) ,(- (term number))])
 
@@ -623,9 +649,17 @@
  (eval ((fn main [] () { (tup 1 2) }))) (tup 1 2)
  (eval ((fn main [] () { (let (x (tup num num)) = (tup 5 9))
                          x }))) (tup 5 9)
+ (eval ((fn main [] () { (let (x (tup num num)) = (tup 5 9))
+                         ((proj 1 x) + (proj 2 x)) }))) 14
  (eval ((struct Point [] num num)
         (fn main [] () { (let (x Point) = (Point [] 1 9))
                          x }))) (Point [] 1 9)
+ (eval ((struct Point [] num num)
+        (fn main [] () { (let (x Point) = (Point [] 1 9))
+                         ((proj 1 x) + (proj 2 x)) }))) 10
+ (eval ((struct Point [] { (x num) (y num) })
+        (fn main [] () { (let (p Point) = (Point [] { (x 1) (y 9)}))
+                         ((proj x p) + (proj y p)) }))) 10
  (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
 
  ;; Simple non-recursive functions
