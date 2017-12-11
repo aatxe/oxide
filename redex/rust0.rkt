@@ -99,9 +99,7 @@
        ;; named tuple pattern
        (sid pat ...)
        ;; named record pattern
-       (sid {(x pat) ...})
-       ;; reference pattern
-       (ref pat))
+       (sid {(x pat) ...}))
 
   ;; operators
   (binop ::= + = ∧ ∨)
