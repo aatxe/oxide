@@ -32,10 +32,10 @@
       x
       ;; pointer dereference
       (deref lv)
-      ;; projecting a field from a struct variable
-      (proj x x)
-      ;; lvalue products
-      (tup lv ...))
+      ;; field projection
+      (proj x lv)
+      ;; product projection
+      (proj n lv))
 
   ;; data structures - struct and variant kinds
   (d ::=
@@ -226,6 +226,22 @@
      ;; continuation representing a block of statements to execute before continuing to κ
      (block st ... κ))
 
+  ;; lvalues
+  (lv ::=
+      ....
+      ;; pointers appear in the runtime interpretation of lvalues
+      (ptr α))
+
+  ;; LValue contexts
+  (LV ::=
+      hole
+      ;; pointer dereference
+      (deref LV)
+      ;; field projection
+      (proj x LV)
+      ;; product projection
+      (proj n LV))
+
   ;; evaluation contexts
   (E ::=
      ;; top-level evaluation context, format: c ρ ψ κ prog
@@ -271,6 +287,42 @@
      (¬ E)
      (deref E)))
 
+(define -->Rust0-LValue
+  (reduction-relation
+   Rust0-Machine
+
+   (--> ((in-hole LV x) (env (flag_1 x_1 α_1) ... (flag x α) (flag_2 x_2 α_2) ...) ψ)
+        ((in-hole LV (ptr α)) (env (flag_1 x_1 α_1) ... (flag x α) (flag_2 x_2 α_2) ...) ψ)
+        "LV-Id")
+   ;; NOTE: I think real Rust does auto-dereferencing, so, one deref is automatically the correct number of derefs?
+   (--> ((in-hole LV (deref (ptr α))) ρ (name ψ (mem (α_1 v_1) ... (α (ptr α_t)) (α_2 v_2) ...)))
+        ((in-hole LV (ptr α_t)) ρ ψ)
+        "LV-Deref")
+   (--> ((in-hole LV (proj n (ptr α_t)))
+         ρ
+         (mem (α_1 v_1) ... (α_t (tup α_tc ...)) (α_2 v_2) ...))
+        ((in-hole LV (ptr (proj-tup n (tup α_tc ...))))
+         ρ
+         (mem (α_1 v_1) ... (α_t (tup α_tc ...)) (α_2 v_2) ...))
+        "LV-ProjTup")
+   (--> ((in-hole LV (proj n (ptr α_t)))
+         ρ
+         (mem (α_1 v_1) ... (α_t (sid [] α_tc ...)) (α_2 v_2) ...))
+        ((in-hole LV (ptr (proj-tup n (sid [] α_tc ...))))
+         ρ
+         (mem (α_1 v_1) ... (α_t (sid [] α_tc ...)) (α_2 v_2) ...))
+        "LV-ProjNamedTup")
+   (--> ((in-hole LV (proj x_t (ptr α_t)))
+         ρ
+         (mem (α_1 v_1) ... (α_t (sid [] { (x_tc α_tc) ... })) (α_2 v_2) ...))
+        ((in-hole LV (ptr (proj-rec x_t (sid [] { (x_tc α_tc) ... }))))
+         ρ
+         (mem (α_1 v_1) ... (α_t (sid [] { (x_tc α_tc) ... })) (α_2 v_2) ...))
+        "LV-ProjNamedRec")
+
+  (--> ((ptr α) ρ ψ)
+       (ptr α)
+       "LV-FinishReduce")))
 
 (define -->Rust0
   (reduction-relation
@@ -470,28 +522,16 @@
          ψ κ prog)
         "E-RefId")
 
-   (--> ((x_t := v_t)
-         (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 α_2) ...)
-         (mem (α_3 v_3) ... (α_t v_old) (α_4 v_4) ...)
-         κ prog)
-        ((tup)
-         (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 α_2) ...)
-         (mem (α_3 v_3) ... (α_t v_t) (α_4 v_4) ...)
-         κ prog)
-        "E-AssignId")
-   (--> (((deref lv) := v_t)
-         ;; NOTE: because we require a mutable binding to appear to this address, we actually
-         ;; operationally enforce that you can't mutate through references to immutable things
-         ;; we could remove this requirement if we desired by replacing the next line with ρ
-         (name ρ (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 α_2) ...))
+   (--> ((lv := v_t)
+         ρ
          (name ψ (mem (α_3 v_3) ... (α_t v_old) (α_4 v_4) ...))
          κ prog)
         ((tup)
-         (env (flag_1 x_1 α_1) ... (mut x_t α_t) (flag_2 x_2 α_2) ...)
+         ρ
          (mem (α_3 v_3) ... (α_t v_t) (α_4 v_4) ...)
          κ prog)
         (where (ptr α_t) (reduce-lv-in lv ρ ψ))
-        "E-AssignDeref")
+        "E-Assign")
 
    ;;;;;;;;;;;;;;;;;;;;;;;;;;
    ;; Pure Reduction Rules ;;
@@ -653,12 +693,13 @@
   [(negative number) ,(- (term number))])
 
 (define-metafunction Rust0-Machine
-  reduce-lv-in : lv ρ ψ -> cv
+  reduce-lv-in : lv ρ ψ -> (ptr α)
   [(reduce-lv-in lv ρ ψ)
-   ,(car (apply-reduction-relation* -->Rust0 (term (lv ρ ψ halt ()))))])
+   ,(car (apply-reduction-relation* -->Rust0-LValue (term (lv ρ ψ))))])
 
 (redex-chk
- (reduce-lv-in y (env (mut y y1) (imm x x1)) (mem (y1 (ptr x1)) (x1 5))) (ptr x1))
+ (reduce-lv-in y (env (mut y y1)) (mem (y1 5))) (ptr y1))
+
 (define-metafunction Rust0-Machine
   eval : prog -> any
   [(eval prog) ,(car (apply-reduction-relation* -->Rust0 (term (· (env) (mem) start prog))))])
@@ -689,6 +730,17 @@
         (fn main [] () { (let (p Foo) = (Foo [] { (x (tup 1 2)) (y (tup 3 4)) }))
                          (proj x p) }))) (tup 1 2)
  (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
+ (eval ((fn main [] () { (let mut (x (tup num num num)) = (tup 2 3 4))
+                         ((proj 3 x) := 7)
+                         (proj 3 x) }))) 7
+ (eval ((struct Point [] num num)
+        (fn main [] () { (let (x Point) = (Point [] 1 9))
+                         ((proj 1 x) := 6)
+                         ((proj 1 x) + (proj 2 x)) }))) 15
+ (eval ((struct Point [] { (x num) (y num) })
+        (fn main [] () { (let (p Point) = (Point [] { (x 1) (y 9)}))
+                         ((proj x p) := 11)
+                         ((proj x p) + (proj y p)) }))) 20
 
  ;; Simple non-recursive functions
  (eval ((fn main [] () { (id [] (5)) })
