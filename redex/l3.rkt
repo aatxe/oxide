@@ -429,14 +429,6 @@
    ------------------------------ "App"
    (type? Δ Γ ⊢ (e_3 e_1) : τ_2)]
 
-  [-------------------------------- "Ptr"
-   (type? Δ Γ ⊢ (ptr l) : (ptr l))]
-
-  ;; FIXME: where does the τ come from in the type?
-  ;; can probably infer, but we can probably just add an extra environment instead.
-  ;; [---------------------------------- "Cap"
-  ;;  (type? Δ Γ ⊢ (cap l) : (cap l τ))]
-
   [(type? (Δ ρ) Γ ⊢ e : τ)
    -------------------------------- "Univ"
    (type? Δ Γ ⊢ (Λ ρ e) : (∀ ρ τ))]
