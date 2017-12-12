@@ -2,6 +2,7 @@
 
 (require redex
          redex-chk
+         racket/block
          racket/list
          rackunit)
 
@@ -815,6 +816,17 @@
      (Θ defn)))
 
 (define-judgment-form Rust0-statics
+  #:mode (in I I I O)
+  #:contract (in Γ x = t)
+
+  [---------------------
+   (in (Γ (x t)) x = t)]
+
+  [(in Γ x = t)
+   --------------------------------------
+   (in (Γ (x_!_1 t)) (name x x_!_1) = t)])
+
+(define-judgment-form Rust0-statics
   #:mode (meets-def I I I I I O)
   #:contract (meets-def Γ Θ ⊢ e : t)
 
@@ -862,6 +874,10 @@
   #:mode (type? I I I I I O)
   #:contract (type? Γ Θ ⊢ e : t)
 
+  [(in Γ x = t)
+   -------------------- "T-Id"
+   (type? Γ Θ ⊢ x : t)]
+
   [---------------------- "T-Num"
    (type? Γ Θ ⊢ n : num)]
 
@@ -877,26 +893,77 @@
 
   [(meets-def Γ Θ ⊢ e : t_res)
    --------------------------- "T-DataStructure"
-   (type? Γ Θ ⊢ e : t_res)   ])
+   (type? Γ Θ ⊢ e : t_res)   ]
 
-(define-syntax-rule (type-of x = type)
-  (let ([types (judgment-holds (type? • • ⊢ x : t) t)])
-    (check-true (eq? (length types) 1) "Type-checking returned more than one possible type.")
-    (check-equal? (car types) (term type))))
-(define-syntax-rule (in-context Γ Χ
-                      (type-of x = type))
-  (let ([types (judgment-holds (type? • Χ ⊢ x : t) t)])
-    (check-true (eq? (length types) 1) "Type-checking returned more than one possible type.")
-    (check-equal? (car types) (term type))))
+  [(type? Γ Θ ⊢ e_1 : bool)
+   (type? Γ Θ ⊢ e_2 : t_2)
+   (type? Γ Θ ⊢ e_3 : t_2)
+   ------------------------------------- "T-If"
+   (type? Γ Θ ⊢ (if e_1 e_2 e_3) : t_2)]
+
+  [(type? Γ Θ ⊢ e_1 : num)
+   (type? Γ Θ ⊢ e_2 : num)
+   -------------------------------- "T-Add"
+   (type? Γ Θ ⊢ (e_1 + e_2) : num)]
+
+  [(type? Γ Θ ⊢ e_1 : num)
+   (type? Γ Θ ⊢ e_2 : num)
+   -------------------------------- "T-Mul"
+   (type? Γ Θ ⊢ (e_1 * e_2) : num)]
+
+  [(type? Γ Θ ⊢ e : num)
+   -------------------------- "T-Neg"
+   (type? Γ Θ ⊢ (- e) : num)]
+
+  [(type? Γ Θ ⊢ e_1 : t)
+   (type? Γ Θ ⊢ e_2 : t)
+   ------------------------------ "T-Eq"
+   (type? Γ Θ ⊢ (e_1 = e_2) : bool)]
+
+  [(type? Γ Θ ⊢ e_1 : bool)
+   (type? Γ Θ ⊢ e_2 : bool)
+   --------------------------------- "T-And"
+   (type? Γ Θ ⊢ (e_1 ∧ e_2) : bool)]
+
+  [(type? Γ Θ ⊢ e_1 : bool)
+   (type? Γ Θ ⊢ e_2 : bool)
+   --------------------------------- "T-Or"
+   (type? Γ Θ ⊢ (e_1 ∨ e_2) : bool)]
+
+  [(type? Γ Θ ⊢ e : bool)
+   --------------------------- "T-Not"
+   (type? Γ Θ ⊢ (¬ e) : bool)])
+
+(define-syntax-rule (in-context Γ Θ
+                      (type-of x is type))
+  (let ([types (judgment-holds (type? Γ Θ ⊢ x : t) t)])
+    (if (eq? (quote type) 'not-defined)
+        (block
+         (check-false (> (length types) 1) "Type-checking returned more than one type, but should have failed.")
+         (check-true (eq? (length types) 0) "Type-checking returned a type, but should have failed."))
+        (block
+         (check-false (eq? (length types) 0) "Type-checking did not return a type.")
+         (check-true (eq? (length types) 1) "Type-checking returned more than one type.")
+         (check-equal? (car types) (term type))))))
+(define-syntax-rule (type-of x is type)
+  (in-context • • (type-of x is type)))
 
 (test-begin
-  (type-of 5 = num)
-  (type-of true = bool)
-  (type-of false = bool)
-  (type-of (tup true 5) = (tup bool num))
+  (type-of 5 is num)
+  (type-of true is bool)
+  (type-of false is bool)
+  (type-of (tup true 5) is (tup bool num))
   (in-context • (• (struct Point [] num num))
-    (type-of (Point [] 5 5) = Point))
+    (type-of (Point [] 5 5) is Point))
   (in-context • ((• (struct Point [] num num)) (struct Unrelated [] bool bool bool))
-    (type-of (Point [] 5 5) = Point))
+    (type-of (Point [] 5 5) is Point))
   (in-context • ((• (struct Point [] { (x num) (y num) })) (struct Unrelated [] bool bool bool))
-    (type-of (Point [] { (x 0) (y 0) }) = Point)))
+    (type-of (Point [] { (x 0) (y 0) }) is Point))
+  (in-context (• (x num)) •
+    (type-of x is num))
+
+  (type-of (if true 3 2) is num)
+  (type-of (if true 3 false) is not-defined)
+  (type-of (if ((2 = 2) ∧ (¬ (3 = (- 2))))
+               (2 + 2)
+               (3 * 3)) is num))
