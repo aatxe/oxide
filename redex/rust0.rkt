@@ -2,7 +2,8 @@
 
 (require redex
          redex-chk
-         racket/list)
+         racket/list
+         rackunit)
 
 (define-language Rust0
   ;; programs
@@ -10,10 +11,14 @@
 
   ;; top-level statements
   (tls ::=
-       (struct sid [(lft ι) ... T ...] {(x t) ...})
-       (struct sid [(lft ι) ... T ...] t ...)
-       (enum sid [(lft ι) ... T ...] {dt ...})
+       defn
        (fn f [(lft ι) ... T ...] ((x t) ...) { st ... }))
+
+  ;; definitions for data structures
+  (defn ::=
+    (struct sid [(lft ι) ... T ...] {(x t) ...})
+    (struct sid [(lft ι) ... T ...] t ...)
+    (enum sid [(lft ι) ... T ...] {dt ...}))
 
   ;; statements
   (st ::=
@@ -797,3 +802,101 @@
                          ((deref y) := z)
                          ((deref (deref y)) := 9)
                          (m + n) }))) 14)
+
+(define-extended-language Rust0-statics Rust0
+  ;; value contexts
+  (Γ ::=
+     •
+     (Γ (x t)))
+
+  ;; data structure contexts
+  (Θ ::=
+     •
+     (Θ defn)))
+
+(define-judgment-form Rust0-statics
+  #:mode (meets-def I I I I I O)
+  #:contract (meets-def Γ Θ ⊢ e : t)
+
+  ;; patterns that matched
+
+  [(type? Γ Θ ⊢ e : t) ...
+   ------------------------------------------- "T-TupStructMeetsDefn"
+   (meets-def Γ (Θ (struct sid [_ ...] t ...))
+              ⊢ (sid [_ ...] e ...) : sid)   ]
+
+  [(type? Γ Θ ⊢ e : t) ...
+   --------------------------------------------------- "T-RecStructMeetsDefn"
+   (meets-def Γ (Θ (struct sid [_ ...] { (x t) ... }))
+              ⊢ (sid [_ ...] { (x e) ... }) : sid)   ]
+
+  ;; patterns that did not match
+
+  [(meets-def Γ Θ ⊢ e : t)
+   --------------------------------------------------- "T-TupStructPassDifferentId"
+   (meets-def Γ (Θ (struct sid_!_1 [_ ...] _ ...))
+              ⊢ (name e (sid_!_1 [_ ...] _ ...)) : t)]
+  [(meets-def Γ Θ ⊢ e : t)
+   --------------------------------------------------- "T-TupStructPassRecStruct"
+   (meets-def Γ (Θ (struct sid_!_1 [_ ...] { _ ... }))
+              ⊢ (name e (sid_!_1 [_ ...] _ ...)) : t)]
+  [(meets-def Γ Θ ⊢ e : t)
+   --------------------------------------------------- "T-TupStructPassEnum"
+   (meets-def Γ (Θ (enum sid_!_1 [_ ...] { _ ... }))
+              ⊢ (name e (sid_!_1 [_ ...] _ ...)) : t)]
+
+  [(meets-def Γ Θ ⊢ e : t)
+   ------------------------------------------------------- "T-RecStructPassDifferentId"
+   (meets-def Γ (Θ (struct sid_!_1 [_ ...] { _ ... }))
+              ⊢ (name e (sid_!_1 [_ ...] { _ ... })) : t)]
+  [(meets-def Γ Θ ⊢ e : t)
+   ------------------------------------------------------- "T-RecStructPassTupStruct"
+   (meets-def Γ (Θ (struct sid_!_1 [_ ...] _ ...))
+              ⊢ (name e (sid_!_1 [_ ...] { _ ... })) : t)]
+  [(meets-def Γ Θ ⊢ e : t)
+   ------------------------------------------------------- "T-RecStructPassEnum"
+   (meets-def Γ (Θ (enum sid_!_1 [_ ...] { _ ... }))
+              ⊢ (name e (sid_!_1 [_ ...] { _ ... })) : t)])
+
+(define-judgment-form Rust0-statics
+  #:mode (type? I I I I I O)
+  #:contract (type? Γ Θ ⊢ e : t)
+
+  [---------------------- "T-Num"
+   (type? Γ Θ ⊢ n : num)]
+
+  [-------------------------- "T-True"
+   (type? Γ Θ ⊢ true : bool)]
+
+  [--------------------------- "T-False"
+   (type? Γ Θ ⊢ false : bool)]
+
+  [(type? Γ Θ ⊢ e : t) ...
+   ---------------------------------------- "T-Tuple"
+   (type? Γ Θ ⊢ (tup e ...) : (tup t ...))]
+
+  [(meets-def Γ Θ ⊢ e : t_res)
+   --------------------------- "T-DataStructure"
+   (type? Γ Θ ⊢ e : t_res)   ])
+
+(define-syntax-rule (type-of x = type)
+  (let ([types (judgment-holds (type? • • ⊢ x : t) t)])
+    (check-true (eq? (length types) 1) "Type-checking returned more than one possible type.")
+    (check-equal? (car types) (term type))))
+(define-syntax-rule (in-context Γ Χ
+                                type-of x = type)
+  (let ([types (judgment-holds (type? • Χ ⊢ x : t) t)])
+    (check-true (eq? (length types) 1) "Type-checking returned more than one possible type.")
+    (check-equal? (car types) (term type))))
+
+(test-begin
+  (type-of 5 = num)
+  (type-of true = bool)
+  (type-of false = bool)
+  (type-of (tup true 5) = (tup bool num))
+  (in-context • (• (struct Point [] num num))
+              type-of (Point [] 5 5) = Point)
+  (in-context • ((• (struct Point [] num num)) (struct Unrelated [] bool bool bool))
+              type-of (Point [] 5 5) = Point)
+  (in-context • ((• (struct Point [] { (x num) (y num) })) (struct Unrelated [] bool bool bool))
+              type-of (Point [] { (x 0) (y 0) }) = Point))
