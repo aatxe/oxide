@@ -13,7 +13,7 @@
   ;; top-level statements
   (tls ::=
        defn
-       (fn f [(lft ι) ... T ...] ((x t) ...) { st ... }))
+       (fn f [(lft ι) ... T ...] ((x t) ...) -> t { st ... }))
 
   ;; definitions for data structures
   (defn ::=
@@ -152,10 +152,10 @@
 
  ;; valid programs
  #:m prog ((enum Option [T] { (None) (Some T) })
-           (fn unwrap [T] ((opt (Option [T]))) { (match opt { ((Option::None) => (abort!))
-                                                              ((Option::Some x) => x) }) }))
- #:m prog ((fn main [] () { (tup) }))
- #:m prog ((fn main [] () { 7 }))
+           (fn unwrap [T] ((opt (Option [T]))) -> T { (match opt { ((Option::None) => (abort!))
+                                                                   ((Option::Some x) => x) }) }))
+ #:m prog ((fn main [] () -> (tup) { (tup) }))
+ #:m prog ((fn main [] () -> num { 7 }))
 
  ;; valid top-level statements
  #:m tls (struct Point [] { (x num)
@@ -166,14 +166,14 @@
  #:m tls (enum WeirdOption [T] { (None)
                                  (Some T)
                                  (Double T T) })
- #:m tls (fn main [] () { (tup) (tup) (tup) })
- #:m tls (fn main [] () { (let [(tup x y) (tup num num)] = (tup 1 2)) })
- #:m tls (fn sum_to [] ((x num)) { (if (x = 0)
-                                       1
-                                       (x + (sum_to [] ((x + -1))))) })
+ #:m tls (fn main [] () -> (tup) { (tup) (tup) (tup) })
+ #:m tls (fn main [] () -> (tup) { (let [(tup x y) (tup num num)] = (tup 1 2)) })
+ #:m tls (fn sum_to [] ((x num)) -> num { (if (x = 0)
+                                              1
+                                              (x + (sum_to [] ((x + -1))))) })
 
  ;; invalid top-level statements
- #:f #:m tls (fn main [] () { (let [(tup 1 2) (tup num num)] = (tup 3 4)) }))
+ #:f #:m tls (fn main [] () -> num { (let [(tup 1 2) (tup num num)] = (tup 3 4)) }))
 
 (define-extended-language Rust0-Machine Rust0
   ;; flags indicating immutable or mutable
@@ -336,7 +336,7 @@
 
    (--> (· ρ ψ start prog)
         (st_0 ρ ψ (block st_1 ... halt) prog)
-        (where (fn main [] () { st_0 st_1 ... }) (lookup-fn prog main))
+        (where (fn main [] () -> t { st_0 st_1 ... }) (lookup-fn prog main))
         "E-StartMain")
    (--> (cv ρ ψ halt prog)
         cv
@@ -475,7 +475,7 @@
          (env (imm x α) ...)
          (mem (α v) ... (α_m v_m) ...)
          (block st_1 ... (fun x_f (in-hole E x_f) ρ κ)) prog)
-        (where (fn f [(lft ι) ... T ...] ((x t) ...) { st_0 st_1 ... })
+        (where (fn f [(lft ι) ... T ...] ((x t) ...) -> t_ret { st_0 st_1 ... })
                (lookup-fn prog f))
         (where (α ...) ,(variables-not-in (term (x_f x ... v ... α_m ... v_m ...))
                                           (term (x ...))))
@@ -609,8 +609,8 @@
 
 (define-metafunction Rust0-Machine
   lookup-fn : prog f -> tls
-  [(lookup-fn (_ ... (fn f_0 [(lft ι) ... T ...] ((x t) ...) { st ... }) _ ...) f_0)
-   (fn f_0 [(lft ι) ... T ...] ((x t) ...) { st ... })]
+  [(lookup-fn (_ ... (fn f_0 [(lft ι) ... T ...] ((x t) ...) -> t_ret { st ... }) _ ...) f_0)
+   (fn f_0 [(lft ι) ... T ...] ((x t) ...) -> t_ret { st ... })]
   [(lookup-fn prog f) ,(error "lookup-fn: function with name not found:" (term f))])
 
 (define-metafunction Rust0-Machine
@@ -719,90 +719,91 @@
 
 (redex-chk
  ;; Straight line code
- (eval ((fn main [] () { 7 }))) 7
- (eval ((fn main [] () { 3 2 }))) 2
- (eval ((fn main [] () { ((3 + 2) * 6) }))) 30
- (eval ((fn main [] () { (block 4 5) }))) 5
- (eval ((fn main [] () { (tup 1 2) }))) (tup 1 2)
- (eval ((fn main [] () { (let (x (tup num num)) = (tup 5 9))
-                         x }))) (tup 5 9)
- (eval ((fn main [] () { (let (x (tup num num)) = (tup 5 9))
-                         ((proj 1 x) + (proj 2 x)) }))) 14
+ (eval ((fn main [] () -> num { 7 }))) 7
+ (eval ((fn main [] () -> num { 3 2 }))) 2
+ (eval ((fn main [] () -> num { ((3 + 2) * 6) }))) 30
+ (eval ((fn main [] () -> num { (block 4 5) }))) 5
+ (eval ((fn main [] () -> (tup num num) { (tup 1 2) }))) (tup 1 2)
+ (eval ((fn main [] () -> (tup num num) { (let (x (tup num num)) = (tup 5 9))
+                                          x }))) (tup 5 9)
+ (eval ((fn main [] () -> num { (let (x (tup num num)) = (tup 5 9))
+                                ((proj 1 x) + (proj 2 x)) }))) 14
  (eval ((struct Point [] num num)
-        (fn main [] () { (let (x Point) = (Point [] 1 9))
-                         x }))) (Point [] 1 9)
+        (fn main [] () -> Point { (let (x Point) = (Point [] 1 9))
+                                  x }))) (Point [] 1 9)
  (eval ((struct Point [] num num)
-        (fn main [] () { (let (x Point) = (Point [] 1 9))
-                         ((proj 1 x) + (proj 2 x)) }))) 10
+        (fn main [] () -> num { (let (x Point) = (Point [] 1 9))
+                                ((proj 1 x) + (proj 2 x)) }))) 10
  (eval ((struct Point [] { (x num) (y num) })
-        (fn main [] () { (let (p Point) = (Point [] { (x 1) (y 9)}))
-                         p }))) (Point [] { (x 1) (y 9) })
+        (fn main [] () -> Point { (let (p Point) = (Point [] { (x 1) (y 9)}))
+                                  p }))) (Point [] { (x 1) (y 9) })
  (eval ((struct Point [] { (x num) (y num) })
-        (fn main [] () { (let (p Point) = (Point [] { (x 1) (y 9)}))
-                         ((proj x p) + (proj y p)) }))) 10
+        (fn main [] () -> num { (let (p Point) = (Point [] { (x 1) (y 9)}))
+                                ((proj x p) + (proj y p)) }))) 10
  (eval ((struct Foo [] { (x (tup num num)) (y (tup num num)) })
-        (fn main [] () { (let (p Foo) = (Foo [] { (x (tup 1 2)) (y (tup 3 4)) }))
-                         (proj x p) }))) (tup 1 2)
- (eval ((fn main [] () { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
- (eval ((fn main [] () { (let mut (x (tup num num num)) = (tup 2 3 4))
-                         ((proj 3 x) := 7)
-                         (proj 3 x) }))) 7
+        (fn main [] () -> (tup num num) { (let (p Foo) = (Foo [] { (x (tup 1 2)) (y (tup 3 4)) }))
+                                          (proj x p) }))) (tup 1 2)
+ (eval ((fn main [] () -> num { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
+ (eval ((fn main [] () -> num { (let mut (x (tup num num num)) = (tup 2 3 4))
+                                ((proj 3 x) := 7)
+                                (proj 3 x) }))) 7
  (eval ((struct Point [] num num)
-        (fn main [] () { (let (x Point) = (Point [] 1 9))
-                         ((proj 1 x) := 6)
-                         ((proj 1 x) + (proj 2 x)) }))) 15
+        (fn main [] () -> num { (let (x Point) = (Point [] 1 9))
+                                ((proj 1 x) := 6)
+                                ((proj 1 x) + (proj 2 x)) }))) 15
  (eval ((struct Point [] { (x num) (y num) })
-        (fn main [] () { (let (p Point) = (Point [] { (x 1) (y 9)}))
-                         ((proj x p) := 11)
-                         ((proj x p) + (proj y p)) }))) 20
+        (fn main [] () -> num { (let (p Point) = (Point [] { (x 1) (y 9)}))
+                                ((proj x p) := 11)
+                                ((proj x p) + (proj y p)) }))) 20
 
  ;; Simple non-recursive functions
- (eval ((fn main [] () { (id [] (5)) })
-        (fn id [] ((x num)) { x }))) 5
- (eval ((fn main [] () { (id [] ((tup 7 4))) })
-        (fn id [] ((x (tup num num))) { x }))) (tup 7 4)
- (eval ((fn main [] () { (add_doubles [] (2 3)) })
-        (fn add_doubles [] ((x num) (y num)) { ((x + x) + (y + y)) }))) 10
+ (eval ((fn main [] () -> num { (id [] (5)) })
+        (fn id [] ((x num)) -> num { x }))) 5
+ (eval ((fn main [] () -> (tup num num) { (id [] ((tup 7 4))) })
+        (fn id [] ((x (tup num num))) -> (tup num num) { x }))) (tup 7 4)
+ (eval ((fn main [] () -> num { (sum_of_squares [] (2 3)) })
+        (fn sum_of_squares [] ((x num) (y num)) -> num { ((x * x) + (y * y)) }))) 13
 
  ;; Complex functions with recursion, pattern matching, abort
- (eval ((fn main [] () { (sum_to [] ((2 + 3))) })
-        (fn sum_to [] ((x num)) { (if (x = 0)
-                                      0
-                                      (x + (sum_to [] ((x + -1))))) }))) 15
+ (eval ((fn main [] () -> num { (sum_to [] ((2 + 3))) })
+        (fn sum_to [] ((x num)) -> num { (if (x = 0)
+                                             0
+                                             (x + (sum_to [] ((x + -1))))) }))) 15
  (eval ((enum Option [T] { (None) (Some T) })
-        (fn unwrap [T] ((opt (Option [T]))) { (match opt { ((Option::None) => (abort!))
-                                                         ((Option::Some x) => x) }) })
-        (fn main [] () { (let (x (Option [num])) = (Option::Some [] 2))
-                         (unwrap [num] (x)) }))) 2
+        (fn unwrap [T] ((opt (Option [T]))) -> T { (match opt { ((Option::None) => (abort!))
+                                                                ((Option::Some x) => x) }) })
+        (fn main [] () -> num { (let (x (Option [num])) = (Option::Some [] 2))
+                                (unwrap [num] (x)) }))) 2
 (eval ((enum Option [T] { (None) (Some T) })
-       (fn unwrap [T] ((opt (Option [T]))) { (match opt { ((Option::None) => (abort!))
-                                                          ((Option::Some x) => x) }) })
-       (fn main [] () { (let (x (Option [num])) = (Option::None []))
-                        (unwrap [num] (x)) }))) (abort!)
+       (fn unwrap [T] ((opt (Option [T]))) -> T { (match opt { ((Option::None) => (abort!))
+                                                               ((Option::Some x) => x) }) })
+       ;; NOTE: we don't have a clear story for the type of abort! yet
+       (fn main [] () -> (tup) { (let (x (Option [num])) = (Option::None []))
+                                 (unwrap [num] (x)) }))) (abort!)
 
  ;; Straight line code with references
- (eval ((fn main [] () { (let (x num) = 3)
-                         (let (y (ref ι num)) = (ref ι x))
-                         (let mut (z num) = (deref y))
-                         (z := 5)
-                         (x + z) }))) 8
- (eval ((fn main [] () { (let mut (x num) = 3)
-                         (let (y (ref ι num)) = (ref ι x))
-                         (let (z num) = (deref y))
-                         (x := 5)
-                         (x + z) }))) 8
- (eval ((fn main [] () { (let mut (x num) = 5)
-                         (let mut (y (ref ι num)) = (ref ι x))
-                         ((deref y) := 4)
-                         x }))) 4
- (eval ((fn main [] () { (let mut (n num) = 5)
-                         (let mut (x (ref ι num)) = (ref ι n))
-                         (let mut (y (ref ι (ref ι num))) = (ref ι x))
-                         (let mut (m num) = 3)
-                         (let mut (z (ref ι num)) = (ref ι m))
-                         ((deref y) := z)
-                         ((deref (deref y)) := 9)
-                         (m + n) }))) 14)
+ (eval ((fn main [] () -> num { (let (x num) = 3)
+                                (let (y (ref ι num)) = (ref ι x))
+                                (let mut (z num) = (deref y))
+                                (z := 5)
+                                (x + z) }))) 8
+ (eval ((fn main [] () -> num { (let mut (x num) = 3)
+                                (let (y (ref ι num)) = (ref ι x))
+                                (let (z num) = (deref y))
+                                (x := 5)
+                                (x + z) }))) 8
+ (eval ((fn main [] () -> num { (let mut (x num) = 5)
+                                (let mut (y (ref ι num)) = (ref ι x))
+                                ((deref y) := 4)
+                                x }))) 4
+ (eval ((fn main [] () -> num { (let mut (n num) = 5)
+                                (let mut (x (ref ι num)) = (ref ι n))
+                                (let mut (y (ref ι (ref ι num))) = (ref ι x))
+                                (let mut (m num) = 3)
+                                (let mut (z (ref ι num)) = (ref ι m))
+                                ((deref y) := z)
+                                ((deref (deref y)) := 9)
+                                (m + n) }))) 14)
 
 (define-extended-language Rust0-statics Rust0
   ;; value contexts
