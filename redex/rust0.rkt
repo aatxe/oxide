@@ -13,18 +13,13 @@
   ;; top-level statements
   (tls ::=
        defn
-       (fn f [(lft ι) ... T ...] ((x t) ...) -> t { st ... }))
+       (fn f [(lft ι) ... T ...] ((x t) ...) -> t { e }))
 
   ;; definitions for data structures
   (defn ::=
     (struct sid [(lft ι) ... T ...] {(x t) ...})
     (struct sid [(lft ι) ... T ...] t ...)
     (enum sid [(lft ι) ... T ...] {dt ...}))
-
-  ;; statements
-  (st ::=
-      ;; expressions
-      e)
 
   ;; lvalues - expressions that can appear on the left-side of an assignment
   (lv ::=
@@ -71,8 +66,8 @@
 
      ;; function calls
      (f [(lft ι) ... t ...] (e ...))
-     ;; blocks - sequence of statements, takes value of last expression or unit if statement
-     (block st ...)
+     ;; blocks - sequence of expressions, takes value of last expression
+     (block e ...)
      ;; pattern matching
      (match e {(pat => e) ...})
 
@@ -166,7 +161,7 @@
  #:m tls (enum WeirdOption [T] { (None)
                                  (Some T)
                                  (Double T T) })
- #:m tls (fn main [] () -> (tup) { (tup) (tup) (tup) })
+ #:m tls (fn main [] () -> (tup) { (block (tup) (tup) (tup)) })
  #:m tls (fn main [] () -> (tup) { (let ([(tup x y) (tup num num)] = (tup 1 2))
                                      (tup)) })
  #:m tls (fn sum_to [] ((x num)) -> num { (if (x = 0)
@@ -209,7 +204,7 @@
      ;; empty
      ·
      ;; statement
-     st)
+     e)
 
   ;; control values - flattened values (i.e. with no indirection via pointers) and abort! and ·
   (cv ::=
@@ -228,9 +223,9 @@
      ;; special start continuation indicating main should be called
      start
      ;; function call continuation - the hole in st should be bound to x
-     (fun x st ρ κ)
+     (fun x e ρ κ)
      ;; continuation representing a block of statements to execute before continuing to κ
-     (block st ... κ))
+     (block e ... κ))
 
   ;; lvalues
   (lv ::=
@@ -338,18 +333,18 @@
    Rust0-Machine
 
    (--> (· ρ ψ start prog)
-        (st_0 ρ ψ (block st_1 ... halt) prog)
-        (where (fn main [] () -> t { st_0 st_1 ... }) (lookup-fn prog main))
+        (e ρ ψ halt prog)
+        (where (fn main [] () -> t { e }) (lookup-fn prog main))
         "E-StartMain")
    (--> (cv ρ ψ halt prog)
         cv
         "E-HaltProgram")
 
-   (--> ((block st ...) ρ ψ κ prog)
-        (· ρ ψ (block st ... κ) prog)
+   (--> ((block e ...) ρ ψ κ prog)
+        (· ρ ψ (block e ... κ) prog)
         "E-StartBlock")
-   (--> (cv ρ ψ (block st_0 st_1 ... κ) prog)
-        (st_0 ρ ψ (block st_1 ... κ) prog)
+   (--> (cv ρ ψ (block e_0 e_1 ... κ) prog)
+        (e_0 ρ ψ (block e_1 ... κ) prog)
         "E-AdvanceBlock")
    (--> (cv ρ ψ (block κ) prog)
         (cv ρ ψ κ prog)
@@ -474,19 +469,19 @@
          ρ
          (name ψ (mem (α_m v_m) ...))
          κ prog)
-        (st_0
+        (e
          (env (imm x α) ...)
          (mem (α v) ... (α_m v_m) ...)
-         (block st_1 ... (fun x_f (in-hole E x_f) ρ κ)) prog)
-        (where (fn f [(lft ι) ... T ...] ((x t) ...) -> t_ret { st_0 st_1 ... })
+         (fun x_f (in-hole E x_f) ρ κ) prog)
+        (where (fn f [(lft ι) ... T ...] ((x t) ...) -> t_ret { e })
                (lookup-fn prog f))
         (where (α ...) ,(variables-not-in (term (x_f x ... v ... α_m ... v_m ...))
                                           (term (x ...))))
         (fresh x_f)
         "E-App")
    ;; TODO: return should de-allocate memory that is no longer accessible (eqv. calling drop)
-   (--> (v_1 _ (mem (α_m v_m) ...) (fun x_1 st (env (flag_2 x_2 α_2) ...) κ) prog)
-        (st (env (imm x_1 α_1) (flag_2 x_2 α_2) ...) (mem (α_1 v_1) (α_m v_m) ...) κ prog)
+   (--> (v_1 _ (mem (α_m v_m) ...) (fun x_1 e (env (flag_2 x_2 α_2) ...) κ) prog)
+        (e (env (imm x_1 α_1) (flag_2 x_2 α_2) ...) (mem (α_1 v_1) (α_m v_m) ...) κ prog)
         (fresh α_1)
         "E-Return")
 
@@ -612,8 +607,8 @@
 
 (define-metafunction Rust0-Machine
   lookup-fn : prog f -> tls
-  [(lookup-fn (_ ... (fn f_0 [(lft ι) ... T ...] ((x t) ...) -> t_ret { st ... }) _ ...) f_0)
-   (fn f_0 [(lft ι) ... T ...] ((x t) ...) -> t_ret { st ... })]
+  [(lookup-fn (_ ... (fn f_0 [(lft ι) ... T ...] ((x t) ...) -> t_ret { e }) _ ...) f_0)
+   (fn f_0 [(lft ι) ... T ...] ((x t) ...) -> t_ret { e })]
   [(lookup-fn prog f) ,(error "lookup-fn: function with name not found:" (term f))])
 
 (define-metafunction Rust0-Machine
@@ -723,7 +718,7 @@
 (redex-chk
  ;; Straight line code
  (eval ((fn main [] () -> num { 7 }))) 7
- (eval ((fn main [] () -> num { 3 2 }))) 2
+ (eval ((fn main [] () -> num { (block 3 2) }))) 2
  (eval ((fn main [] () -> num { ((3 + 2) * 6) }))) 30
  (eval ((fn main [] () -> num { (block 4 5) }))) 5
  (eval ((fn main [] () -> (tup num num) { (tup 1 2) }))) (tup 1 2)
@@ -883,7 +878,7 @@
 
 (define-judgment-form Rust0-statics
   #:mode (type? I I I I I O)
-  #:contract (type? Γ Θ ⊢ st : t)
+  #:contract (type? Γ Θ ⊢ e : t)
 
   [(in Γ x = t)
    -------------------- "T-Id"
@@ -907,9 +902,11 @@
    (type? Γ Θ ⊢ e : t_res)   ]
 
   [ ;; TODO: type-check the pattern
-   (type? Γ Θ ⊢ e : t)
+   (type? Γ Θ ⊢ e_1 : t_1)
+   ;; TODO: add bindings from pattern
+   (type? Γ Θ ⊢ e_2 : t_2)
    ---------------------------------------- "T-Let"
-   (type? Γ Θ ⊢ (let (pat t) = e) : (tup))]
+   (type? Γ Θ ⊢ (let [(pat t_1) = e_1] e_2) : t_2)]
 
   [------------------------------ "T-EmptyBlock"
    (type? Γ Θ ⊢ (block) : (tup))]
