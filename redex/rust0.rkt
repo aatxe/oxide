@@ -23,12 +23,6 @@
 
   ;; statements
   (st ::=
-      ;; let bindings (immutable and mutable)
-      (let (pat t) = e)
-      (let mut (pat t) = e)
-      ;; assignment (only for mutable bindings)
-      (lv := e)
-
       ;; expressions
       e)
 
@@ -60,6 +54,12 @@
   (e ::=
      ;; variables
      x
+     ;; let bindings (immutable and mutable)
+     (let [(pat t) = e] e)
+     (let mut [(pat t) = e] e)
+     ;; assignment (only for mutable bindings)
+     (lv := e)
+
      ;; branching
      (if e e e)
      ;; tuples
@@ -167,13 +167,15 @@
                                  (Some T)
                                  (Double T T) })
  #:m tls (fn main [] () -> (tup) { (tup) (tup) (tup) })
- #:m tls (fn main [] () -> (tup) { (let [(tup x y) (tup num num)] = (tup 1 2)) })
+ #:m tls (fn main [] () -> (tup) { (let ([(tup x y) (tup num num)] = (tup 1 2))
+                                     (tup)) })
  #:m tls (fn sum_to [] ((x num)) -> num { (if (x = 0)
                                               1
                                               (x + (sum_to [] ((x + -1))))) })
 
  ;; invalid top-level statements
- #:f #:m tls (fn main [] () -> num { (let [(tup 1 2) (tup num num)] = (tup 3 4)) }))
+ #:f #:m tls (fn main [] () -> num { (let ([(tup 1 2) (tup num num)] = (tup 3 4))
+                                       (tup)) }))
 
 (define-extended-language Rust0-Machine Rust0
   ;; flags indicating immutable or mutable
@@ -254,9 +256,10 @@
      ;; hole
      hole
 
-     ;; statements
-     (let (pat t) = E)
-     (let mut (pat t) = E)
+     ;; let bindings
+     (let [(pat t) = E] e)
+     (let mut [(pat t) = E] e)
+     ;; assignment
      (lv := E)
 
      ;; data structures (enum variants and structs)
@@ -432,11 +435,11 @@
                             (not (eq? (car (term κ)) (term fun)))))
         "E-DeallocNamedRecord")
 
-   (--> ((let (pat t) = v)
+   (--> ((let [(pat t) = v] e)
          (env (flag x_e α_e) ...)
          (name ψ (mem (α_m v_m) ...))
          κ prog)
-        ((tup)
+        (e
          (env (imm x_n α_n) ... (flag x_e α_e) ...)
          (mem (α_n v_n) ... (α_m v_m) ...)
          κ prog)
@@ -444,11 +447,11 @@
         (where (α_n ...) ,(variables-not-in (term (x_e ... x_n ... α_e ... α_m ...))
                                             (term (x_n ...))))
         "E-ImmBinding")
-   (--> ((let mut (pat t) = v)
+   (--> ((let mut [(pat t) = v] e)
          (env (flag x_e α_e) ...)
          (name ψ (mem (α_m v_m) ...))
          κ prog)
-        ((tup)
+        (e
          (env (mut x_n α_n) ... (flag x_e α_e) ...)
          (mem (α_n v_n) ... (α_m v_m) ...)
          κ prog)
@@ -724,37 +727,40 @@
  (eval ((fn main [] () -> num { ((3 + 2) * 6) }))) 30
  (eval ((fn main [] () -> num { (block 4 5) }))) 5
  (eval ((fn main [] () -> (tup num num) { (tup 1 2) }))) (tup 1 2)
- (eval ((fn main [] () -> (tup num num) { (let (x (tup num num)) = (tup 5 9))
-                                          x }))) (tup 5 9)
- (eval ((fn main [] () -> num { (let (x (tup num num)) = (tup 5 9))
-                                ((proj 1 x) + (proj 2 x)) }))) 14
+ (eval ((fn main [] () -> (tup num num) { (let [(x (tup num num)) = (tup 5 9)]
+                                            x) }))) (tup 5 9)
+ (eval ((fn main [] () -> num { (let [(x (tup num num)) = (tup 5 9)]
+                                  ((proj 1 x) + (proj 2 x))) }))) 14
  (eval ((struct Point [] num num)
-        (fn main [] () -> Point { (let (x Point) = (Point [] 1 9))
-                                  x }))) (Point [] 1 9)
+        (fn main [] () -> Point { (let [(x Point) = (Point [] 1 9)]
+                                    x) }))) (Point [] 1 9)
  (eval ((struct Point [] num num)
-        (fn main [] () -> num { (let (x Point) = (Point [] 1 9))
-                                ((proj 1 x) + (proj 2 x)) }))) 10
+        (fn main [] () -> num { (let [(x Point) = (Point [] 1 9)]
+                                  ((proj 1 x) + (proj 2 x))) }))) 10
  (eval ((struct Point [] { (x num) (y num) })
-        (fn main [] () -> Point { (let (p Point) = (Point [] { (x 1) (y 9)}))
-                                  p }))) (Point [] { (x 1) (y 9) })
+        (fn main [] () -> Point { (let [(p Point) = (Point [] { (x 1) (y 9)})]
+                                    p) }))) (Point [] { (x 1) (y 9) })
  (eval ((struct Point [] { (x num) (y num) })
-        (fn main [] () -> num { (let (p Point) = (Point [] { (x 1) (y 9)}))
-                                ((proj x p) + (proj y p)) }))) 10
+        (fn main [] () -> num { (let [(p Point) = (Point [] { (x 1) (y 9)})]
+                                  ((proj x p) + (proj y p))) }))) 10
  (eval ((struct Foo [] { (x (tup num num)) (y (tup num num)) })
-        (fn main [] () -> (tup num num) { (let (p Foo) = (Foo [] { (x (tup 1 2)) (y (tup 3 4)) }))
-                                          (proj x p) }))) (tup 1 2)
+        (fn main [] () -> (tup num num) { (let [(p Foo) = (Foo [] { (x (tup 1 2)) (y (tup 3 4)) })]
+                                            (proj x p)) }))) (tup 1 2)
  (eval ((fn main [] () -> num { (block (3 + 3) (4 + 4) (5 + 5)) }))) 10
- (eval ((fn main [] () -> num { (let mut (x (tup num num num)) = (tup 2 3 4))
-                                ((proj 3 x) := 7)
-                                (proj 3 x) }))) 7
+ (eval ((fn main [] () -> num { (let mut [(x (tup num num num)) = (tup 2 3 4)]
+                                  (block
+                                   ((proj 3 x) := 7)
+                                   (proj 3 x))) }))) 7
  (eval ((struct Point [] num num)
-        (fn main [] () -> num { (let (x Point) = (Point [] 1 9))
-                                ((proj 1 x) := 6)
-                                ((proj 1 x) + (proj 2 x)) }))) 15
+        (fn main [] () -> num { (let [(x Point) = (Point [] 1 9)]
+                                  (block
+                                   ((proj 1 x) := 6)
+                                   ((proj 1 x) + (proj 2 x)))) }))) 15
  (eval ((struct Point [] { (x num) (y num) })
-        (fn main [] () -> num { (let (p Point) = (Point [] { (x 1) (y 9)}))
-                                ((proj x p) := 11)
-                                ((proj x p) + (proj y p)) }))) 20
+        (fn main [] () -> num { (let [(p Point) = (Point [] { (x 1) (y 9)})]
+                                  (block
+                                   ((proj x p) := 11)
+                                   ((proj x p) + (proj y p)))) }))) 20
 
  ;; Simple non-recursive functions
  (eval ((fn main [] () -> num { (id [] (5)) })
@@ -764,7 +770,7 @@
  (eval ((fn main [] () -> num { (sum_of_squares [] (2 3)) })
         (fn sum_of_squares [] ((x num) (y num)) -> num { ((x * x) + (y * y)) }))) 13
 
- ;; Complex functions with recursion, pattern matching, abort
+;;  ;; Complex functions with recursion, pattern matching, abort
  (eval ((fn main [] () -> num { (sum_to [] ((2 + 3))) })
         (fn sum_to [] ((x num)) -> num { (if (x = 0)
                                              0
@@ -772,38 +778,42 @@
  (eval ((enum Option [T] { (None) (Some T) })
         (fn unwrap [T] ((opt (Option [T]))) -> T { (match opt { ((Option::None) => (abort!))
                                                                 ((Option::Some x) => x) }) })
-        (fn main [] () -> num { (let (x (Option [num])) = (Option::Some [] 2))
-                                (unwrap [num] (x)) }))) 2
+        (fn main [] () -> num { (let [(x (Option [num])) = (Option::Some [] 2)]
+                                  (unwrap [num] (x))) }))) 2
 (eval ((enum Option [T] { (None) (Some T) })
        (fn unwrap [T] ((opt (Option [T]))) -> T { (match opt { ((Option::None) => (abort!))
                                                                ((Option::Some x) => x) }) })
        ;; NOTE: we don't have a clear story for the type of abort! yet
-       (fn main [] () -> (tup) { (let (x (Option [num])) = (Option::None []))
-                                 (unwrap [num] (x)) }))) (abort!)
+       (fn main [] () -> (tup) { (let [(x (Option [num])) = (Option::None [])]
+                                   (unwrap [num] (x))) }))) (abort!)
 
  ;; Straight line code with references
- (eval ((fn main [] () -> num { (let (x num) = 3)
-                                (let (y (ref ι num)) = (ref ι x))
-                                (let mut (z num) = (deref y))
-                                (z := 5)
-                                (x + z) }))) 8
- (eval ((fn main [] () -> num { (let mut (x num) = 3)
-                                (let (y (ref ι num)) = (ref ι x))
-                                (let (z num) = (deref y))
-                                (x := 5)
-                                (x + z) }))) 8
- (eval ((fn main [] () -> num { (let mut (x num) = 5)
-                                (let mut (y (ref ι num)) = (ref ι x))
-                                ((deref y) := 4)
-                                x }))) 4
- (eval ((fn main [] () -> num { (let mut (n num) = 5)
-                                (let mut (x (ref ι num)) = (ref ι n))
-                                (let mut (y (ref ι (ref ι num))) = (ref ι x))
-                                (let mut (m num) = 3)
-                                (let mut (z (ref ι num)) = (ref ι m))
-                                ((deref y) := z)
-                                ((deref (deref y)) := 9)
-                                (m + n) }))) 14)
+ (eval ((fn main [] () -> num { (let [(x num) = 3]
+                                  (let [(y (ref ι num)) = (ref ι x)]
+                                    (let mut [(z num) = (deref y)]
+                                      (block
+                                       (z := 5)
+                                       (x + z))))) }))) 8
+ (eval ((fn main [] () -> num { (let mut [(x num) = 3]
+                                  (let [(y (ref ι num)) = (ref ι x)]
+                                    (let [(z num) = (deref y)]
+                                      (block
+                                       (x := 5)
+                                       (x + z))))) }))) 8
+ (eval ((fn main [] () -> num { (let mut [(x num) = 5]
+                                  (let mut [(y (ref ι num)) = (ref ι x)]
+                                    (block
+                                     ((deref y) := 4)
+                                     x))) }))) 4
+ (eval ((fn main [] () -> num { (let mut [(n num) = 5]
+                                  (let mut [(x (ref ι num)) = (ref ι n)]
+                                    (let mut [(y (ref ι (ref ι num))) = (ref ι x)]
+                                      (let mut [(m num) = 3]
+                                        (let mut [(z (ref ι num)) = (ref ι m)]
+                                          (block
+                                           ((deref y) := z)
+                                           ((deref (deref y)) := 9)
+                                           (m + n))))))) }))) 14)
 
 (define-extended-language Rust0-statics Rust0
   ;; value contexts
