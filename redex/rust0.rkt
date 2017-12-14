@@ -873,7 +873,7 @@
 
 (define-judgment-form Rust0-statics
   #:mode (type? I I I I I O)
-  #:contract (type? Γ Θ ⊢ e : t)
+  #:contract (type? Γ Θ ⊢ st : t)
 
   [(in Γ x = t)
    -------------------- "T-Id"
@@ -895,6 +895,19 @@
   [(meets-def Γ Θ ⊢ e : t_res)
    --------------------------- "T-DataStructure"
    (type? Γ Θ ⊢ e : t_res)   ]
+
+  [ ;; TODO: type-check the pattern
+   (type? Γ Θ ⊢ e : t)
+   ---------------------------------------- "T-Let"
+   (type? Γ Θ ⊢ (let (pat t) = e) : (tup))]
+
+  [------------------------------ "T-EmptyBlock"
+   (type? Γ Θ ⊢ (block) : (tup))]
+
+  [(type? Γ Θ ⊢ e : t) ...
+   (type? Γ Θ ⊢ e_l : t_l)
+   -------------------------------------- "T-Block"
+   (type? Γ Θ ⊢ (block e ... e_l) : t_l)]
 
   [(type? Γ Θ ⊢ e_1 : bool)
    (type? Γ Θ ⊢ e_2 : t_2)
