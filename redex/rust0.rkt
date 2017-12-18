@@ -811,10 +811,15 @@
                                            (m + n))))))) }))) 14)
 
 (define-extended-language Rust0-statics Rust0
+  ;; (im)mutability flag
+  (flag ::=
+        imm
+        mut)
+
   ;; value contexts
   (Γ ::=
      •
-     (Γ (x t)))
+     (Γ (flag x t)))
 
   ;; data structure contexts
   (Θ ::=
@@ -822,15 +827,15 @@
      (Θ defn)))
 
 (define-judgment-form Rust0-statics
-  #:mode (in I I I O)
-  #:contract (in Γ x = t)
+  #:mode (in I I I O O)
+  #:contract (in Γ x = flag t)
 
   [---------------------
-   (in (Γ (x t)) x = t)]
+   (in (Γ (flag x t)) x = flag t)]
 
-  [(in Γ x = t)
+  [(in Γ x = flag t)
    --------------------------------------
-   (in (Γ (x_!_1 t)) (name x x_!_1) = t)])
+   (in (Γ (x_!_1 t)) (name x x_!_1) = flag t)])
 
 (define-judgment-form Rust0-statics
   #:mode (meets-def I I I I I O)
@@ -880,7 +885,7 @@
   #:mode (type? I I I I I O)
   #:contract (type? Γ Θ ⊢ e : t)
 
-  [(in Γ x = t)
+  [(in Γ x = flag t)
    -------------------- "T-Id"
    (type? Γ Θ ⊢ x : t)]
 
@@ -905,8 +910,13 @@
    (type? Γ Θ ⊢ e_1 : t_1)
    ;; TODO: add bindings from pattern
    (type? Γ Θ ⊢ e_2 : t_2)
-   ---------------------------------------- "T-Let"
+   ------------------------------------------------ "T-Let"
    (type? Γ Θ ⊢ (let [(pat t_1) = e_1] e_2) : t_2)]
+
+  [(in Γ x = mut t)
+   (type? Γ Θ ⊢ e : t)
+   ------------------------------- "T-AssignId"
+   (type? Γ Θ ⊢ (x := e) : (tup))]
 
   [------------------------------ "T-EmptyBlock"
    (type? Γ Θ ⊢ (block) : (tup))]
@@ -938,7 +948,7 @@
 
   [(type? Γ Θ ⊢ e_1 : t)
    (type? Γ Θ ⊢ e_2 : t)
-   ------------------------------ "T-Eq"
+   --------------------------------- "T-Eq"
    (type? Γ Θ ⊢ (e_1 = e_2) : bool)]
 
   [(type? Γ Θ ⊢ e_1 : bool)
@@ -980,8 +990,17 @@
     (type-of (Point [] 5 5) is Point))
   (in-context • ((• (struct Point [] { (x num) (y num) })) (struct Unrelated [] bool bool bool))
     (type-of (Point [] { (x 0) (y 0) }) is Point))
-  (in-context (• (x num)) •
+  (in-context (• (imm x num)) •
     (type-of x is num))
+
+  (in-context (• (mut x num)) •
+    (type-of (block
+              (x := 5)
+              x) is num))
+  (in-context (• (imm x num)) •
+              (type-of (block
+                        (x := 5)
+                        x) is not-defined))
 
   (type-of (if true 3 2) is num)
   (type-of (if true 3 false) is not-defined)
