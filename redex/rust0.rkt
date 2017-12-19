@@ -13,6 +13,10 @@
   ;; top-level statements
   (tls ::=
        defn
+       fndefn)
+
+  ;; function definitions
+  (fndefn ::=
        (fn f [(lft ι) ... T ...] ((x t) ...) -> t { e }))
 
   ;; definitions for data structures
@@ -821,10 +825,10 @@
      •
      (Γ (flag x t)))
 
-  ;; data structure contexts
+  ;; top-level contexts
   (Θ ::=
      •
-     (Θ defn)))
+     (Θ tls)))
 
 (define-judgment-form Rust0-statics
   #:mode (in I I I O O)
@@ -836,6 +840,17 @@
   [(in Γ x = flag t)
    --------------------------------------
    (in (Γ (x_!_1 t)) (name x x_!_1) = flag t)])
+
+(define-judgment-form Rust0-statics
+  #:mode (fn-in I I I O)
+  #:contract (fn-in Θ f = t)
+
+  [(type-fn? Θ ⊢ (fn f [(lft ι) ... T ...] ((x t) ...) { e }) : t_fn)
+   ------------------------------------------------------------------ "T-FnInContext"
+   (fn-in (Θ (fn f [(lft ι) ... T ...] ((x t) ...) { e })) f = t_fn)]
+
+
+  )
 
 (define-judgment-form Rust0-statics
   #:mode (meets-def I I I I I O)
@@ -879,7 +894,12 @@
   [(meets-def Γ Θ ⊢ e : t)
    ------------------------------------------------------- "T-RecStructPassEnum"
    (meets-def Γ (Θ (enum sid_!_1 [_ ...] { _ ... }))
-              ⊢ (name e (sid_!_1 [_ ...] { _ ... })) : t)])
+              ⊢ (name e (sid_!_1 [_ ...] { _ ... })) : t)]
+
+  [(meets-def Γ Θ ⊢ e : t)
+   --------------------------------------------- "T-AlwaysPassFn"
+   (meets-def Γ (Θ (fn f [_ ...] (_ ...) { _ }))
+              ⊢ e : t)])
 
 (define-judgment-form Rust0-statics
   #:mode (type? I I I I I O)
@@ -917,6 +937,13 @@
    (type? Γ Θ ⊢ e : t)
    ------------------------------- "T-AssignId"
    (type? Γ Θ ⊢ (x := e) : (tup))]
+
+
+  [(fn-in Θ f = (fn [_ ...] ((x t) ...) -> t_ret))
+   ;; TODO: figure out why this doesn't work?
+   ;; (type? Γ Θ ⊢ v : t) ...
+   ------------------------------------------- "T-App"
+   (type? Γ Θ ⊢ (f [_ ...] (v ...)) : t_ret) ]
 
   [------------------------------ "T-EmptyBlock"
    (type? Γ Θ ⊢ (block) : (tup))]
@@ -964,6 +991,20 @@
   [(type? Γ Θ ⊢ e : bool)
    --------------------------- "T-Not"
    (type? Γ Θ ⊢ (¬ e) : bool)])
+
+(define-judgment-form Rust0-statics
+  #:mode (type-fn? I I I I O)
+  #:contract (type-fn? Θ ⊢ fndefn : t)
+
+  [(type? (mk-env (x t) ...) Θ ⊢ e : t_ret)
+   ------------------------------------------------------------------------------- "T-Fn"
+   (type-fn? Θ ⊢ (fn f [] ((x t) ...) -> t_ret { e }) : (fn [] (t ...) -> t_ret))])
+
+;; FIXME: this first cut doesn't deal with mutability in function bindings, which is actually a syntactic deficiency.
+(define-metafunction Rust0-statics
+  mk-env : (x t) ... -> Γ
+  [(mk-env) •]
+  [(mk-env (x_1 t_1) (x t) ...) ((mk-env (x t) ...) (imm x_1 t_1))])
 
 (define-syntax-rule (in-context Γ Θ
                       (type-of x is type))
