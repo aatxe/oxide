@@ -847,10 +847,7 @@
 
   [(type-fn? Θ ⊢ (fn f [(lft ι) ... T ...] ((x t) ...) { e }) : t_fn)
    ------------------------------------------------------------------ "T-FnInContext"
-   (fn-in (Θ (fn f [(lft ι) ... T ...] ((x t) ...) { e })) f = t_fn)]
-
-
-  )
+   (fn-in (Θ (fn f [(lft ι) ... T ...] ((x t) ...) { e })) f = t_fn)])
 
 (define-judgment-form Rust0-statics
   #:mode (meets-def I I I I I O)
@@ -1039,9 +1036,17 @@
               (x := 5)
               x) is num))
   (in-context (• (imm x num)) •
-              (type-of (block
-                        (x := 5)
-                        x) is not-defined))
+    (type-of (block
+              (x := 5)
+              x) is not-defined))
+
+  (let ([fn-types (judgment-holds (type-fn? • ⊢ (fn id [] ((x num)) -> num { x }) : t) t)])
+    (check-equal? (car fn-types) (term (fn [] (num) -> num))))
+  (let ([fn-types (judgment-holds (fn-in (• (fn id [] ((x num)) -> num { x })) id = t) t)])
+    (check-true (eq? (length fn-types) 1) "fn-in should find a function.")
+    (check-equal? (car fn-types) (term (fn [] (num) -> num))))
+  (in-context • (• (fn id [] ((x num)) -> num { x }))
+    (type-of (id [] (3)) is num))
 
   (type-of (if true 3 2) is num)
   (type-of (if true 3 false) is not-defined)
