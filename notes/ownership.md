@@ -6,8 +6,7 @@ I can tell, there are two sensible ways of doing this.
 
 Firstly, we can follow the tradition of Boyland and introduce a sort of substructural permissions
 context that gets updated accordingly as the program executes (or while stepping through statements 
-durin
-g type-checking). This results in typing rules that look like ordinary rules for typing
+during type-checking). This results in typing rules that look like ordinary rules for typing
 imperative programs (with each rule yielding an updated context).
 
 The alternative is to follow more directly Linear Regions, L3, etc. and add a capability type that
