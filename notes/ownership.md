@@ -85,7 +85,7 @@ e ::= prims
 
 ## Static Semantics
 
-Judgment: `Σ; Δ; Γ ⊢ e : τ`
+Judgment: `Σ; Δ; Γ ⊢ e : τ`  
 Meaning: In a structure context Σ, type context Δ, and value context Γ, expression e has type τ.
 
 ```
@@ -207,11 +207,11 @@ n ∈ ℕ
 Σ; Δ; Γ ⊢ S : S
 ```
 
-Judgment: `Δ ⊢ τ : κ`
+Judgment: `Δ ⊢ τ : κ`  
 Meaning: In a type context Δ, type τ has the kind κ.
 
-Judgment: `Σ ⊢ e`
+Judgment: `Σ ⊢ e`  
 Meaning: In a structure context Σ, the struct introducing expression e is well-formed.
 
-Judgment: `Σ; S ⊢ (n|x) : τ`
+Judgment: `Σ; S ⊢ (n|x) : τ`  
 Meaning: In a structure S within structure context Σ, the n-th projection or x field is of type τ.
