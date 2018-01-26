@@ -59,7 +59,7 @@ e ::= prims
     | e.x
 
 ;; Types
-τ ::= α
+τ ::= ε
     | τ_1 → τ_2
     | Unit
     | 1
@@ -148,30 +148,30 @@ Meaning: In a structure context Σ, type context Δ, and value context Γ, expre
 Σ; Δ; Γ ⊢ e : τ
 Δ ⊢ τ : ★
 ---------------------------------------------- T-New
-Σ; Δ; Γ ⊢ new e : ∃ρ:LOC. (ref ρ τ × cap ρ 1)
+Σ; Δ; Γ ⊢ new e : ∃ρ:RGN. (ref ρ τ × cap ρ 1)
 
 Σ; Δ; Γ ⊢ e_1 : cap ℓ τ_ƒ
-Δ ⊢ ℓ : LOC
+Δ ⊢ ℓ : RGN
 Δ ⊢ τ_ƒ: FRAC
 Σ; Δ; Γ ⊢ e_2 : ref ℓ τ
 --------------------------------------- T-Read
 Σ; Δ; Γ ⊢ read e_1 e_2 : cap ℓ τ_ƒ × τ
 
 Σ; Δ; Γ ⊢ e_1 : cap ℓ 1
-Δ ⊢ ℓ : LOC
+Δ ⊢ ℓ : RGN
 Σ; Δ; Γ ⊢ e_2 : ref ℓ τ
 Σ; Δ; Γ ⊢ e_3 : τ
 --------------------------------------------- T-Write
 Σ; Δ; Γ ⊢ write e_1 e_2 e_3 : cap ℓ 1 × Unit
 
 Σ; Δ; Γ ⊢ e : cap ℓ τ_ƒ
-Δ ⊢ ℓ : LOC
+Δ ⊢ ℓ : RGN
 Δ ⊢ τ_ƒ: FRAC
 -------------------------------------------------------- T-Split
 Σ; Δ; Γ ⊢ split e : (cap ℓ (τ_ƒ / 2) × cap ℓ (τ_ƒ / 2))
 
 Σ; Δ; Γ ⊢ e_1 : cap ℓ (τ_ƒ / 2)
-Δ ⊢ ℓ : LOC
+Δ ⊢ ℓ : RGN
 Δ ⊢ τ_ƒ: FRAC
 Σ; Δ; Γ ⊢ e_2 : cap ℓ (τ_ƒ / 2)
 ----------------------------------- T-Join
@@ -210,8 +210,72 @@ n ∈ ℕ
 Judgment: `Δ ⊢ τ : κ`  
 Meaning: In a type context Δ, type τ has the kind κ.
 
+```
+---------------- K-Id
+Δ, ε: κ ⊢ ε : κ
+
+------------- K-Unit
+Δ ⊢ Unit : ★
+
+------------- K-WholeFrac
+Δ ⊢ 1 : FRAC
+
+Δ ⊢ τ : FRAC
+----------------- K-HalfFrac
+Δ ⊢ τ / 2 : FRAC
+
+Δ ⊢ τ_1 : ★
+Δ ⊢ τ_2 : ★
+------------------ K-Fun
+Δ ⊢ τ_1 → τ_2 : ★
+
+Δ ⊢ τ_1 : ★
+...
+Δ ⊢ τ_n : ★
+------------------------ K-Prod
+Δ ⊢ τ_1 × ... × τ_n : ★
+
+Δ,ε:κ ⊢ τ : ★
+---------------- K-Univ
+Δ ⊢ ∀ε:κ. τ : ★
+
+Δ ⊢ ℓ : RGN
+Δ ⊢ τ : FRAC
+---------------- K-Ref
+Δ ⊢ ref ℓ τ : ★
+
+Δ ⊢ ℓ : RGN
+Δ ⊢ τ : FRAC
+---------------- K-Cap
+Δ ⊢ cap ℓ τ : ★
+
+;; n.b. we may wish to include Σ here and require S ∈ dom(Σ)
+---------- K-Struct
+Δ ⊢ S : ★
+```
+
 Judgment: `Σ ⊢ e`  
 Meaning: In a structure context Σ, the struct introducing expression e is well-formed.
 
+```
+----------------------------------------------------------------------- WF-StructTuple
+Σ, struct S { x_1: τ_1, ..., x_n: τ_n) ⊢ S { x_1: τ_1, ..., x_n: τ_n }
+
+---------------------------------------------- WF-StructTuple
+Σ, struct S(τ_1, ..., τ_n) ⊢ S(τ_1, ..., τ_n)
+
+---------------- WF-StructUnit
+Σ, struct S ⊢ S
+```
+
 Judgment: `Σ; S ⊢ (n|x) : τ`  
 Meaning: In a structure S within structure context Σ, the n-th projection or x field is of type τ.
+
+```
+------------------------------------------------------------------- T-StructXthProj
+Σ, struct S { x_1: τ_1, ..., x_i: τ_i, ... x_n: τ_n }; S ⊢ x_i : τ
+
+i ∈ ℕ
+----------------------------------------------- T-StructIthProj
+Σ, struct S(τ_1, ..., τ_i, ... τ_n); S ⊢ i : τ
+```
