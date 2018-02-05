@@ -48,7 +48,7 @@ expressions e ::= prim
                 | e.n
                 | e.x
                 
-type environments Γ ::= • | Γ, x : τ ⊗ cap ρ ζ
+type environments Γ ::= • | Γ, {x} x : τ ⊗ cap ρ ζ
 kind environments Δ ::= • | Δ, ς : κ
 data environments Σ ::= •
                       | Σ, struct S<α_1, ..., α_n> { x_1: τ_1, ..., x_n: τ_n }
@@ -59,26 +59,36 @@ Shorthand: `∀α. τ ≝ ∀α:★. τ` and `Λα. e ≝ Λα:★. e`
 
 ## Static Semantics
 
-Judgment: `Σ; Δ; Γ ⊢ e : τ ⇒ Γ'`  
+Judgment: `Σ; Δ; Γ ⊢ e : τ ⇒ Γ' {x}`  
 Meaning: In a data environment Σ, kind environment Δ, and type environment Γ, expression e has
-type τ and produces a new type environment Γ'.
+type τ and produces a new type environment Γ' and optionally a source `x` for the given expression.
 
 ```
---------------------------------------------------------------------------------------- T-IdImm
-Σ; Δ; Γ, x : τ ⊗ cap ρ ζ ⊢ x : ref ρ imm τ ⊗ cap ρ (ζ / 2) ⇒ Γ, x : τ ⊗ cap ρ (ζ / 2)
+;; maybe a really controversial rule
 
----------------------------------------------------------------------------- T-IdMut
-Σ; Δ; Γ, x : τ ⊗ cap ρ 1 ⊢ x : ref ρ mut τ ⊗ cap ρ 1 ⇒ Γ, x : τ ⊗ cap ρ 0
+x_s : τ ⊗ cap ρ ζ_1 ∈ Γ
+join(cap ρ ζ_1, cap ρ ζ_2) ⇝ cap ρ ζ
+Σ; Δ; Γ, x_s : τ ⊗ cap ρ ζ ⊢ e : τ ⇒ Γ'
+---------------------------------------------- T-Drop
+Σ; Δ; Γ, {x_s} x : τ ⊗ cap ρ ζ_2 ⊢ e : τ ⇒ Γ'
 
-Σ; Δ; Γ ⊢ e_1 : ref ρ μ τ_1 ⊗ cap ρ ζ ⇒ Γ_1
+;; the rest
+
+------------------------------------------------------------------------------------------- T-IdImm
+Σ; Δ; Γ, x : τ ⊗ cap ρ ζ ⊢ x : ref ρ imm τ ⊗ cap ρ (ζ / 2) ⇒ Γ, x : τ ⊗ cap ρ (ζ / 2) {x}
+
+------------------------------------------------------------------------------- T-IdMut
+Σ; Δ; Γ, x : τ ⊗ cap ρ 1 ⊢ x : ref ρ mut τ ⊗ cap ρ 1 ⇒ Γ, x : τ ⊗ cap ρ 0 {x}
+
+Σ; Δ; Γ ⊢ e_1 : ref ρ μ τ_1 ⊗ cap ρ ζ ⇒ Γ_1 {x_s}
 ζ ≠ 0
-Σ; Δ; Γ_1, x : τ_1 ⊗ cap ρ ζ ⊢ e_2 : τ_2 ⇒ Γ_2 
------------------------------------------------- T-LetImm
+Σ; Δ; Γ_1, {x_s} x : τ_1 ⊗ cap ρ ζ ⊢ e_2 : τ_2 ⇒ Γ_2
+----------------------------------------------------- T-LetImm
 Σ; Δ; Γ ⊢ let x: τ_1 = e_1 in e_2 : τ_2 ⇒ Γ_2
 
-Σ; Δ; Γ ⊢ e_1 : ref ρ mut τ_1 ⊗ cap ρ 1 ⇒ Γ_1
-Σ; Δ; Γ_1, x : τ_1 ⊗ cap ρ 1 ⊢ e_2 : τ_2 ⇒ Γ_2 
---------------------------------------------------- T-LetMut
+Σ; Δ; Γ ⊢ e_1 : ref ρ mut τ_1 ⊗ cap ρ 1 ⇒ Γ_1 {x_s}
+Σ; Δ; Γ_1, {x_s} x : τ_1 ⊗ cap ρ 1 ⊢ e_2 : τ_2 ⇒ Γ_2 
+----------------------------------------------------- T-LetMut
 Σ; Δ; Γ ⊢ let mut x: τ_1 = e_1 in e_2 : τ_2 ⇒ Γ_2
 
 fresh ρ
@@ -144,7 +154,8 @@ We have type environments `Γ ::= • | Γ, ζ of x : τ` where each binding can
 a few possibilities for each binding. A binding `ζ of x : τ` can either be copied exactly into
 each context (if type `τ` implements `Copy`), can be fractionally split between each context
 (corresponding to an immutable borrow), or can be used completely in only one of the contexts
-(corresponding to either a mutable borrow or a move).
+(corresponding to either a mutable borrow or a move). The fraction is used to determine whether or
+not mutation can occur at that point, and taking or dropping a reference should also impact `ζ`.
 
 Outstanding questions about this alternative: Does this address the problem here that restoring
 capabilities seems mechanically complex?
