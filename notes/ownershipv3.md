@@ -1,0 +1,197 @@
+# Ownership Made Explicit (v3)
+
+Third time's the charm?
+
+## Syntax
+
+```
+identifiers x, y
+struct names S
+
+naturals n ∈ ℕ
+fractions ζ ::= n | ζ / ζ | ζ + ζ
+immediate path Π ::= x | n
+paths π ::= ε | Π | Π.π ;; π is (Π(.Π)*)?
+regions ρ ⊆ { π ↦ v }
+environments σ ⊆ { x ↦ (ρ.π, cap ρ ζ, x_s) }
+
+mutability μ ::= imm | mut
+kinds κ ::= ★
+
+type variables ς ::= α -- by convention, of kind ★
+
+base types bt ::= bool | u32
+primitives prim ::= true | false | n
+
+types τ ::= ς
+          | bt
+          | τ_1 → τ_2
+          | unit
+          | τ_1 ⊗ ... ⊗ τ_n
+          | ∀ς: κ. τ
+          | ref ρ μ τ
+          | cap ρ ζ
+          | S
+
+expressions e ::= prim
+                | ptr μ ρ.π
+                | x
+                | drop x
+                | letnew x: τ = e_1 in e_2
+                | let μ x: τ = y.π in e
+                | ()
+                | let () = e_1 in e_2
+                | (e_1, ..., e_n)
+                | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = y.π in e
+                | S { x_1: e_1, ..., x_n: e_n }
+                | S(e_1, ..., e_N)
+                | Λς: κ. e
+                | e [τ]
+                | e.Π
+
+type environments Γ ::= • | Γ, {from x_s} x : τ ⊗ cap ρ ζ
+kind environments Δ ::= • | Δ, ς : κ
+data environments Σ ::= •
+                      | Σ, struct S<α_1, ..., α_n> { x_1: τ_1, ..., x_n: τ_n }
+                      | Σ, struct S<α_1, ..., α_n>(τ_1, ..., τ_n)
+```
+
+Shorthand: `∀α. τ ≝ ∀α:★. τ` and `Λα. e ≝ Λα:★. e`
+
+## Static Semantics
+
+Judgment: `Σ; Δ; Γ ⊢ e : τ`  
+Meaning: In a data environment Σ, kind environment Δ, and type environment Γ, expression e has
+type τ.
+
+```
+--------------------------------------------- T-Id
+Σ; Δ; Γ, {from x_s} x : τ ⊗ cap ρ ζ ⊢ x : τ
+
+{from x_s'} x_s : τ ⊗ cap ρ ζ_1 ∈ Γ
+ζ_1 + ζ_2 ↓ ζ_n
+Σ; Δ; Γ, {from x_s'} x_s : τ ⊗ cap ρ ζ_n ⊢ e : τ
+---------------------------------------------------------- T-Drop
+Σ; Δ; Γ, {from x_s} x : τ ⊗ cap ρ ζ_2 ⊢ drop x in e : τ
+
+∀x. x ∉ e_1
+Σ; Δ; Γ ⊢ e_1 : τ
+fresh ρ
+Σ; Δ; Γ, {} x : τ ⊗ cap ρ 1 ⊢ e_2 : τ
+--------------------------------------- T-LetNew
+Σ; Δ; Γ ⊢ letnew x: τ = e_1 in e_2 : τ
+
+{from x_s} y : τ_y ⊗ cap ρ ζ ∈ Γ
+ζ ≠ 0
+Σ; Δ; Γ ⊢ y.π : τ_x
+Σ; Δ; Γ, {from x_s} y : τ_y ⊗ cap ρ (ζ / 2), {from y} x : τ_x ⊗ cap ρ (ζ / 2) ⊢ e : τ
+--------------------------------------------------------------------------------------- T-LetImm
+Σ; Δ; Γ ⊢ let imm x: τ_x = y.π in e : τ
+
+{from x_s} y : τ_y ⊗ cap ρ 1 ∈ Γ
+ζ ≠ 0
+Σ; Δ; Γ ⊢ y.π : τ_x
+Σ; Δ; Γ, {from x_s} y : τ_y ⊗ cap ρ 0, {from y} x : τ_x ⊗ cap ρ 1 ⊢ e : τ
+--------------------------------------------------------------------------------------- T-LetMut
+Σ; Δ; Γ ⊢ let mut x: τ_x = y.π in e : τ
+
+------------------------ T-True
+Σ; Δ; Γ ⊢ true : bool
+
+------------------------ T-False
+Σ; Δ; Γ ⊢ false : bool
+
+------------------------ T-u32
+Σ; Δ; Γ ⊢ n : u32
+
+------------------------ T-Unit
+Σ; Δ; Γ ⊢ () : unit
+
+Σ; Δ; Γ ⊢ e_1 : unit
+Σ; Δ; Γ_1 ⊢ e_2 : τ_2
+------------------------------------ T-LetUnit
+Σ; Δ; Γ ⊢ let () = e_1 in e_2 : τ_2
+
+Σ; Δ; Γ ⊢ e_1 : τ_1
+...
+Σ; Δ; Γ ⊢ e_n : τ_n
+--------------------------------------------- T-Tup
+Σ; Δ; Γ ⊢ (e_1, ..., e_n) : τ_1 ⊗ ... ⊗ τ_n
+
+{from x_s} y : τ_y ⊗ cap ρ ζ ∈ Γ
+ζ ≠ 0
+Σ; Δ; Γ ⊢ y.π : τ_x
+ζ / (n + 1) ↓ ζ_n
+Σ; Δ; Γ, {from x_s} y : τ_y ⊗ cap ρ ζ_n,
+         {from y} x_1 : τ_1 ⊗ cap ρ ζ_n,
+         ...
+         {from y} x_n : τ_n ⊗ cap ρ ζ_n
+         ⊢ e : τ_f
+------------------------------------------------------------------------- T-LetTupImm
+Σ; Δ; Γ ⊢ let (imm x_1, ..., imm x_n): τ_1 ⊗ ... ⊗ τ_n = y.π in e : τ_f
+
+mut ∈ {μ_1, ..., μ_n}
+{from x_s} y : τ_y ⊗ cap ρ 1 ∈ Γ
+Σ; Δ; Γ ⊢ y.π : τ_x
+1 / n ↓ ζ_n
+Σ; Δ; Γ, {from x_s} y : τ_y ⊗ cap ρ 0,
+         {from y} x_1 : τ_1 ⊗ cap ρ ζ_n,
+         ...
+         {from y} x_n : τ_n ⊗ cap ρ ζ_n
+         ⊢ e : τ_f
+------------------------------------------------------------------------- T-LetTupAnyMut
+Σ; Δ; Γ ⊢ let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = y.π in e : τ_f
+
+Σ; Δ; Γ ⊢ e_1 : τ_1
+...
+Σ; Δ; Γ ⊢ e_n : τ_n
+Σ ⊢ S { x_1: τ_1, ..., x_n: τ_n }
+------------------------------------------- T-StructRecord
+Σ; Δ; Γ ⊢ S { x_1: e_1, ... x_n: e_n } : S
+
+Σ; Δ; Γ ⊢ e_1 : τ_1
+...
+Σ; Δ; Γ ⊢ e_n : τ_n
+Σ ⊢ S(τ_1, ..., τ_n)
+------------------------------- T-StructTuple
+Σ; Δ; Γ ⊢ S(e_1, ..., e_n) : S
+
+Σ; Δ, ς : κ; Γ ⊢ e : τ
+----------------------- T-TAbs
+Σ; Δ; Γ ⊢ Λς: κ. e : τ
+
+Σ; Δ; Γ ⊢ e_1 : ∀ς: κ. τ
+Δ ⊢ τ_2 : κ
+--------------------------------- T-TApp
+Σ; Δ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς]
+
+;; These arbitrary projections seem to violate our ownership model (maybe they should be invalid)
+
+Σ; Δ; Γ ⊢ e : S
+struct S { x_1: τ_1, ..., x: τ, ..., x_n: τ_n } ∈ Σ
+---------------------------------------------------- T-ProjFieldPath
+Σ; Δ; Γ ⊢ e.x : τ
+
+Σ; Δ; Γ ⊢ e : S
+struct S(τ_1, ..., τ_t, ..., τ_n) ∈ Σ
+-------------------------------------- T-ProjIndexPathStruct
+Σ; Δ; Γ ⊢ e.t : τ_t
+
+Σ; Δ; Γ ⊢ e : τ_1 ⊗ ... ⊗ τ_t ⊗ ... ⊗ τ_n
+-------------------------------------------- T-ProjIndexPathTup
+Σ; Δ; Γ ⊢ e.t : τ_t
+```
+
+Judgment: `Σ ⊢ e`  
+Meaning: In a structure context Σ, the struct introducing expression e is well-formed.
+
+```
+----------------------------------------------------------------------- WF-StructTuple
+Σ, struct S { x_1: τ_1, ..., x_n: τ_n) ⊢ S { x_1: τ_1, ..., x_n: τ_n }
+
+---------------------------------------------- WF-StructTuple
+Σ, struct S(τ_1, ..., τ_n) ⊢ S(τ_1, ..., τ_n)
+
+---------------- WF-StructUnit
+Σ, struct S ⊢ S
+```
