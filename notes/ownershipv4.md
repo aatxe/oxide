@@ -41,25 +41,23 @@ types τ ::= ς
           | r | ι | f
           ;; ★-kind types
           | bt
-          | pkg τ r f ι -- fraction f of τ-value in region r aliased from ι
-          | pkg τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ pkg τ_n r_n f_n ι_n → τ_ret -- ordinary closure
-          | pkg τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ pkg τ_n r_n f_n ι_n ↝ τ_ret -- move closure
+          | ref τ r f ι -- fraction f of τ-value in region r aliased from ι
+          | ref τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ ref τ_n r_n f_n ι_n → τ_ret -- ordinary closure
+          | ref τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ ref τ_n r_n f_n ι_n ↝ τ_ret -- move closure
           | unit
           | τ_1 ⊗ ... ⊗ τ_n
           | ∀ς: κ. τ
-          | ref r μ τ
           | cap r f
           | S
 
 expressions e ::= prim
-                | ptr μ ρ.π
                 | x
                 | stack e
-                | borrow μ x
+                | borrow μ x -- Rust syntax: &μ x
                 | drop x
                 | let μ x: τ = e_1 in e_2
-                | |x_1: pkg τ_1 r_1 f_1 ι_1, ..., x_n: pkg τ_n r_n f_n ι_n| { e }
-                | move |x_1: pkg τ_1 r_1 f_1 ι_1, ..., x_n: pkg τ_n r_n f_n ι_n| { e }
+                | |x_1: ref τ_1 r_1 f_1 ι_1, ..., x_n: ref τ_n r_n f_n ι_n| { e }
+                | move |x_1: ref τ_1 r_1 f_1 ι_1, ..., x_n: ref τ_n r_n f_n ι_n| { e }
                 | e_1 e_2
                 | ()
                 | let () = e_1 in e_2
@@ -88,68 +86,68 @@ type τ and produces the updated environment Γ'.
 
 ```
 ------------------------------------------------------- T-Id
-Σ; Δ; Γ, x ↦ pkg τ r f ι ⊢ x : τ ⇒ Γ, x ↦ pkg τ r f ι
+Σ; Δ; Γ, x ↦ ref τ r f ι ⊢ x : τ ⇒ Γ, x ↦ ref τ r f ι
 
 fresh r
 Σ; Δ; Γ ⊢ e : τ
 ------------------------------------ T-Stack
-Σ; Δ; Γ ⊢ stack e : pkg τ r 1 • ⇒ Γ
+Σ; Δ; Γ ⊢ stack e : ref τ r 1 • ⇒ Γ
 
-Γ(x) = pkg τ r f ι
+Γ(x) = ref τ r f ι
 f ≠ 0
 f / 2 ↓ f_n
 -------------------------------------------------------------- T-BorrowImm
-Σ; Δ; Γ ⊢ borrow imm x : pkg τ r f_n x ⇒ Γ, x ↦ pkg τ r f_n ι
+Σ; Δ; Γ ⊢ borrow imm x : ref τ r f_n x ⇒ Γ, x ↦ ref τ r f_n ι
 
-Γ(x) = pkg τ r 1 ι
+Γ(x) = ref τ r 1 ι
 -------------------------------------------------------------- T-BorrowMut
-Σ; Δ; Γ ⊢ borrow mut x : pkg τ r 1 x ⇒ Γ, x ↦ pkg τ r 0 ι
+Σ; Δ; Γ ⊢ borrow mut x : ref τ r 1 x ⇒ Γ, x ↦ ref τ r 0 ι
 
-Γ(x_s) = pkg τ_s r f_s ι
+Γ(x_s) = ref τ_s r f_s ι
 f + f_s ↓ f_n
 ------------------------------------------------------------------- T-DropRet
-Σ; Δ; Γ, x ↦ pkg τ r f x_s ⊢ drop x : τ ⇒ Γ, x_s ↦ pkg τ_s r f_n ι
+Σ; Δ; Γ, x ↦ ref τ r f x_s ⊢ drop x : τ ⇒ Γ, x_s ↦ ref τ_s r f_n ι
 
 ------------------------------------------------------------------- T-Drop
-Σ; Δ; Γ, x ↦ pkg τ r f • ⊢ drop x : τ ⇒ Γ
+Σ; Δ; Γ, x ↦ ref τ r f • ⊢ drop x : τ ⇒ Γ
 
-Σ; Δ; Γ ⊢ e_1 : pkg τ_1 r_1 f_1 ι_1 ⇒ Γ_1
+Σ; Δ; Γ ⊢ e_1 : ref τ_1 r_1 f_1 ι_1 ⇒ Γ_1
 f_1 ≠ 0
-Σ; Δ; Γ_1, x ↦ pkg τ_1 r_1 f_1 ι_1 ⊢ e_2 : τ_2 ⇒ Γ_2
+Σ; Δ; Γ_1, x ↦ ref τ_1 r_1 f_1 ι_1 ⊢ e_2 : τ_2 ⇒ Γ_2
 ----------------------------------------------------- T-LetImm
 Σ; Δ; Γ ⊢ let imm x: τ_1 = e_1 in e_2 : τ_2 ⇒ Γ_2
 
-Σ; Δ; Γ ⊢ e_1 : pkg τ_1 r_1 1 ι_1 ⇒ Γ_1
-Σ; Δ; Γ_1, x ↦ pkg τ_1 r_1 1 ι_1 ⊢ e_2 : τ_2 ⇒ Γ_2
+Σ; Δ; Γ ⊢ e_1 : ref τ_1 r_1 1 ι_1 ⇒ Γ_1
+Σ; Δ; Γ_1, x ↦ ref τ_1 r_1 1 ι_1 ⊢ e_2 : τ_2 ⇒ Γ_2
 --------------------------------------------------- T-LetMut
 Σ; Δ; Γ ⊢ let mut x: τ_1 = e_1 in e_2 : τ_2 ⇒ Γ_2
 
-Σ; Δ; Γ, x_1 ↦ pkg τ_1 r_1 f_1 ι_1,
+Σ; Δ; Γ, x_1 ↦ ref τ_1 r_1 f_1 ι_1,
          ...
-         x_n ↦ pkg τ_n r_n f_n ι_n
+         x_n ↦ ref τ_n r_n f_n ι_n
          ⊢ e : τ_ret ⇒ Γ'
 -------------------------------------------------------------------------- T-Closure
-Σ; Δ; Γ ⊢ |x_1: pkg τ_1 r_1 f_1 ι_1, ..., x_n: pkg τ_n r_n f_n ι_n| { e }
-        : pkg τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ pkg τ_n r_n f_n ι_n → τ_ret
+Σ; Δ; Γ ⊢ |x_1: ref τ_1 r_1 f_1 ι_1, ..., x_n: ref τ_n r_n f_n ι_n| { e }
+        : ref τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ ref τ_n r_n f_n ι_n → τ_ret
         ⇒ Γ'
 
 Γ_1 ⊡ Γ_2 ⇝ Γ
-Σ; Δ; Γ_1, x_1 ↦ pkg τ_1 r_1 f_1 ι_1,
+Σ; Δ; Γ_1, x_1 ↦ ref τ_1 r_1 f_1 ι_1,
            ...
-           x_n ↦ pkg τ_n r_n f_n ι_n
+           x_n ↦ ref τ_n r_n f_n ι_n
            ⊢ e : τ_ret ⇒ Γ_ignored
 ------------------------------------------------------------------------------- T-MoveClosure
-Σ; Δ; Γ ⊢ move |x_1: pkg τ_1 r_1 f_1 ι_1, ..., x_n: pkg τ_n r_n f_n ι_n| { e }
-        : pkg τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ pkg τ_n r_n f_n ι_n ⇝ τ_ret
+Σ; Δ; Γ ⊢ move |x_1: ref τ_1 r_1 f_1 ι_1, ..., x_n: ref τ_n r_n f_n ι_n| { e }
+        : ref τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ ref τ_n r_n f_n ι_n ⇝ τ_ret
         ⇒ Γ_2
 
-Σ; Δ; Γ ⊢ e_1 : pkg τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ pkg τ_n r_n f_n ι_n → τ_ret ⇒ Γ_1
-Σ; Δ; Γ_1 ⊢ e_2 : pkg τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ pkg τ_n r_n f_n ι_n ⇒ Γ_2
+Σ; Δ; Γ ⊢ e_1 : ref τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ ref τ_n r_n f_n ι_n → τ_ret ⇒ Γ_1
+Σ; Δ; Γ_1 ⊢ e_2 : ref τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ ref τ_n r_n f_n ι_n ⇒ Γ_2
 ------------------------------------------------------------------------------- T-App
 Σ; Δ; Γ ⊢ e_1 e_2 : τ_ret ⇒ Γ_2
 
-Σ; Δ; Γ ⊢ e_1 : pkg τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ pkg τ_n r_n f_n ι_n ⇝ τ_ret ⇒ Γ_1
-Σ; Δ; Γ_1 ⊢ e_2 : pkg τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ pkg τ_n r_n f_n ι_n ⇒ Γ_2
+Σ; Δ; Γ ⊢ e_1 : ref τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ ref τ_n r_n f_n ι_n ⇝ τ_ret ⇒ Γ_1
+Σ; Δ; Γ_1 ⊢ e_2 : ref τ_1 r_1 f_1 ι_1 ⊗ ... ⊗ ref τ_n r_n f_n ι_n ⇒ Γ_2
 ------------------------------------------------------------------------------- T-MoveApp
 Σ; Δ; Γ ⊢ e_1 e_2 : τ_ret ⇒ Γ_2
 
@@ -176,22 +174,22 @@ f_1 ≠ 0
 --------------------------------------------------- T-Tup
 Σ; Δ; Γ ⊢ (e_1, ..., e_n) : τ_1 ⊗ ... ⊗ τ_n ⇒ Γ_n
 
-Σ; Δ; Γ ⊢ e_1 : pkg (τ_1 ⊗ ... ⊗ τ_n) r f ι ⇒ Γ_1
+Σ; Δ; Γ ⊢ e_1 : ref (τ_1 ⊗ ... ⊗ τ_n) r f ι ⇒ Γ_1
 f ≠ 0
 f / n ↓ f_n
-Σ; Δ; Γ, x_1 ↦ pkg τ_1 r f_n ι,
+Σ; Δ; Γ, x_1 ↦ ref τ_1 r f_n ι,
          ...
-         x_n ↦ pkg τ_n r f_n ι,
+         x_n ↦ ref τ_n r f_n ι,
          ⊢ e_2 : t_2 ⇒ Γ_2
 --------------------------------------------------------------------------------- T-LetTupImm
 Σ; Δ; Γ ⊢ let (imm x_1, ..., imm x_n): τ_1 ⊗ ... ⊗ τ_n = e_1 in e_2 : τ_2 ⇒ Γ_2
 
 mut ∈ {μ_1, ..., μ_n}
-Σ; Δ; Γ ⊢ e_1 : pkg (τ_1 ⊗ ... ⊗ τ_n) r 1 ι ⇒ Γ_1
+Σ; Δ; Γ ⊢ e_1 : ref (τ_1 ⊗ ... ⊗ τ_n) r 1 ι ⇒ Γ_1
 fresh r_1 ... r_n
-Σ; Δ; Γ, x_1 ↦ pkg τ_1 r_1 1 •,
+Σ; Δ; Γ, x_1 ↦ ref τ_1 r_1 1 •,
          ...
-         x_n ↦ pkg τ_n r_n 1 •
+         x_n ↦ ref τ_n r_n 1 •
          ⊢ e_2 : t_2 ⇒ Γ_2
 --------------------------------------------------------------------------------- T-LetTupAnyMut
 Σ; Δ; Γ ⊢ let (imm x_1, ..., imm x_n): τ_1 ⊗ ... ⊗ τ_n = e_1 in e_2 : τ_2 ⇒ Γ_2
@@ -219,19 +217,19 @@ fresh r_1 ... r_n
 -------------------------------------- T-TApp
 Σ; Δ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς] ⇒ Γ'
 
-Σ; Δ; Γ ⊢ e : pkg S r f ι ⇒ Γ'
+Σ; Δ; Γ ⊢ e : ref S r f ι ⇒ Γ'
 struct S { x_1: τ_1, ..., x: τ, ..., x_n: τ_n } ∈ Σ
 ---------------------------------------------------- T-ProjFieldPath
-Σ; Δ; Γ ⊢ e.x : pkg τ r f ι ⇒ Γ'
+Σ; Δ; Γ ⊢ e.x : ref τ r f ι ⇒ Γ'
 
-Σ; Δ; Γ ⊢ e : pkg S r f ι ⇒ Γ'
+Σ; Δ; Γ ⊢ e : ref S r f ι ⇒ Γ'
 struct S(τ_1, ..., τ_t, ..., τ_n) ∈ Σ
 -------------------------------------- T-ProjIndexPathStruct
-Σ; Δ; Γ ⊢ e.t : pkg τ_t r f ι ⇒ Γ'
+Σ; Δ; Γ ⊢ e.t : ref τ_t r f ι ⇒ Γ'
 
-Σ; Δ; Γ ⊢ e : pkg (τ_1 ⊗ ... ⊗ τ_t ⊗ ... ⊗ τ_n) r f ι ⇒ Γ'
+Σ; Δ; Γ ⊢ e : ref (τ_1 ⊗ ... ⊗ τ_t ⊗ ... ⊗ τ_n) r f ι ⇒ Γ'
 ------------------------------------------------------------ T-ProjIndexPathTup
-Σ; Δ; Γ ⊢ e.t : pkg τ_t r f ι ⇒ Γ'
+Σ; Δ; Γ ⊢ e.t : ref τ_t r f ι ⇒ Γ'
 ```
 
 Judgment: `Σ ⊢ e`  
