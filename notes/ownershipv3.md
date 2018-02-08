@@ -16,22 +16,26 @@ regions ρ ⊆ { π ↦ v }
 environments σ ⊆ { x ↦ (ρ.π, cap ρ ζ, x_s) }
 
 mutability μ ::= imm | mut
-kinds κ ::= ★
+kinds κ ::= ★ | RGN
 
 type variables ς ::= α -- by convention, of kind ★
+                   | ϱ -- by convention, of kind RGN
 
 base types bt ::= bool | u32
 primitives prim ::= true | false | n
 
+region types r ::= ϱ -- region variables
+                 | ρ -- concrete regions
+
 types τ ::= ς
           | bt
-          | τ_1 ⊗ ... ⊗ τ_n → τ_ret     ;; ordinary closure
-          | τ_1 ⊗ ... ⊗ τ_n ↝ τ_ret     ;; move closure
+          | (τ_1 ⊗ cap r_1 ζ_1) ⊗ ... ⊗ (τ_n ⊗ cap r_n ζ_n) → τ_ret -- ordinary closure
+          | (τ_1 ⊗ cap r_1 ζ_1) ⊗ ... ⊗ (τ_n ⊗ cap r_n ζ_n) ↝ τ_ret -- move closure
           | unit
           | τ_1 ⊗ ... ⊗ τ_n
           | ∀ς: κ. τ
-          | ref ρ μ τ
-          | cap ρ ζ
+          | ref r μ τ
+          | cap r ζ
           | S
 
 expressions e ::= prim
@@ -40,8 +44,8 @@ expressions e ::= prim
                 | drop x
                 | letnew x: τ = e_1 in e_2
                 | let μ x: τ = y.π in e
-                | |μ_1 x_1: τ_1, ..., μ_n x_n: τ_n| { e }
-                | move |μ_1 x_1: τ_1, ..., μ_n x_n: τ_n| { e }
+                | |x_1: τ_1 ⊗ cap r_1 ζ_1, ..., x_n: τ_n ⊗ cap r_n ζ_n| { e }
+                | move |x_1: τ_1 ⊗ cap r_1 ζ_1, ..., x_n: τ_n ⊗ cap r_n ζ_n| { e }
                 | e_1 e_2
                 | ()
                 | let () = e_1 in e_2
@@ -53,7 +57,7 @@ expressions e ::= prim
                 | e [τ]
                 | e.Π
 
-type environments Γ ::= • | Γ, {from x_s} x : τ ⊗ cap ρ ζ
+type environments Γ ::= • | Γ, {from x_s} x : τ ⊗ cap r ζ
 kind environments Δ ::= • | Δ, ς : κ
 data environments Σ ::= •
                       | Σ, struct S<α_1, ..., α_n> { x_1: τ_1, ..., x_n: τ_n }
@@ -70,12 +74,12 @@ type τ and produces the updated environment Γ'.
 
 ```
 ----------------------------------------------------------------------------- T-Id
-Σ; Δ; Γ, {from x_s} x : τ ⊗ cap ρ ζ ⊢ x : τ ⇒ Γ, {from x_s} x : τ ⊗ cap ρ ζ
+Σ; Δ; Γ, {from x_s} x : τ ⊗ cap r ζ ⊢ x : τ ⇒ Γ, {from x_s} x : τ ⊗ cap r ζ
 
-{from x_s'} x_s : τ ⊗ cap ρ ζ_1 ∈ Γ
+{from x_s'} x_s : τ ⊗ cap r ζ_1 ∈ Γ
 ζ_1 + ζ_2 ↓ ζ_n
 ----------------------------------------------------------------------------------------- T-Drop
-Σ; Δ; Γ, {from x_s} x : τ ⊗ cap ρ ζ_2 ⊢ drop x : τ ⇒ Γ, {from x_s'} x_s : τ ⊗ cap ρ ζ_n
+Σ; Δ; Γ, {from x_s} x : τ ⊗ cap r ζ_2 ⊢ drop x : τ ⇒ Γ, {from x_s'} x_s : τ ⊗ cap r ζ_n
 
 ∀x. x ∉ e_1
 Σ; Δ; Γ ⊢ e_1 : τ ⇒ Γ_1
@@ -84,46 +88,44 @@ fresh ρ
 ---------------------------------------------- T-LetNew
 Σ; Δ; Γ ⊢ letnew x: τ = e_1 in e_2 : τ ⇒ Γ_2
 
-{from x_s} y : τ_y ⊗ cap ρ ζ ∈ Γ
+{from x_s} y : τ_y ⊗ cap r ζ ∈ Γ
 ζ ≠ 0
 Σ; Δ; Γ ⊢ y.π : τ_x ⇒ Γ_1
-Σ; Δ; Γ_1, {from x_s} y : τ_y ⊗ cap ρ (ζ / 2),
-           {from y} x : τ_x ⊗ cap ρ (ζ / 2)
+Σ; Δ; Γ_1, {from x_s} y : τ_y ⊗ cap r (ζ / 2),
+           {from y} x : τ_x ⊗ cap r (ζ / 2)
            ⊢ e : τ ⇒ Γ_2
 ----------------------------------------------- T-LetImm
 Σ; Δ; Γ ⊢ let imm x: τ_x = y.π in e : τ ⇒ Γ_2
 
-{from x_s} y : τ_y ⊗ cap ρ 1 ∈ Γ
+{from x_s} y : τ_y ⊗ cap r 1 ∈ Γ
 ζ ≠ 0
 Σ; Δ; Γ ⊢ y.π : τ_x ⇒ Γ_1
-Σ; Δ; Γ_1, {from x_s} y : τ_y ⊗ cap ρ 0, {from y} x : τ_x ⊗ cap ρ 1 ⊢ e : τ ⇒ Γ_2
+Σ; Δ; Γ_1, {from x_s} y : τ_y ⊗ cap r 0, {from y} x : τ_x ⊗ cap r 1 ⊢ e : τ ⇒ Γ_2
 --------------------------------------------------------------------------------------- T-LetMut
 Σ; Δ; Γ ⊢ let mut x: τ_x = y.π in e : τ ⇒ Γ_2
 
-;; mut becomes 1, and imm is an arbitrary non-zero fraction
-μ-to-ζ(μ_1, ..., μ_n) ⇒ ζ_1, ... ζ_n
-ζ_1 ≠ 0 ... ζ_n ≠ 0
-Σ; Δ; Γ, {} x_1 : τ_1 ⊗ cap ρ_1 ζ_1
+Σ; Δ; Γ, {} x_1 : τ_1 ⊗ cap r_1 ζ_1
          ...
-         {} x_n : τ_n ⊗ cap ρ_n ζ_n
+         {} x_n : τ_n ⊗ cap r_n ζ_n
          ⊢ e : τ_ret ⇒ Γ'
----------------------------------------------------------------------------------- T-Closure
-Σ; Δ; Γ ⊢ |μ_1 x_1: τ_1, ..., μ_n x_n: τ_n| { e } : τ_1 ⊗ ... ⊗ τ_n → τ_ret ⇒ Γ'
+----------------------------------------------------------------------- T-Closure
+Σ; Δ; Γ ⊢ |x_1: τ_1 ⊗ cap r_1 ζ_1, ..., x_n: τ_n ⊗ cap r_n ζ_n| { e }
+        : (τ_1 ⊗ cap r_1 ζ_1) ⊗ ... ⊗ (τ_n ⊗ cap r_n ζ_n) → τ_ret
+        ⇒ Γ'
 
-;; mut becomes 1, and imm is an arbitrary non-zero fraction
-μ-to-ζ(μ_1, ..., μ_n) ⇒ ζ_1, ... ζ_n
-ζ_1 ≠ 0 ... ζ_n ≠ 0
 Γ_1 ⊡ Γ_2 ⇝ Γ
-Σ; Δ; Γ_1, {} x_1 : τ_1 ⊗ cap ρ_1 ζ_1
-            ...
-            {} x_n : τ_n ⊗ cap ρ_n ζ_n
-            ⊢ e : τ_ret ⇒ Γ_ignored
----------------------------------------------------------------------------------------- T-MvClosure
-Σ; Δ; Γ ⊢ move |μ_1 x_1: τ_1, ..., μ_n x_n: τ_n| { e } : τ_1 ⊗ ... ⊗ τ_n ↝ τ_ret ⇒ Γ_2
+Σ; Δ; Γ_1, {} x_1 : τ_1 ⊗ cap r_1 ζ_1
+           ...
+           {} x_n : τ_n ⊗ cap r_n ζ_n
+           ⊢ e : τ_ret ⇒ Γ_ignored
+---------------------------------------------------------------------------- T-MvClosure
+Σ; Δ; Γ ⊢ move |x_1: τ_1 ⊗ cap r_1 ζ_1, ..., x_n: τ_n ⊗ cap r_n ζ_n| { e }
+        : (τ_1 ⊗ cap r_1 ζ_1) ⊗ ... ⊗ (τ_n ⊗ cap r_n ζ_n) ⇝ τ_ret
+        ⇒ Γ_2
 
-Σ; Δ; Γ ⊢ e_1 : τ_1 ⊗ ... ⊗ τ_n → τ_ret ⇒ Γ_1
-Σ; Δ; Γ_1 ⊢ e_2 : τ_1 ⊗ ... ⊗ τ_n ⇒ Γ_2
------------------------------------------------ T-App
+Σ; Δ; Γ ⊢ (τ_1 ⊗ cap r_1 ζ_1) ⊗ ... ⊗ (τ_n ⊗ cap r_n ζ_n) arr τ_ret ⇒ Γ_1 ;; arr here is → or ⇝ 
+Σ; Δ; Γ_1 ⊢ e_2 : (τ_1 ⊗ cap r_1 ζ_1) ⊗ ... ⊗ (τ_n ⊗ cap r_n ζ_n) ⇒ Γ_2
+------------------------------------------------------------------------- T-App
 Σ; Δ; Γ ⊢ e_1 e_2 : τ_ret ⇒ Γ_2
 
 -------------------------- T-True
@@ -149,26 +151,26 @@ fresh ρ
 --------------------------------------------------- T-Tup
 Σ; Δ; Γ ⊢ (e_1, ..., e_n) : τ_1 ⊗ ... ⊗ τ_n ⇒ Γ_n
 
-{from x_s} y : τ_y ⊗ cap ρ ζ ∈ Γ
+{from x_s} y : τ_y ⊗ cap r ζ ∈ Γ
 ζ ≠ 0
 Σ; Δ; Γ ⊢ y.π : τ_x ⇒ Γ_1
 ζ / (n + 1) ↓ ζ_n
-Σ; Δ; Γ_1, {from x_s} y : τ_y ⊗ cap ρ ζ_n,
-           {from y} x_1 : τ_1 ⊗ cap ρ ζ_n,
+Σ; Δ; Γ_1, {from x_s} y : τ_y ⊗ cap r ζ_n,
+           {from y} x_1 : τ_1 ⊗ cap r ζ_n,
            ...
-           {from y} x_n : τ_n ⊗ cap ρ ζ_n
+           {from y} x_n : τ_n ⊗ cap r ζ_n
            ⊢ e : τ_f ⇒ Γ_2
 ------------------------------------------------------------------------------- T-LetTupImm
 Σ; Δ; Γ ⊢ let (imm x_1, ..., imm x_n): τ_1 ⊗ ... ⊗ τ_n = y.π in e : τ_f ⇒ Γ_2
 
 mut ∈ {μ_1, ..., μ_n}
-{from x_s} y : τ_y ⊗ cap ρ 1 ∈ Γ
+{from x_s} y : τ_y ⊗ cap r 1 ∈ Γ
 Σ; Δ; Γ ⊢ y.π : τ_x ⇒ Γ_1
 1 / n ↓ ζ_n
-Σ; Δ; Γ_1, {from x_s} y : τ_y ⊗ cap ρ 0,
-           {from y} x_1 : τ_1 ⊗ cap ρ ζ_n,
+Σ; Δ; Γ_1, {from x_s} y : τ_y ⊗ cap r 0,
+           {from y} x_1 : τ_1 ⊗ cap r ζ_n,
            ...
-           {from y} x_n : τ_n ⊗ cap ρ ζ_n
+           {from y} x_n : τ_n ⊗ cap r ζ_n
            ⊢ e : τ_f ⇒ Γ_2
 ------------------------------------------------------------------------------- T-LetTupAnyMut
 Σ; Δ; Γ ⊢ let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = y.π in e : τ_f ⇒ Γ_2
