@@ -52,7 +52,7 @@ types τ ::= ς
 expressions e ::= prim
                 | x
                 | stack e
-                | borrow μ x -- Rust syntax: &μ x
+                | borrow μ x.π -- Rust syntax: &μ x / &μ x.π
                 | drop x
                 | let μ x: τ = e_1 in e_2
                 | |x_1: stk τ_1 r_1 f_1 ι_1, ..., x_n: stk τ_n r_n f_n ι_n| { e }
@@ -95,12 +95,14 @@ fresh r
 Γ(x) = stk τ r f ι
 f ≠ 0
 f / 2 ↓ f_n
--------------------------------------------------------------- T-BorrowImm
-Σ; Δ; Γ ⊢ borrow imm x : stk τ r f_n x ⇒ Γ, x ↦ stk τ r f_n ι
+Σ; τ ⊢ π : τ_π
+------------------------------------------------------------------- T-BorrowImm
+Σ; Δ; Γ ⊢ borrow imm x.π : stk τ_π r f_n x ⇒ Γ, x ↦ stk τ r f_n ι
 
 Γ(x) = stk τ r 1 ι
--------------------------------------------------------------- T-BorrowMut
-Σ; Δ; Γ ⊢ borrow mut x : stk τ r 1 x ⇒ Γ, x ↦ stk τ r 0 ι
+Σ; τ ⊢ π : τ_π
+------------------------------------------------------------- T-BorrowMut
+Σ; Δ; Γ ⊢ borrow mut x : stk τ_π r 1 x ⇒ Γ, x ↦ stk τ r 0 ι
 
 Γ(x_s) = stk τ_s r f_s ι
 f + f_s ↓ f_n
