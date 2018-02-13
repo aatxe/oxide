@@ -51,7 +51,7 @@ types τ ::= ς
 
 expressions e ::= prim
                 | x
-                | stack e
+                | alloc e
                 | borrow μ x.π -- Rust syntax: &μ x / &μ x.π
                 | drop x
                 | let μ x: τ = e_1 in e_2
@@ -89,8 +89,8 @@ type τ and produces the updated environment Γ'.
 
 fresh r
 Σ; Δ; Γ ⊢ e : τ
------------------------------------- T-Stack
-Σ; Δ; Γ ⊢ stack e : stk τ r 1 • ⇒ Γ
+------------------------------------ T-Alloc
+Σ; Δ; Γ ⊢ alloc e : stk τ r 1 • ⇒ Γ
 
 Γ(x) = stk τ r f ι
 f ≠ 0
@@ -106,10 +106,10 @@ f / 2 ↓ f_n
 
 Γ(x_s) = stk τ_s r f_s ι
 f + f_s ↓ f_n
-------------------------------------------------------------------- T-DropRet
+------------------------------------------------------------------- T-Drop
 Σ; Δ; Γ, x ↦ stk τ r f x_s ⊢ drop x : τ ⇒ Γ, x_s ↦ stk τ_s r f_n ι
 
------------------------------------------- T-Drop
+------------------------------------------ T-Free
 Σ; Δ; Γ, x ↦ stk τ r 1 • ⊢ drop x : τ ⇒ Γ
 
 Σ; Δ; Γ ⊢ e_1 : stk τ_1 r_1 f_1 ι_1 ⇒ Γ_1
