@@ -13,8 +13,6 @@ naturals n ∈ ℕ
 concrete fractions ƒ ::= n | ƒ / ƒ | ƒ + ƒ
 immediate path Π ::= x | n
 paths π ::= ε | Π | Π.π ;; π is (Π(.Π)*)?
-regions ρ ⊆ { π ↦ v }
-environments σ ⊆ { x ↦ (ρ.π, cap ρ ζ, x_s) }
 
 mutability μ ::= imm | mut
 kinds κ ::= ★ | RGN | FRAC | ID
@@ -80,6 +78,8 @@ Shorthand: `&r f τ ≝ &r f^• τ`
 
 ## Static Semantics
 
+### Type Checking
+
 Judgment: `Σ; Δ; Γ ⊢ e : τ ⇒ Γ'`  
 Meaning: In a data environment Σ, kind environment Δ, and type environment Γ, expression e has
 type τ and produces the updated environment Γ'.
@@ -88,10 +88,10 @@ type τ and produces the updated environment Γ'.
 ------------------------------------------------------- T-Id
 Σ; Δ; Γ, x ↦ stk τ r f ι ⊢ x : τ ⇒ Γ, x ↦ stk τ r f ι
 
-fresh r
+fresh ρ
 Σ; Δ; Γ ⊢ e : τ
 ------------------------------------ T-Alloc
-Σ; Δ; Γ ⊢ alloc e : &r 1 τ • ⇒ Γ
+Σ; Δ; Γ ⊢ alloc e : &ρ 1 τ • ⇒ Γ
 
 Γ(x) = stk τ r f ι
 f ≠ 0
@@ -247,6 +247,8 @@ struct S(τ_1, ..., τ_t, ..., τ_n) ∈ Σ
 ------------------------------------------------------------ T-ProjIndexPathTup
 Σ; Δ; Γ ⊢ e.t : &r f^ι τ_t ⇒ Γ'
 ```
+
+### Additional Judgments
 
 Judgment: `Σ ⊢ e`  
 Meaning: In a structure context Σ, the struct introducing expression e is well-formed.
