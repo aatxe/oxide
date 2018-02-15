@@ -61,7 +61,7 @@ expressions e ::= prim
                 | (e_1, ..., e_n)
                 | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1 in e_2
                 | S { x_1: e_1, ..., x_n: e_n }
-                | S(e_1, ..., e_N)
+                | S(e_1, ..., e_n)
                 | Λς: κ. e
                 | e [τ]
                 | e.Π
@@ -262,4 +262,112 @@ Meaning: In a structure context Σ, the struct introducing expression e is well-
 
 ---------------- WF-StructUnit
 Σ, struct S ⊢ S
+```
+
+## Dynamic Semantics
+
+### Syntax Extensions
+
+```
+expresions e ::= ...
+               | ptr ρ.π ƒ x
+
+simple values sv ::= true | false
+                   | n
+                   | ptr ρ.π ƒ x
+                   | ()
+
+values v ::= sv
+           | (v_1, ... v_n)
+           | S { x_1: v_1, ... x_n: v_n }
+           | S(v_1, ..., v_n)
+           | |x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }
+           | move |x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }
+
+evaluation contexts E ::= []
+                        | alloc E
+                        | let μ x: τ = E in e
+                        | E e
+                        | v E
+                        | let () = E in e
+                        | (v ..., E, e ...)
+                        | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = E in e
+                        | S { x: v ..., x: E, x: e ... }
+                        | S(v ..., E, e ...)
+                        | E [τ]
+                        | E.Π
+
+regions ρ are maps from paths π to simple values sv.
+region sets R map region names to regions.
+stores σ are maps from identifiers x to pointers ptr ρ.π ƒ x
+```
+
+### Operational Semantics
+
+Form: `(σ, R, e) → (σ, R, e)`
+
+```
+σ(x) = ptr ρ.π ƒ x_s
+ƒ ≠ 0
+canonize(π) = π_c
+R(ρ)(π_c) = sv
+----------------------- E-Id
+(σ, R, x) → (σ, R, sv)
+
+fresh ρ
+------------------------------------------------------------ E-AllocSimple
+(σ, R, alloc sv) → (σ, R ∪ { ρ ↦ { ε ↦ sv } }, ptr ρ.ε 1 •)
+
+;; TODO: alloc for tuples and structs
+;; general idea: recursively convert subvalues to sets of path-sv pairs and union them all together
+
+σ(x) = ptr ρ.π_x ƒ x_s
+ƒ ≠ 0
+canonize(π_x.π) = π_c
+ƒ / 2 ↓ ƒ_n
+--------------------------------------------------------------------------- E-BorrowImm
+(σ, R, borrow imm x.π) → (σ ∪ { x ↦ ptr ρ.π_x ƒ_n x_s, R, ptr ρ.π_c ƒ_n x)
+
+σ(x) = ptr ρ.π_x 1 x_s
+canonize(π_x.π) = π_c
+----------------------------------------------------------------------- E-BorrowMut
+(σ, R, borrow mut x.π) → (σ ∪ { x ↦ ptr ρ.π_x 0 x_s, R, ptr ρ.π_c 1 x)
+
+σ(x) = ptr ρ.π ƒ x_s
+σ(x_s) = ptr ρ.π_s ƒ_s x_ss
+ƒ + ƒ_s ↓ ƒ_n
+--------------------------------------------------------------- E-Drop
+(σ, R, drop x) ↦ (σ ∪ { x_s ↦ ptr ρ.π_s ƒ_n x_ss } / x, R, ())
+
+σ(x) = ptr ρ.π 1 •
+------------------------------------ E-Free
+(σ, R, drop x) ↦ (σ / x, R / ρ, ())
+
+μ = mut ⇒ ƒ = 1
+ƒ ≠ 0
+---------------------------------------------------------------------------- E-Let
+(σ, R, let μ x: τ = ptr ρ.π ƒ x_s in e) → (σ ∪ { x ↦ ptr ρ.π ƒ x_s }, R, e)
+
+-------------------------------------------------------------------------------------- E-App
+(σ, R, (|x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }) (v_1, ..., v_n)) →
+(σ ∪ { x_1 ↦ v_1, ..., x_n ↦ v_n }, R, e)
+
+------------------------------------------------------------------------------------------- E-MvApp
+(σ, R, (move |x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }) (v_1, ..., v_n)) →
+(σ ∪ { x_1 ↦ v_1, ..., x_n ↦ v_n }, R, e)
+
+------------------------------------- E-LetUnit
+(σ, R, let () = () in e) → (σ, R, e)
+
+mut ∈ { μ_1, ..., μ_n } ⇒ ƒ_1 = 1 ∧ ... ∧ ƒ_n = 1
+ƒ_1 ≠ 0 ∧ ... ∧ ƒ_n ≠ 0
+------------------------------------------------------------------------------- E-LetTup
+(σ, R, let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = (v_1, ..., v_n) in e) →
+(σ ∪ { x_1 ↦ v_1, ..., x_n ↦ v_n }, R, e)
+
+------------------------------------------ E-TApp
+(σ, R, (Λς: κ. e) [τ]) → (σ, R, e[τ / ς])
+
+---------------------------------------------------- E-ProjImmPath
+(σ, R, (ptr ρ.π ƒ x_s).Π) → (σ, R, ptr ρ.π.Π ƒ x_s)
 ```
