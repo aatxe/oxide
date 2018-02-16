@@ -270,11 +270,11 @@ Meaning: In a structure context Σ, the struct introducing expression e is well-
 
 ```
 expresions e ::= ...
-               | ptr ρ.π ƒ x
+               | ptr_τ ρ.π ƒ x
 
 simple values sv ::= true | false
                    | n
-                   | ptr ρ.π ƒ x
+                   | ptr_τ ρ.π ƒ x
                    | ()
 
 values v ::= sv
@@ -299,15 +299,23 @@ evaluation contexts E ::= []
 
 regions ρ are maps from paths π to simple values sv.
 region sets R map region names to regions.
-stores σ are maps from identifiers x to pointers ptr ρ.π ƒ x
+stores σ are maps from identifiers x to pointers ptr_τ ρ.π ƒ x
+```
+
+### Typing Extensions
+
+```
+----------------------------------- T-Ptr
+Σ; Δ; Γ ⊢ ptr_τ ρ.π ƒ x : &ρ ƒ^x τ
 ```
 
 ### Operational Semantics
 
 Form: `(σ, R, e) → (σ, R, e)`
 
+;; TODO: add all the necessary τ's for ptr
 ```
-σ(x) = ptr ρ.π ƒ x_s
+σ(x) = ptr_τ ρ.π ƒ x_s
 ƒ ≠ 0
 canonize(π) = π_c
 R(ρ)(π_c) = sv
@@ -315,8 +323,9 @@ R(ρ)(π_c) = sv
 (σ, R, x) → (σ, R, sv)
 
 fresh ρ
+type-of(sv) = τ
 ------------------------------------------------------------ E-AllocSimple
-(σ, R, alloc sv) → (σ, R ∪ { ρ ↦ { ε ↦ sv } }, ptr ρ.ε 1 •)
+(σ, R, alloc sv) → (σ, R ∪ { ρ ↦ { ε ↦ sv } }, ptr_τ ρ.ε 1 •)
 
 ;; TODO: alloc for tuples and structs
 ;; general idea: recursively convert subvalues to sets of path-sv pairs and union them all together
@@ -371,3 +380,26 @@ mut ∈ { μ_1, ..., μ_n } ⇒ ƒ_1 = 1 ∧ ... ∧ ƒ_n = 1
 ---------------------------------------------------- E-ProjImmPath
 (σ, R, (ptr ρ.π ƒ x_s).Π) → (σ, R, ptr ρ.π.Π ƒ x_s)
 ```
+
+## Proof of Soundness
+
+### Progress
+
+**Lemma** (Canonical Forms):
+  1. if `v` is a value of type `bool`, then `v` is either `true` or `false`.
+  2. if `v` is a value of type `u32`, then `v` is a numeric value on the range `[0, 2^32)`.
+  3. if `v` is a value of type `unit`, then `v` is `()`.
+  4. if `v` is a value of type `&ρ ƒ^x τ`, then `v` is of the form `ptr_τ ρ.π ƒ x`.
+
+**Theorem**: `(•; •; • ⊢ e : τ ⇒ Γ) ⇒ (e ∈ v) ∨ (∃σ, R, σ', R', e'. (σ, R, e) → (σ', R', e'))`
+
+#### Proof.
+
+By induction on a derivation of `e : τ`.
+
+The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, and `T-MvClosure` cases are all
+immediate since `e` is in all these cases a value. The other cases follow.
+
+Case `T-Id`: Cannot occur because `e` is closed.
+
+
