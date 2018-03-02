@@ -124,7 +124,7 @@ f_2 + f_s ↓ f_n
 -------------------------------------------------------------------------------------- T-LetImm
 Σ; Δ; Ρ; Γ ⊢ let imm x: τ_1 = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2, x_s ↦ stk τ_s r_2 f_n ι_s
 
-Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1^ι_1 τ_1 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1^ι_1 τ_1 ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1, x ↦ stk τ_1 r_1 1 ι_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
 Γ_2(x) = stk τ_2 r_2 0 x_s
 Γ_2(x_s) = stk τ_s r_2 1 ι_s
@@ -334,12 +334,14 @@ fresh ρ
 σ(x) = ptr ρ.π_x ƒ x_s
 ƒ ≠ 0
 canonize(π_x.π) = π_c
+π_c ∈ R(ρ)
 ƒ / 2 ↓ ƒ_n
 --------------------------------------------------------------------------- E-BorrowImm
 (σ, R, borrow imm x.π) → (σ ∪ { x ↦ ptr ρ.π_x ƒ_n x_s, R, ptr ρ.π_c ƒ_n x)
 
 σ(x) = ptr ρ.π_x 1 x_s
 canonize(π_x.π) = π_c
+π_c ∈ R(ρ)
 ----------------------------------------------------------------------- E-BorrowMut
 (σ, R, borrow mut x.π) → (σ ∪ { x ↦ ptr ρ.π_x 0 x_s, R, ptr ρ.π_c 1 x)
 
@@ -362,7 +364,7 @@ canonize(π_x.π) = π_c
 (σ, R, (|x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }) (v_1, ..., v_n)) →
 (σ ∪ { x_1 ↦ v_1, ..., x_n ↦ v_n }, R, e)
 
-------------------------------------------------------------------------------------------- E-MvApp
+------------------------------------------------------------------------------------------ E-MoveApp
 (σ, R, (move |x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }) (v_1, ..., v_n)) →
 (σ ∪ { x_1 ↦ v_1, ..., x_n ↦ v_n }, R, e)
 
@@ -390,12 +392,17 @@ mut ∈ { μ_1, ..., μ_n } ⇒ ƒ_1 = 1 ∧ ... ∧ ƒ_n = 1
   1. if `v` is a value of type `bool`, then `v` is either `true` or `false`.
   2. if `v` is a value of type `u32`, then `v` is a numeric value on the range `[0, 2^32)`.
   3. if `v` is a value of type `unit`, then `v` is `()`.
-  4. if `v` is a value of type `&ρ ƒ^x τ`, then `v` is of the form `ptr_τ ρ.π ƒ x`.
+  4. if `v` is a value of type `&ρ ƒ^x τ`, then `v` is of the form `ptr ρ.π ƒ x`.
+  5. if `v` is a value of type `&r_1 f_1^ι_1 τ_1 ⊗ ... ⊗ &r_n f_n^ι_n τ_n → τ_ret`, then `v` is of
+     the form `|x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }`.
+  6. if `v` is a value of type `&r_1 f_1^ι_1 τ_1 ⊗ ... ⊗ &r_n f_n^ι_n τ_n ↝ τ_ret`, then `v` is of
+     the form `move |x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }`.
 
 **Theorem**:
-`∀Ρ. (•; •; Ρ; • ⊢ e : τ ⇒ Γ) ∧ (Ρ ⊢ R) ⇒ (e ∈ v) ∨ (∃σ, R, σ', R', e'. (σ, R, e) → (σ', R', e'))`
+`∀Ρ, Γ. ∃Σ, σ, R. (Σ; •; Ρ; Γ ⊢ e : τ ⇒ Γ) ∧ (Ρ ⊢ R) ∧ (Γ ⊢ σ)
+                   ⇒ (e ∈ v) ∨ (∃σ', R', e'. (σ, R, e) → (σ', R', e'))`
 
-This theorem is still wrong. We need to give it the right struct definitions too.
+I think we need to somehow bound `Σ` here or something.
 
 #### Proof.
 
@@ -404,6 +411,46 @@ By induction on a derivation of `e : τ`.
 The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, and `T-MvClosure` cases are all
 immediate since `e` is in all these cases a value. The other cases follow.
 
-Case `T-Id`: Cannot occur because `e` is closed.
+Case `T-Id`: `e = x`. From premise, we know `Γ ⊢ σ` and thus, if `x : τ`, `x ∈ σ`. Thus, we can
+take a step via `E-Id`.
 
+Case `T-Alloc`: `e = alloc e'`. By IH, either `e ∈ v` or we can take a step. In the former case,
+since `e ∈ v`, we can apply `E-Alloc` to step. In the latter case, we can step `e'` to step e to
+`alloc e''`. ;; TODO: fix `E-Alloc`
 
+Case `T-BorrowImm`: `e = borrow imm x.π`. From premise, we know `Γ ⊢ σ` and `Ρ ⊢ R`. Thus, we know
+if `x : τ`, `x ∈ σ`. Looking up `x`, we get `σ(x) = ptr ρ.π_x ƒ x_s`. With this info and `P ⊢ R`
+from our premise, we know that the `canonize(π_x.π) ∈ R(ρ)` and so we can use `E-BorrowImm` to step
+forward.
+
+Case `T-BorrowMut`: `e = borrow mut x.π`. From premise, we know `Γ ⊢ σ` and `Ρ ⊢ R`. Thus, we know
+if `x : τ`, `x ∈ σ`. Looking up `x`, we get `σ(x) = ptr ρ.π_x 1 x_s`. With this info and `P ⊢ R`
+from our premise, we know that the `canonize(π_x.π) ∈ R(ρ)` and so we can use `E-BorrowMut` to step
+forward.
+
+Case `T-Drop`: `e = drop x`. From premise, we know `Γ ⊢ σ` and can thus conclude `x ∈ σ`. Looking up
+`x`, we get `σ(x) = ptr ρ.π ƒ x_s` and we can apply `E-Drop` to take a step.
+
+Case `T-Free`: `e = drop x`. From premise, we know `Γ ⊢ σ` and can thus conclude `x ∈ σ`. Looking up
+`x`, we get `σ(x) = ptr ρ.π 1 •` (subject to constraints of `T-Free`) and can apply `E-Free` to take
+a step.
+
+Case `T-LetImm`: `e = let imm x: τ = e_1 in e_2`. By IH, either `e_1 ∈ v` or we can take a step. In
+the former case, `e_1 ∈ v` and of type `&ρ ƒ^x τ` from case, by Canonical Forms, `e_1` is of the
+form `ptr ρ.π ƒ x`. Thus, we can use `E-Let` to step.
+
+Case `T-LetMut`: `e = let mut x: τ = e_1 in e_2`. By IH, either `e_1 ∈ v` or we can take a step. In
+the former case, `e_1 ∈ v` and of type `&ρ ƒ^x τ` from case, by Canonical Forms, `e_1` is of the
+form `ptr ρ.π ƒ x`. Thus, we can use `E-Let` to step.
+
+Case `T-App`: `e = e_1 e_2`. By IH, either `e_1 ∈ v` and `e_2 ∈ v` or we can take a step. In the
+former case, we know `e_1 : &r_1 f_1^ι_1 τ_1 ⊗ ... ⊗ &r_n f_n^ι_n τ_n → τ_ret` and
+`e_2 : &r_1 f_1^ι_1 τ_1 ⊗ ... ⊗ &r_n f_n^ι_n τ_n`, then by Canonical Forms `e_1` is of the form
+`|x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }` and `e_2` is of the form 
+`(ptr r_1.π_1 f_1 ι_1, ..., ptr r_n.π_n f_n ι_n)`. So, we can step using `E-App`.
+
+Case `T-MoveApp`: `e = e_1 e_2`. By IH, either `e_1 ∈ v` and `e_2 ∈ v` or we can take a step. In the
+former case, we know `e_1 : &r_1 f_1^ι_1 τ_1 ⊗ ... ⊗ &r_n f_n^ι_n τ_n ↝ τ_ret` and
+`e_2 : &r_1 f_1^ι_1 τ_1 ⊗ ... ⊗ &r_n f_n^ι_n τ_n`, then by Canonical Forms `e_1` is of the form
+`move |x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }` and `e_2` is of the form 
+`(ptr r_1.π_1 f_1 ι_1, ..., ptr r_n.π_n f_n ι_n)`. So, we can step using `E-MoveApp`.
