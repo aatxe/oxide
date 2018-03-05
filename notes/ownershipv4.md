@@ -454,3 +454,15 @@ former case, we know `e_1 : &r_1 f_1^ι_1 τ_1 ⊗ ... ⊗ &r_n f_n^ι_n τ_n �
 `e_2 : &r_1 f_1^ι_1 τ_1 ⊗ ... ⊗ &r_n f_n^ι_n τ_n`, then by Canonical Forms `e_1` is of the form
 `move |x_1: &r_1 f_1^ι_1 τ_1, ..., x_n: &r_n f_n^ι_n τ_n| { e }` and `e_2` is of the form 
 `(ptr r_1.π_1 f_1 ι_1, ..., ptr r_n.π_n f_n ι_n)`. So, we can step using `E-MoveApp`.
+
+Case `T-LetUnit`: `e = let () = e_1 in e_2`. By IH, either `e_1 ∈ v` or we can take a step. In the
+former case, we know `e_1 : unit` and thus by Canonical Forms `e_1` is `()`. Thus, we can step using
+`E-LetUnit`.
+
+Case `T-LetTupImm`: `e = let (imm x_1, ..., imm x_n): τ_1 ⊗ ... ⊗ τ_n = e_1 in e_2`. By IH, either
+`e_1 ∈ v` or we can take a step. In the former case, we know `e_1 : τ_1 ⊗ ... ⊗ τ_n` and thus by
+Canonical forms, `e_1` is of the form `(v_1, ..., v_n)`. Thus, we can step using `E-LetTup`.
+
+Case `T-LetMutAnyMut`: `e = let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1 in e_2`. By IH,
+either `e_1 ∈ v` or we can take a step. In the former case, we know `e_1 : τ_1 ⊗ ... ⊗ τ_n` and thus
+by Canonical forms, `e_1` is of the form `(v_1, ..., v_n)`. Thus, we can step using `E-LetTup`.
