@@ -15,6 +15,11 @@ _lifetime_ corresponds to the span from when a region is created to when the reg
 Lifetime variables don't appear in the core semantics of `oxide` because the constraints that they
 imply are used in the placement of region creation and destruction.
 
+One may also wonder where the "borrow checker" is. We've given regions their own notion of
+ownership, and so all of the type checking related to region creation and destruction is exactly
+the mechanisms of borrow checking. Rather than generate and later solve constraints as in `rustc`,
+we check that our ownership discipline is maintained throughout type checking.
+
 ## To the researcher
 
 It seems to me that the term "lifetime" is often conflated with the term "region" for historical
