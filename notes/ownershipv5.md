@@ -18,6 +18,7 @@ kinds κ ::= ★ | RGN | FRAC
 
 type variables ς ::= α -- by convention, of kind ★
                    | ϱ -- by convention, of kind RGN
+                   | ζ -- by convention, of kind FRAC
 
 region types r ::= ϱ -- region variables
                  | ρ -- concrete regions
