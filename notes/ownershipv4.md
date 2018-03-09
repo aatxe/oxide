@@ -315,7 +315,6 @@ stores σ are maps from identifiers x to pointers ptr ρ.π ƒ x
 
 Form: `(σ, R, e) → (σ, R, e)`
 
-;; TODO: add all the necessary τ's for ptr
 ```
 σ(x) = ptr ρ.π ƒ x_s
 ƒ ≠ 0
