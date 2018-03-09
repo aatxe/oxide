@@ -363,8 +363,21 @@ R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
 
 ### Progress
 
+**Theorem**:
+`∀Σ, Ρ, Γ, σ, R, e. (Σ; •; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ') ∧ (Ρ ⊢ R) ∧ (Γ ⊢ σ)
+                    ⇒ (e ∈ 𝕍) ∨ (∃σ', R', e'. (σ, R, e) → (σ', R', e'))`
+
+#### Proof.
+
+By induction on a derivation of `e : τ`.
+
+The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, and `T-MvClosure` cases are all
+immediate since `e` is in all these cases a value. The other cases follow.
+
 ...
 
 ### Preservation
 
-...
+**Theorem**:
+`∀Σ, Ρ, Γ, σ, R, e, σ', R', e'. (Σ; •; Ρ; Γ ⊢ e : τ ⇒ Ρ_f; Γ_f) ∧ (σ, R, e) → (σ', R', e')
+                                ⇒ ∃Ρ', Γ'. Σ; •; P'; Γ' ⊢ e' : τ ⇒ Ρ_f; Γ_f`
