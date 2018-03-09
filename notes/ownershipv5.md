@@ -196,12 +196,12 @@ r ∉ Ρ_2
 ...
 Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &r_n 1 τ_n ⇒ Ρ_n; Γ_n
 Σ ⊢ S(τ_1, ..., τ_n)
---------------------------------------------- T-StructTuple
+--------------------------------------------- T-StructTup
 Σ; Δ; Ρ; Γ ⊢ S(e_1, ..., e_n) : S ⇒ Ρ_n; Γ_n
 
 Σ; Δ, ς : κ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
 ----------------------------------- T-TAbs
-Σ; Δ; Ρ; Γ ⊢ Λς: κ. e : τ ⇒ Ρ'; Γ'
+Σ; Δ; Ρ; Γ ⊢ Λς: κ. e : ∀ς : κ. τ ⇒ Ρ'; Γ'
 
 Σ; Δ; Ρ; Γ ⊢ e_1 : ∀ς: κ. τ ⇒ Ρ'; Γ'
 Δ ⊢ τ_2 : κ
@@ -244,6 +244,7 @@ values v ::= sv
            | S(sv_1, ..., sv_n)
            | |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
            | move |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
+           | Λς: κ. e
 
 region sets R ::= ∅
                 | R ∪ { ρ ↦ ƒ ⊗ { Π ↦ ρ, ... }} 
@@ -297,7 +298,7 @@ fresh ρ
 ;; looking up the whole path through regions checks ƒ = 1
 R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
 fresh ρ
--------------------------------------------------------------------- E-BorrowImm
+-------------------------------------------------------------------- E-BorrowMut
 (σ, R, borrow mut x.π) →
   (σ, R ∪ { ρ_π ↦ 0 ⊗ path_set, ρ ↦ 1 ⊗ { ε ↦ ρ_π } }, ptr ρ ƒ_n)
 
@@ -328,7 +329,7 @@ R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
 (σ, R, (|x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }) (ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n))
   → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
 
--------------------------------------------------------------------------------------------- E-MvApp
+---------------------------------------------------------------- E-MoveApp
 (σ, R, (move |x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e })
        (ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n))
   → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
@@ -360,6 +361,7 @@ R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
      the form `|x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
   8. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret`, then `v` is of
      the form `move |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
+  9. if `v` is a value of type `∀ς : κ. e`, then `v` is of the form `Λς: κ. e`.
 
 ### Progress
 
@@ -371,13 +373,85 @@ R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
 
 By induction on a derivation of `e : τ`.
 
-The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, and `T-MvClosure` cases are all
-immediate since `e` is in all these cases a value. The other cases follow.
+The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, `T-MvClosure`, `T-Tup`,
+`T-StructRecord`, `T-StructTup`, and `T-TAbs` cases are all immediate since `e` is in all these
+cases a value. The other cases follow.
 
-...
+Case `T-Alloc`: `e = alloc e'`. By IH, either `e' ∈ 𝕍` or we can take a step. In the former case,
+we can use the type of `e'` and our Canonical Forms lemma to do find ways to step:
+  1. `e' : bool` then `E-AllocSimple` applies.
+  2. `e' : u32` then `E-AllocSimple` applies.
+  3. `e' : unit` then `E-AllocSimple` applies.
+  4. `e' : &ρ ƒ τ` then `E-AllocSimple` applies.
+  5. `e' : (τ_1, ..., τ_n)` then `E-AllocTup` applies.
+  6. `e' : S` then either `E-AllocStructTup` or `E-AllocStructRecord` applies, depending on the
+     definition of `S` in `Σ`.
+  7. TODO: decide if this should be allowed or if we should guard against it in `T-Alloc`
+  8. TODO: decide if this should be allowed or if we should guard against it in `T-Alloc`
+  9. TODO: decide if this should be allowed or if we should guard against it in `T-Alloc`
+
+Case `T-BorrowImm`: `e = borrow imm x.π`. From premise, we know `Γ ⊢ σ` and `Ρ ⊢ R`. Thus, we know
+if `x : τ`, `x ∈ σ`. Looking up `x`, we get `σ(x) = ptr ρ ƒ`. With this info and `P ⊢ R` from our
+premise, we know that the `R(ρ)(π)` does give us a binding and thus,  we can use `E-BorrowImm` to
+step forward.
+
+Case `T-BorrowMut`: `e = borrow mut x.π`. From premise, we know `Γ ⊢ σ` and `Ρ ⊢ R`. Thus, we know
+if `x : τ`, `x ∈ σ`. Looking up `x`, we get `σ(x) = ptr ρ ƒ`. With this info and `P ⊢ R` from our
+premise, we know that the `R(ρ)(π)` does give us a binding and thus,  we can use `E-BorrowMut` to
+step forward.
+
+Case `T-Drop`: `e = drop x`. From premise, we know `Γ ⊢ σ` and can thus conclude `x ∈ σ`. Looking up
+`x`, we get `σ(x) = ρ` and then from `Ρ ⊢ R`, we know that  `ρ ∈ R` and we can safely apply
+`E-Drop`.
+
+Case `T-FreeImmediate`: `e = drop x`. From premise, we know `Γ ⊢ σ` and thus can conclude `x ∈ σ`.
+Looking up `x`, we get `σ(x) = ρ` for which we know `ρ ∈ R` from `Ρ ⊢ R`. From the premise, we also
+know that `R(ρ)` must be of the form `1 ⊗ { ε ↦ sv }` and thus we can apply `E-FreeImmediate`.
+
+Case `T-Free`: `e = drop x`. From premise, we know `Γ ⊢ σ` and thus can conclude `x ∈ σ`. Looking up
+`x`, we get `σ(x) = ρ` for which we know `ρ ∈ R` from `Ρ ⊢ R`. From the premise, we also know that
+`R(ρ)` must be of the form `1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }` and that none of `ρ_1` through `ρ_n`
+are in `R`. Thus, we can apply `E-Free`.
+
+Case `T-LetImm`: `e = let imm x: τ = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In
+the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ` from case, by Canonical Forms, `e_1` is of the
+form `ptr ρ ƒ`. Thus, we can use `E-Let` to step.
+
+Case `T-LetMut`: `e = let mut x: τ = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In
+the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ` from case, by Canonical Forms, `e_1` is of the
+form `ptr ρ ƒ`. Thus, we can use `E-Let` to step.
+
+Case `T-App`: `e = e_1 e_2`. By IH, either `e_1 ∈ 𝕍` and `e_2 ∈ 𝕍` or we can take a step. In the
+former case, we know `e_1 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n → τ_ret` and
+`e_2 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n`, then by Canonical Forms `e_1` is of the form
+`|x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }` and `e_2` is of the form
+`(ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n)`. So, we can step using `E-App`.
+
+Case `T-MoveApp`: `e = e_1 e_2`. By IH, either `e_1 ∈ 𝕍` and `e_2 ∈ 𝕍` or we can take a step. In the
+former case, we know `e_1 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n ↝ τ_ret` and
+`e_2 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n`, then by Canonical Forms `e_1` is of the form
+`move |x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }` and `e_2` is of the form
+`(ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n)`. So, we can step using `E-MoveApp`.
+
+Case `T-LetUnit`: `e = let () = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In the
+former case, we know `e_1 : unit` and thus by Canonical Forms `e_1` is `()`. Thus, we can step using
+`E-LetUnit`.
+
+Case `T-LetTup`: `e = let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1 in e_2`. By IH, either
+`e_1 ∈ 𝕍` or we can step. In the former case, we know `e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n)` and
+thus by Canonical Forms, `e_1` is of the form `(ptr ρ_1 1, ..., ptr ρ_n 1)`. Thus, we can step using
+`E-LetTup`.
+
+Case `T-TApp`: `e = e_1 [τ_2]`. By IH, either `e_1 ∈ 𝕍` or we can step. In the former case, we know
+`e_1 : ∀ς : κ. τ_1`. By Canonical Forms, `e_1` is of the form `Λς : κ. e` Thus, we can apply
+`E-TApp` to step forward.
 
 ### Preservation
 
 **Theorem**:
 `∀Σ, Ρ, Γ, σ, R, e, σ', R', e'. (Σ; •; Ρ; Γ ⊢ e : τ ⇒ Ρ_f; Γ_f) ∧ (σ, R, e) → (σ', R', e')
                                 ⇒ ∃Ρ', Γ'. Σ; •; P'; Γ' ⊢ e' : τ ⇒ Ρ_f; Γ_f`
+
+#### Proof.
+
+....
