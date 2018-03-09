@@ -346,6 +346,21 @@ R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
 
 ## Proof of Soundness
 
+### Important Lemmas
+
+**Lemma** (Canonical Forms):
+  1. if `v` is a value of type `bool`, then `v` is either `true` or `false`.
+  2. if `v` is a value of type `u32`, then `v` is a numeric value on the range `[0, 2^32)`.
+  3. if `v` is a value of type `unit`, then `v` is `()`.
+  4. if `v` is a value of type `&ρ ƒ τ`, then `v` is `ptr ρ ƒ`.
+  5. if `v` is a value of type `(τ_1, ..., τ_n)`, then `v` is of the form `(sv_1, ..., sv_n)`.
+  6. if `v` is a value of type `S`, then `v` is either of the form `S(sv_1, ..., sv_n)` or
+     `S { x_1: sv_1, ..., x_n: sv_n }` depending on its definition in `Σ`.
+  7. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret`, then `v` is of
+     the form `|x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
+  8. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret`, then `v` is of
+     the form `move |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
+
 ### Progress
 
 ...
