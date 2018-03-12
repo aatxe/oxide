@@ -8,9 +8,31 @@ __Tags__: Scientific, Lecture, Theory
 
 ## Abstract
 
+As Rust programmers, we all have an intuitive sense that types are useful, and of course, we rely on
+Rust's ownership model and borrow checker to keep our programs free of data races. But what exactly
+do our types _mean_? In this talk, we'll explore an ongoing effort to build an accessible formal
+semantics for Rust and its application to understanding the meaning of types in Rust programs.
+Further, we'll use this newfound understanding of types to explore interesting ways of enforcing
+correctness and security criteria through types.
+
 [A concise, engaging description for the public program. Limited to 600 characters.]
 
 ## Details
+
+### Outline
+
+...
+
+### Outcome
+
+...
+
+### Intended Audience
+
+The intended audience of this talk is at least intermediate Rust programmers who have some interest
+in the formal world of programming languages and type theory. We won't assume any _pre-existing_
+knowledge of type theory, and the goal is really to require just general mathematical competency
+(i.e. algebra).
 
 [Include any pertinent details such as outlines, outcomes or intended audience.]
 
