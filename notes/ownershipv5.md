@@ -288,7 +288,7 @@ fresh ρ
 σ(x) = ρ_x
 ;; looking up the whole path through regions checks ƒ ≠ 0
 R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
-ƒ_π /2 ↓ ƒ_n
+ƒ_π / 2 ↓ ƒ_n
 fresh ρ
 ----------------------------------------------------------------------- E-BorrowImm
 (σ, R, borrow imm x.π) →
@@ -410,8 +410,8 @@ know that `R(ρ)` must be of the form `1 ⊗ { ε ↦ sv }` and thus we can appl
 
 Case `T-Free`: `e = drop x`. From premise, we know `Γ ⊢ σ` and thus can conclude `x ∈ σ`. Looking up
 `x`, we get `σ(x) = ρ` for which we know `ρ ∈ R` from `Ρ ⊢ R`. From the premise, we also know that
-`R(ρ)` must be of the form `1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }` and that none of `ρ_1` through `ρ_n`
-are in `R`. Thus, we can apply `E-Free`.
+`R(ρ)` must be of the form `1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }` and that none of `ρ_1` through
+`ρ_n` are in `R`. Thus, we can apply `E-Free`.
 
 Case `T-LetImm`: `e = let imm x: τ = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In
 the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ` from case, by Canonical Forms, `e_1` is of the
@@ -454,4 +454,60 @@ Case `T-TApp`: `e = e_1 [τ_2]`. By IH, either `e_1 ∈ 𝕍` or we can step. In
 
 #### Proof.
 
-....
+By induction on a derivation of `e : τ`.
+
+The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, `T-MvClosure`, `T-Tup`,
+`T-StructRecord`, `T-StructTup`, and `T-TAbs` cases are all trivial since `e` is in all these
+cases a value, and thus cannot take a step. The other cases follow.
+
+case `T-Alloc`: `e = alloc e'`. In order to step an alloc, we can apply one of four rules which we
+will examine individually by case:
+
+  - case `E-AllocSimple`: When stepping `alloc sv`, we define `R'` as `R` with a new entry for a
+    fresh region ρ of the form `ρ ↦ 1 ⊗ { ε ↦ sv }`. This corresponds to adding the type-level
+    entry of `ρ ↦ τ ⊗ 1 ⊗ { ε ↦ τ }` to `Ρ` yielding `Ρ'`, maintaining the well-formedness of
+    `R` w.r.t `Ρ` as `Ρ' ⊢ R'`. The resulting expression `ptr ρ 1` is then well-typed by `T-Ptr`.
+
+  - case `E-AllocTup`: When stepping `alloc (sv_1, ..., sv_n)`, we define `R'` as `R` with a new
+    entry for a fresh region ρ of the form `ρ ↦ 1 ⊗ { 1 ↦ sv_1, ..., n ↦ sv_n }`. This corresponds
+    to adding the type-level entry of `ρ ↦ (τ_1, ..., τ_n) ⊗ 1 ⊗ { 1 ↦ τ_1, ..., n ↦ τ_n }` to `Ρ`
+    yielding `Ρ'`, maintaining the well-formedness of `R` w.r.t `Ρ` as `Ρ' ⊢ R'`. The resulting
+    expression `ptr ρ 1` is then well-typed by `T-Ptr`.
+
+  - case `E-AllocStructTup`: When stepping `alloc S (sv_1, ..., sv_n)`, we define `R'` as `R` with a
+    new entry for a fresh region ρ of the form `ρ ↦ 1 ⊗ { 1 ↦ sv_1, ..., n ↦ sv_n }`. This
+    corresponds to adding the type-level entry of `ρ ↦ S ⊗ 1 ⊗ { 1 ↦ τ_1, ..., n ↦ τ_n }` to `Ρ`
+    yielding `Ρ'`, maintaining the well-formedness of `R` w.r.t `Ρ` as `Ρ' ⊢ R'`. The resulting
+    expression `ptr ρ 1` is then well-typed by `T-Ptr`.
+
+  - case `E-AllocStructRecord`: When stepping `alloc S { x_1: sv_1, ..., x_n: sv_n }`, we define
+    `R'` as `R` with a new entry for a fresh region ρ of the form
+    `ρ ↦ 1 ⊗ { x_1 ↦ sv_1, ..., x_n ↦ sv_n }`. This corresponds to adding the type-level entry of
+    `ρ ↦ S ⊗ 1 ⊗ { x_1 ↦ τ_1, ..., x_n ↦ τ_n }` to `Ρ` yielding `Ρ'`, maintaining the
+    well-formedness of `R` w.r.t `Ρ` as `Ρ' ⊢ R'`. The resulting expression `ptr ρ 1` is then
+    well-typed by `T-Ptr`.
+
+
+case `T-BorrowImm`: `e = borrow imm x.π`. Since we know from our premise that we can step e, then we
+must have stepped it by `E-BorrowImm` (as its the only rule that meets the shape). In this case, `σ`
+remains unchanged, and so we know that `Γ'` can simply be `Γ`. We also make two additions to `R`:
+first, we edit the entry for `ρ_π` to have a new fraction `ƒ_n` and second, we add a new entry of
+the form `ρ ↦ ƒ_n ⊗ { ε ↦ ρ_π }`. The former change does not affect the shape of the path set and
+thus does not affect the well-formedness of `Ρ` (i.e. we can simply change the entry in `Ρ` in the
+same way as we did the entry in `R`). The latter change adds a completely new entry which implies
+the need to add a new entry to `Ρ` as well: `ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ ρ_π }`. Under this changed
+enviroment `Ρ'` and the old environment `Γ`, the resulting expression `ptr ρ ƒ_n` is well-typed by
+`T-Ptr`.
+
+case `T-BorrowMut`: `e = borrow mut x.π`. Since we know from our premise that we can step e, then we
+must have stepped it by `E-BorrowMut` (as its the only rule that meets the shape). In this case, `σ`
+remains unchanged, and so we know that `Γ'` can simply be `Γ`. We also make two additions to `R`:
+first, we edit the entry for `ρ_π` to have a new fraction `0` and second, we add a new entry of
+the form `ρ ↦ 1 ⊗ { ε ↦ ρ_π }`. The former change does not affect the shape of the path set and
+thus does not affect the well-formedness of `Ρ` (i.e. we can simply change the entry in `Ρ` in the
+same way as we did the entry in `R`). The latter change adds a completely new entry which implies
+the need to add a new entry to `Ρ` as well: `ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ ρ_π }`. Under this changed
+enviroment `Ρ'` and the old environment `Γ`, the resulting expression `ptr ρ 1` is well-typed by
+`T-Ptr`.
+
+...
