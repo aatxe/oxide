@@ -2,9 +2,9 @@
 
 ## Metadata
 
-__Title__: What can we learn from the Meaning of Types?
-__Session Format__: Standard Talk (30mn)
-__Tags__: Scientific, Lecture, Theory
+__Title__: What can we learn from the Meaning of Types?  
+__Session Format__: Standard Talk (30mn)  
+__Tags__: Scientific, Lecture, Theory  
 
 ## Abstract
 
