@@ -526,4 +526,37 @@ case, we remove `x` from `σ` and remove the `ρ` entry in `R`. This corresponds
 from `Γ` to get our new `Γ'` and the removal of `ρ` from `Ρ`. Then, the resulting subexpression `()`
 is well-typed by `T-Unit`.
 
-...
+Case `T-LetImm`: `e = let imm x: τ = e_1 in e_2`. Since we can step `e`, then we know it must step
+by `E-Let`. In this case, we add a new binding `x ↦ ρ` to `σ` which corresponds to a new binding
+for `Γ` of `x ↦ ρ`, and `Ρ` remains unchanged. We then know from our premise that `e_2`, which
+is the resulting subexpression, is well-typed.
+
+Case `T-LetMut`: `e = let mut x: τ = e_1 in e_2`. Since we can step `e`, then we know it must step
+by `E-Let`. In this case, we add a new binding `x ↦ ρ` to `σ` which corresponds to a new binding
+for `Γ` of `x ↦ ρ`, and `Ρ` remains unchanged. We then know from our premise that `e_2`, which
+is the resulting subexpression, is well-typed.
+
+Case `T-App`: `e = e_1 e_2`. Since we can step `e`, then we know it must step by `E-App`. In this
+case, we add new bindings `{ x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }` to `σ` which corresponds to adding the
+same bindings to `Γ` and leaving `Ρ` unchanged. We then know from our premise that the function
+body, the resulting subexpression, is well-typed with these bindings.
+
+Case `T-MoveApp`: `e = e_1 e_2`. Since we can step `e`, then we know it must step by `E-MoveApp`. In
+this case, we add new bindings `{ x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }` to `σ` which corresponds to adding
+the same bindings to `Γ` and leaving `Ρ` unchanged. We then know from our premise that the function
+body, the resulting subexpression, is well-typed with these bindings.
+
+Case `T-LetUnit`: `e = let () = e_1 in e_2`. Since we can step, `()`, then we know it must step by
+`E-LetUnit`. In this case, we leave `Γ` and `Ρ` unchanged, and know from our premise that `e_2`, the
+resulting subexpression, is well-typed.
+
+Case `T-LetTup`: `e = let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1 in e_2`. Since we can step
+`e`, then we know it must step by `E-LetTup`. In this case, we add new bindings `{ x_1 ↦ ρ_1, ...,
+x_n ↦ ρ_n }` to `σ` which corresponds to adding the same bindings to `Γ` and leaving `Ρ` unchanged.
+We then know from our premise that the function body, the resulting subexpression, is well-typed
+with these bindings.
+
+Case `T-TApp`: `e = e_1 [τ_2]`. Since we can step `e`, then we know it must step by `E-TApp`. In
+this case, we substitute `τ_2` into the type abstraction's body with `σ` and `R` unchanged. Thus,
+we can leave `Γ` and `Ρ` the same, and otherwise know from our premise that the body is well-typed
+after the substituion.
