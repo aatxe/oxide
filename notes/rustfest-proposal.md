@@ -42,5 +42,9 @@ knowledge of type theory, and the goal is really to require just general mathema
 
 ## Bio
 
+Aaron Weiss is a PhD student at Northeastern University working with Prof. Amal Ahmed at the
+intersection of programming languages and security. As part of his research, Aaron is producing a
+source Rust-like formal model for use in designing new extensions and use cases for Rust.
+
 [Your bio should be short, no longer than 500 characters. It's related to why you're speaking about
 this topic.]
