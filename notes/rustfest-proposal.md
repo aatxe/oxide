@@ -10,18 +10,39 @@ __Tags__: Scientific, Lecture, Theory
 
 As Rust programmers, we all have an intuitive sense that types are useful, and of course, we rely on
 Rust's ownership model and borrow checker to keep our programs free of data races. But what exactly
-do our types _mean_? In this talk, we'll explore an ongoing effort to build an accessible formal
-semantics for Rust and its application to understanding the meaning of types in Rust programs.
-Further, we'll use this newfound understanding of types to explore interesting ways of enforcing
-correctness and security criteria through types.
+do our types _mean_? Can a better understanding help us to build correct and secure software?
+
+In this talk, we'll explore an ongoing effort to build an accessible formal semantics for Rust and
+its application to understanding the meaning of types in Rust programs. We'll then use this newfound
+understanding to explore interesting ways of enforcing correctness and security criteria through
+types.
 
 [A concise, engaging description for the public program. Limited to 600 characters.]
 
 ## Details
 
+Rust's promise as a language grounded in programming language theory has made it a darling of the
+academic world. So, a natural question Rust _programmers_ might have is: How can we benefit from
+all of this attention? This talk has answer for these _theory-curious, intermediate Rust
+programmers_. Thanks to ongoing efforts to build a formal semantics for source-level Rust, we can
+build stronger intuitions about the meaning of types in our programs. These strong intuitions
+leverage reasoning about __equivalences_ between parts of programs at specific types along with an
+understanding of _modules_ and _bounded polymorphism_ with traits.
+
+Over the course of this talk, we'll cover a light introduction to formal semantics, a novel formal
+semantics for Rust, and a number of examples of how formal reasoning can be of immediate use to the
+practicing Rust programmer. In the process, we'll explore some interesting uses of these reasoning
+principles for building more secure software, going well beyond the common notion that memory safety
+alone implies security. Hopefully, by the end, everyone will be itching to try it for themselves!
+
+(It appears that they want something along the lines of "two paragraphs or less".)
+[Include any pertinent details such as outlines, outcomes or intended audience.]
+
+## (Way Too Many) Details
+
 ### Rough Outline
 
-1. Wirlwind Introduction to Semantics
+1. Whirlwind Introduction to Semantics
     1. What are PL semantics?
         - Semantics are formal ways of understanding the meaning of elements of our programming
           languages
@@ -36,21 +57,26 @@ correctness and security criteria through types.
           which could prove useful in writing RFCs
         - Reasoning -- semantics can be used to build a more complete intuition about a language,
           which can prove useful while programming
-2. Parametricty and Rust
+2. Parametricity and Rust
     1. Featherweight Rust
         - Compile Rust to a bit more explicit form (to make our semantics compositional)
         - Ownership codified using fractional permissions
-    2. Expressive Layers of (formal) Rust
+    2. Expressive Power and Contextual Equivalence
+        - We define language expressivity relative to a notion of contextual equivalence, i.e. by
+          understanding sets of observable behaviors
+        - This notion of expressivity gives ways to a natural way to divide Rust into layers _and_
+          to understand of the meaning of types.
+    3. Expressive Layers of (formal) Rust
         - Rust0 -- safe Rust without any standard library stuff
         - Rust1 -- extend Rust0 with `Box<T>` and `Vec<T>`, providing access to the heap
         - Rust2 -- extend Rust1 with `Rc<T>` and `Arc<T>`, giving more capacity to share
         - Rust3 -- extend Rust2 with `Cell<T>` and `RefCell<T>`, producing "interior mutability"
-    3. What is parametricity?
+    4. What is parametricity?
         - Parametricity is a kind of "abstraction" result telling you that abstractions _are_
           abstractions
         - A polymorphic function is parametric if it acts the same for all types.
         - A language is parametric if all polymorphic functions are parametric.
-    4. Parametricity in Rust
+    5. Parametricity in Rust
         - Our formal Rust model is parametric!
         - Real Rust is close to parametric, though trait specialization breaks it.
         - Depending on the precise details of specialization, we may be able to know from a type if
@@ -94,7 +120,6 @@ in the formal world of programming languages and type theory. We won't assume an
 knowledge of type theory, and the goal is really to require just general mathematical competency
 (i.e. algebra).
 
-[Include any pertinent details such as outlines, outcomes or intended audience.]
 
 ## Pitch
 
@@ -103,8 +128,10 @@ knowledge of type theory, and the goal is really to require just general mathema
 ## Bio
 
 Aaron Weiss is a PhD student at Northeastern University working with Prof. Amal Ahmed at the
-intersection of programming languages and security. As part of his research, Aaron is producing a
-source Rust-like formal model for use in designing new extensions and use cases for Rust.
+intersection of programming languages and security. He's broadly interested in using programming
+language theory to expand programmers' ability to reason about programs and program security. As
+part of his research, Aaron is producing a formal model of Rust for use in extending the language
+with new features or use cases.
 
 [Your bio should be short, no longer than 500 characters. It's related to why you're speaking about
 this topic.]
