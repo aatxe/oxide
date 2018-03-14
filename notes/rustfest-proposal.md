@@ -10,7 +10,7 @@ __Tags__: Scientific, Lecture, Theory
 
 As Rust programmers, we all have an intuitive sense that types are useful, and of course, we rely on
 Rust's ownership model and borrow checker to keep our programs free of data races. But what exactly
-do our types _mean_? Can a better understanding help us to build correct and secure software?
+do our types _mean_? Can a better understanding help us to build more correct and secure software?
 
 In this talk, we'll explore an ongoing effort to build an accessible formal semantics for Rust and
 its application to understanding the meaning of types in Rust programs. We'll then use this newfound
@@ -23,17 +23,19 @@ types.
 
 Rust's promise as a language grounded in programming language theory has made it a darling of the
 academic world. So, a natural question Rust _programmers_ might have is: How can we benefit from
-all of this attention? This talk has answer for these _theory-curious, intermediate Rust
+all of this attention? This talk has an answer for these _theory-curious, intermediate Rust
 programmers_. Thanks to ongoing efforts to build a formal semantics for source-level Rust, we can
 build stronger intuitions about the meaning of types in our programs. These strong intuitions
-leverage reasoning about __equivalences_ between parts of programs at specific types along with an
+leverage reasoning about _equivalences_ between parts of programs at specific types along with an
 understanding of _modules_ and _bounded polymorphism_ with traits.
 
 Over the course of this talk, we'll cover a light introduction to formal semantics, a novel formal
 semantics for Rust, and a number of examples of how formal reasoning can be of immediate use to the
 practicing Rust programmer. In the process, we'll explore some interesting uses of these reasoning
 principles for building more secure software, going well beyond the common notion that memory safety
-alone implies security. Hopefully, by the end, everyone will be itching to try it for themselves!
+alone implies security. We'll also learn more about some of the theoretical work that influenced
+Rust's creation. Hopefully, by the end, everyone will be itching to try reasoning with equivalences
+for themselves!
 
 (It appears that they want something along the lines of "two paragraphs or less".)
 [Include any pertinent details such as outlines, outcomes or intended audience.]
@@ -60,7 +62,7 @@ alone implies security. Hopefully, by the end, everyone will be itching to try i
 2. Parametricity and Rust
     1. Featherweight Rust
         - Compile Rust to a bit more explicit form (to make our semantics compositional)
-        - Ownership codified using fractional permissions
+        - Ownership and borrowing codified using fractional permissions
     2. Expressive Power and Contextual Equivalence
         - We define language expressivity relative to a notion of contextual equivalence, i.e. by
           understanding sets of observable behaviors
@@ -120,8 +122,24 @@ in the formal world of programming languages and type theory. We won't assume an
 knowledge of type theory, and the goal is really to require just general mathematical competency
 (i.e. algebra).
 
-
 ## Pitch
+
+### Why this talk?
+
+The Rust community is proud of its academic influences, and many seem to have an appetite for
+programming language theory. This talk provides an opportunity to both explore existing connections
+and etablish new ones between Rust and academia. Further, a major portion of the talk will be
+focused on how intuitions gleaned from and support by our formal semantics can be used to write
+programs that leverage the type system more heavily for enforcing security and correctness.
+
+### Why me?
+
+I'm a PhD student working at the intersection of programming languages and security, and I'm
+currently building a formal model of Rust that's useful for understanding programs at a level
+closer to "surface Rust." I hope to use this model to explore interesting results at the
+intersection of programming languages and security, and this talk would play a part of that. My
+research group is one of the leading groups in the world in this space of reasoning with
+equivalences (i.e. parametricity, free theorems, etc.).
 
 [Explain why this talk should be considered and what makes you qualified to speak on the topic.]
 
