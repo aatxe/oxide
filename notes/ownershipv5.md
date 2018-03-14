@@ -767,7 +767,8 @@ analagous change of adding `x ↦ ρ` to `Γ`.
 
 `Ρ'`: `E-Let` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`.
 
-`e'` is well-typed:
+`e'` is well-typed: We know from the premises of `T-LetImm` and `T-LetMut` that `e_2` is well typed
+in our `Γ'`. Since `E-Let` steps to `e_2`, we then know that it's well-typed.
 
 ### Old Proof.
 
