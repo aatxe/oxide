@@ -489,9 +489,9 @@ to derive `e' : &ρ 1 τ`.
 From premise:
 ```
 fresh ρ
--------------------------------------------------------------- E-AllocTup
-(σ, R, alloc (sv_1, ..., sv_n)) →
-  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ sv_1, ..., n ↦ sv_n } }, ptr ρ 1)
+------------------------------------------------------------ E-AllocTup
+(σ, R, alloc (ptr ρ_1 1, ..., ptr ρ_n 1)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
 ```
 
 From premise and knowledge that `e` is of the form `alloc e'`:
