@@ -307,7 +307,7 @@ R(ρ_x) = ƒ_x ⊗ { ε ↦ ρ_s }
 Ρ(ρ_s) = ƒ_s ⊗ path_set
 ƒ_x + ƒ_s ↓ ƒ_n
 ------------------------------------------------------------ E-Drop
-(σ, R, drop x) ↦ (σ / x, R ∪ { ρ_s ↦ ƒ_n ⊗ path_set }, ())
+(σ, R, drop x) ↦ (σ / x, R / ρ_x ∪ { ρ_s ↦ ƒ_n ⊗ path_set }, ())
 
 σ(x) = ρ
 R(ρ) = 1 ⊗ { ε ↦ sv }
@@ -513,6 +513,261 @@ calculate-path-set(e) ⇒ path_set
 `e'` is well-typed: From `E-AllocTup`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'` that
 we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction `ƒ`)
 to derive `e' : &ρ 1 τ`.
+
+##### Case `E-AllocStructTup`:
+
+From premise:
+```
+fresh ρ
+------------------------------------------------------------ E-AllocStructTup
+(σ, R, alloc S (ptr ρ_1 1, ..., ptr ρ_n 1)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
+```
+
+From premise and knowledge that `e` is of the form `alloc e'`:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
+calculate-path-set(e) ⇒ path_set
+-------------------------------------------------------------- T-Alloc
+Σ; Δ; Ρ; Γ ⊢ alloc e : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ path_set; Γ'
+```
+
+`Γ'`: `E-AllocStructTup` did not change `σ` and so we pick `Γ` as `Γ'`.
+
+`Ρ'`: `E-AllocStructTup` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to be
+`Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
+`ρ ↦ τ ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n }`. This corresponds to the same change we see being made in
+`T-Alloc`.
+
+`e'` is well-typed: From `E-AllocStructTup`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'`
+that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction
+`ƒ`) to derive `e' : &ρ 1 τ`.
+
+##### Case `E-AllocStructRecord`:
+
+From premise:
+```
+fresh ρ
+--------------------------------------------------------------- E-AllocStuctRecord
+(σ, R, alloc S { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
+```
+
+From premise and knowledge that `e` is of the form `alloc e'`:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
+calculate-path-set(e) ⇒ path_set
+-------------------------------------------------------------- T-Alloc
+Σ; Δ; Ρ; Γ ⊢ alloc e : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ path_set; Γ'
+```
+
+`Γ'`: `E-AllocStructRecord` did not change `σ` and so we pick `Γ` as `Γ'`.
+
+`Ρ'`: `E-AllocStructRecord` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to
+be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
+`ρ ↦ τ ⊗ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }`. This corresponds to the same change we see being made
+in `T-Alloc`.
+
+`e'` is well-typed: From `E-AllocStructRecord`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
+`Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
+fraction `ƒ`) to derive `e' : &ρ 1 τ`.
+
+##### Case `E-BorrowImm`:
+
+From premise:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
+ƒ_π / 2 ↓ ƒ_n
+fresh ρ
+----------------------------------------------------------------------- E-BorrowImm
+(σ, R, borrow imm x.π) →
+  (σ, R ∪ { ρ_π ↦ ƒ_n ⊗ path_set, ρ ↦ ƒ_n ⊗ { ε ↦ ρ_π } }, ptr ρ ƒ_n)
+```
+
+From premise and knowledge that `e` is of the form `borrow imm x.π`:
+```
+Ρ(Γ(x)) = τ_x ⊗ ƒ_x ⊗ path_set
+ƒ_x ≠ 0
+;; walk the path through Ρ, checking that f ≠ 0, and return r_π
+Ρ; path_set ⊢ π : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
+ƒ_π / 2 ↓ ƒ_n
+fresh ρ
+------------------------------------------------------------------------------- T-BorrowImm
+Σ; Δ; Ρ; Γ ⊢ borrow imm x.π : &ρ ƒ_π τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
+                                              ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π }; Γ
+```
+
+`Γ'`: `E-BorrowImm` did not change `σ` and so we pick `Γ` as `Γ'`.
+
+`Ρ'`: `E-BorrowImm` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to
+be `Ρ` (recall from the premise `Ρ ⊢ R`) with the changed binding for `ρ_π` modifying the fraction
+from `ƒ_π` to `ƒ_n` and the extra binding `ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ ρ_π }`. This corresponds to the
+same change we see being made in `T-BorrowImm`.
+
+`e'` is well-typed: From `E-BorrowImm`, we know `e' = ptr ρ ƒ_n`. Then, using the `Γ'` and
+`Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
+fraction `ƒ`) to derive `e' : &ρ ƒ_n τ_π`.
+
+##### Case `E-BorrowMut`:
+
+From premise:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ = 1
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
+fresh ρ
+-------------------------------------------------------------------- E-BorrowMut
+(σ, R, borrow mut x.π) →
+  (σ, R ∪ { ρ_π ↦ 0 ⊗ path_set, ρ ↦ 1 ⊗ { ε ↦ ρ_π } }, ptr ρ ƒ_n)
+```
+
+From premise and knowledge that `e` is of the form `borrow mut x.π`:
+```
+Ρ(Γ(x)) = τ_x ⊗ 1 ⊗ path_set
+;; walk the path through Ρ, checking that f = 1, and return r_π
+Ρ; path_set ⊢ π : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
+fresh ρ
+------------------------------------------------------------------------------- T-BorrowMut
+Σ; Δ; Ρ; Γ ⊢ borrow mut x.π : &ρ ƒ_π τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ 0 ⊗ π_path_set,
+                                              ρ ↦ τ_π ⊗ ƒ_π ⊗ { ε ↦ r_π }; Γ
+```
+
+`Γ'`: `E-BorrowMut` did not change `σ` and so we pick `Γ` as `Γ'`.
+
+`Ρ'`: `E-BorrowMut` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to
+be `Ρ` (recall from the premise `Ρ ⊢ R`) with the changed binding for `ρ_π` modifying the fraction
+from `ƒ_π` to `1` and the extra binding `ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ ρ_π }`. This corresponds to the same
+change we see being made in `T-BorrowMut`.
+
+`e'` is well-typed: From `E-BorrowMut`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
+`Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
+fraction `ƒ`) to derive `e' : &ρ 1 τ`.
+
+##### Case `E-Drop`:
+
+From premise:
+```
+σ(x) = ρ_x
+R(ρ_x) = ƒ_x ⊗ { ε ↦ ρ_s }
+Ρ(ρ_s) = ƒ_s ⊗ path_set
+ƒ_x + ƒ_s ↓ ƒ_n
+------------------------------------------------------------ E-Drop
+(σ, R, drop x) ↦ (σ / x, R / ρ_x ∪ { ρ_s ↦ ƒ_n ⊗ path_set }, ())
+```
+
+From premise and knowledge that `e` is of the form `drop x`:
+```
+Ρ(r_x) = τ_x ⊗ ƒ_x ⊗ { ε ↦ r }
+Ρ(r) = τ_r ⊗ ƒ_r ⊗ path_set
+ƒ_r + ƒ_x ↓ ƒ_n
+----------------------------------------------------------------------- T-Drop
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ, r ↦ τ_r ⊗ ƒ_n ⊗ path_set; Γ
+```
+
+`Γ'`: `E-Drop` changed `σ` by removing `x` and so we can mirror the change by picking `Γ'` to be
+`Γ / x`.
+
+`Ρ'`: `E-Drop` changes `R` by removing `ρ_x` and updating the binding for `ρ_s` with the new
+fraction `ƒ_n`. So, we'll pick `Ρ'` that mirrors this by taking `Ρ`, removing `ρ_x` and adding
+`ρ_s ↦ τ_s ⊗ ƒ_n ⊗ path_set`.
+
+`e'` is well-typed: From `E-Drop`, we know `e' = ()` and this is trivially well-typed by `T-Unit`.
+
+##### Case `E-FreeImmediate`:
+
+From premise:
+```
+σ(x) = ρ
+R(ρ) = 1 ⊗ { ε ↦ sv }
+------------------------------------- E-FreeImmediate
+(σ, R, drop x) ↦ (σ / x, R / ρ, ())
+```
+
+From premise and knowledge that `e` is of the form `drop x`:
+```
+Ρ(r_x) = τ ⊗ 1 ⊗ {}
+Ρ' = Ρ - r_x
+--------------------------------------------- T-FreeImmediate
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ'; Γ
+```
+
+`Γ'`: `E-FreeImmediate` changed `σ` by removing `x` and so we can mirror the change by picking `Γ'`
+to be `Γ / x`.
+
+`Ρ'`: `E-FreeImmediate` changed `R` by removing `ρ` and so we can mirror the change by picking `Ρ'`
+to be `Ρ / x`.
+
+`e'` is well-typed: From `E-FreeImmediate`, we know `e' = ()` and this is trivially well-typed by
+`T-Unit`.
+
+##### Case `E-Free`:
+
+From premise:
+```
+σ(x) = ρ
+R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
+ρ_1 ∉ R ... ρ_n ∉ R
+------------------------------------------ E-Free
+(σ, R, drop x) ↦ (σ / x, R / ρ, ())
+```
+
+From premise and knowledge that `e` is of the form `drop x`:
+```
+Ρ(r_x) = τ ⊗ 1 ⊗ { Π_1 ↦ r_1, ..., Π_n ↦ r_n }
+r_1 ∉ Ρ ... r_n ∉ Ρ ;; i.e. all the referenced regions need to have been dropped already
+Ρ' = Ρ - r_x
+------------------------------------------------------------------------------------------ T-Free
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ'; Γ
+```
+
+`Γ'`: `E-Free` changed `σ` by removing `x` and so we can mirror the change by picking `Γ'` to be
+`Γ / x`.
+
+`Ρ'`: `E-Free` changed `R` by removing `ρ` and so we can mirror the change by picking `Ρ'` to be
+`Ρ / x`.
+
+`e'` is well-typed: From `E-Free`, we know `e' = ()` and this is trivially well-typed by `T-Unit`.
+
+##### Case `E-Let`:
+
+From premise:
+```
+μ = mut ⇒ ƒ = 1
+ƒ ≠ 0
+---------------------------------------------------------- E-Let
+(σ, R, let μ x: τ = ptr ρ ƒ in e) → (σ ∪ { x ↦ ρ }, R, e)
+```
+
+From premise and knowledge that `e` is of the form `let μ x: τ = ptr ρ ƒ`, either:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
+f_1 ≠ 0
+Σ; Δ; Ρ_1; Γ_1, x : τ_1 ↦ r_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+r_1 ∉ Ρ_2
+----------------------------------------------------------- T-LetImm
+Σ; Δ; Ρ; Γ ⊢ let imm x: τ_1 = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
+```
+or:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1, x : τ_1 ↦ r_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+r_1 ∉ Ρ_2
+----------------------------------------------------------- T-LetMut
+Σ; Δ; Ρ; Γ ⊢ let mut x: τ_1 = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
+```
+
+`Γ'`: `E-Let` adds a new binding to `σ` for `x` to `ρ`, and so we can pick `Γ'` to have the
+analagous change of adding `x ↦ ρ` to `Γ`.
+
+`Ρ'`: `E-Let` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`.
+
+`e'` is well-typed:
 
 ### Old Proof.
 
