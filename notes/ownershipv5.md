@@ -271,19 +271,19 @@ fresh ρ
 (σ, R, alloc sv) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv } }, ptr ρ 1)
 
 fresh ρ
--------------------------------------------------------------- E-AllocTup
-(σ, R, alloc (sv_1, ..., sv_n)) →
-  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ sv_1, ..., n ↦ sv_n } }, ptr ρ 1)
+------------------------------------------------------------ E-AllocTup
+(σ, R, alloc (ptr ρ_1 1, ..., ptr ρ_n 1)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
 
 fresh ρ
--------------------------------------------------------------- E-AllocStuctTup
-(σ, R, alloc S (sv_1, ..., sv_n)) →
-  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ sv_1, ..., n ↦ sv_n } }, ptr ρ 1)
+------------------------------------------------------------ E-AllocStuctTup
+(σ, R, alloc S (ptr ρ_1 1, ..., ptr ρ_n 1)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
 
 fresh ρ
------------------------------------------------------------------ E-AllocStuctRecord
-(σ, R, alloc S { x_1: sv_1, ..., x_n: sv_n }) →
-  (σ, R ∪ { ρ ↦ 1 ⊗ { x_1 ↦ sv_1, ..., x_n ↦ sv_n } }, ptr ρ 1)
+--------------------------------------------------------------- E-AllocStuctRecord
+(σ, R, alloc S { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
 
 σ(x) = ρ_x
 ;; looking up the whole path through regions checks ƒ ≠ 0
@@ -463,7 +463,6 @@ From premise:
 fresh ρ
 ------------------------------------------------------------- E-AllocSimple
 (σ, R, alloc sv) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv } }, ptr ρ 1)
-
 ```
 
 From premise and knowledge that `e` is of the form `alloc e'`:
@@ -482,6 +481,36 @@ calculate-path-set(e) ⇒ path_set
 corresponds to the same change we see being made in `T-Alloc`.
 
 `e'` is well-typed: From `E-AllocSimple`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'` that
+we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction `ƒ`)
+to derive `e' : &ρ 1 τ`.
+
+##### Case `E-AllocTup`:
+
+From premise:
+```
+fresh ρ
+-------------------------------------------------------------- E-AllocTup
+(σ, R, alloc (sv_1, ..., sv_n)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ sv_1, ..., n ↦ sv_n } }, ptr ρ 1)
+```
+
+From premise and knowledge that `e` is of the form `alloc e'`:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
+calculate-path-set(e) ⇒ path_set
+-------------------------------------------------------------- T-Alloc
+Σ; Δ; Ρ; Γ ⊢ alloc e : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ path_set; Γ'
+```
+
+`Γ'`: `E-AllocTup` did not change `σ` and so we pick `Γ` as `Γ'`.
+
+`Ρ'`: `E-AllocTup` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to be
+`Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
+`ρ ↦ τ ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n }`. This corresponds to the same change we see being made in
+`T-Alloc`.
+
+`e'` is well-typed: From `E-AllocTup`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'` that
 we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction `ƒ`)
 to derive `e' : &ρ 1 τ`.
 
