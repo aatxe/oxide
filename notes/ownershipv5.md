@@ -371,7 +371,7 @@ R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
 
 #### Proof.
 
-By induction on a derivation of `e : τ`.
+By induction on the derivation of `e : τ`.
 
 The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, `T-MvClosure`, `T-Tup`,
 `T-StructRecord`, `T-StructTup`, and `T-TAbs` cases are all immediate since `e` is in all these
@@ -454,7 +454,40 @@ Case `T-TApp`: `e = e_1 [τ_2]`. By IH, either `e_1 ∈ 𝕍` or we can step. In
 
 #### Proof.
 
-By induction on a derivation of `e : τ`.
+By induction on the stepping from `(σ, R, e) → (σ', R', e')`.
+
+##### Case `E-AllocSimple`:
+
+From premise:
+```
+fresh ρ
+------------------------------------------------------------- E-AllocSimple
+(σ, R, alloc sv) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv } }, ptr ρ 1)
+
+```
+
+From premise and knowledge that `e` is of the form `alloc e'`:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
+calculate-path-set(e) ⇒ path_set
+-------------------------------------------------------------- T-Alloc
+Σ; Δ; Ρ; Γ ⊢ alloc e : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ path_set; Γ'
+```
+
+`Γ'`: `E-AllocSimple` did not change `σ` and so we pick `Γ` as `Γ'`.
+
+`Ρ'`: `E-AllocSimple` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to be
+`Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding `ρ ↦ τ ⊗ 1 ⊗ { ε ↦ τ }`. This
+corresponds to the same change we see being made in `T-Alloc`.
+
+`e'` is well-typed: From `E-AllocSimple`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'` that
+we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction `ƒ`)
+to derive `e' : &ρ 1 τ`.
+
+### Old Proof.
+
+By induction on the derivation of `e : τ`.
 
 The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, `T-MvClosure`, `T-Tup`,
 `T-StructRecord`, `T-StructTup`, and `T-TAbs` cases are all trivial since `e` is in all these
