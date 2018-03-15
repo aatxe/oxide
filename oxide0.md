@@ -453,18 +453,76 @@ get `ptr ρ_x ƒ_x`. With that and `Ρ ⊢ R`, we know `ρ_x ∈ Ρ` and that `R
 the typing rule's premise, we know that the fractions are 1 along the path, and so this
 condition is met for `E-BorrowMut` as well. Thus, we can indeed step with `E-BorrowMut`.
 
-Case `T-Drop`: `e = drop x`. From premise, we know `Γ ⊢ σ` and can thus conclude `x ∈ σ`. Looking up
-`x`, we get `σ(x) = ρ` and then from `Ρ ⊢ R`, we know that  `ρ ∈ R` and we can safely apply
-`E-Drop`.
+##### Case `T-Drop`:
 
-Case `T-FreeImmediate`: `e = drop x`. From premise, we know `Γ ⊢ σ` and thus can conclude `x ∈ σ`.
-Looking up `x`, we get `σ(x) = ρ` for which we know `ρ ∈ R` from `Ρ ⊢ R`. From the premise, we also
-know that `R(ρ)` must be of the form `1 ⊗ { ε ↦ sv }` and thus we can apply `E-FreeImmediate`.
+From premise:
+```
+Ρ(r_x) = τ_x ⊗ ƒ_x ⊗ { ε ↦ r }
+Ρ(r) = τ_r ⊗ ƒ_r ⊗ path_set
+ƒ_r + ƒ_x ↓ ƒ_n
+----------------------------------------------------------------------- T-Drop
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ, r ↦ τ_r ⊗ ƒ_n ⊗ path_set; Γ
+```
 
-Case `T-Free`: `e = drop x`. From premise, we know `Γ ⊢ σ` and thus can conclude `x ∈ σ`. Looking up
-`x`, we get `σ(x) = ρ` for which we know `ρ ∈ R` from `Ρ ⊢ R`. From the premise, we also know that
-`R(ρ)` must be of the form `1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }` and that none of `ρ_1` through
-`ρ_n` are in `R`. Thus, we can apply `E-Free`.
+We want to step with:
+```
+σ(x) = ρ_x
+R(ρ_x) = ƒ_x ⊗ { ε ↦ ρ_s }
+Ρ(ρ_s) = ƒ_s ⊗ path_set
+ƒ_x + ƒ_s ↓ ƒ_n
+------------------------------------------------------------ E-Drop
+(σ, R, drop x) ↦ (σ / x, R / ρ_x ∪ { ρ_s ↦ ƒ_n ⊗ path_set }, ())
+```
+
+From premise, we know `Γ ⊢ σ` and can thus conclude `x ∈ σ`. Looking up `x`, we get `σ(x) = ρ` and
+then from `Ρ ⊢ R`, we know that  `ρ ∈ R` and we can safely apply `E-Drop`.
+
+##### Case `T-FreeImmediate`:
+
+From premise:
+```
+Ρ(r_x) = τ ⊗ 1 ⊗ {}
+Ρ' = Ρ - r_x
+--------------------------------------------- T-FreeImmediate
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ'; Γ
+```
+
+We want to step with:
+```
+σ(x) = ρ
+R(ρ) = 1 ⊗ { ε ↦ sv }
+------------------------------------- E-FreeImmediate
+(σ, R, drop x) ↦ (σ / x, R / ρ, ())
+```
+
+From premise, we know `Γ ⊢ σ` and thus can conclude `x ∈ σ`. Looking up `x`, we get `σ(x) = ρ` for
+which we know `ρ ∈ R` from `Ρ ⊢ R`. From the premise, we also know that `R(ρ)` must be of the form
+`1 ⊗ { ε ↦ sv }` and thus we can apply `E-FreeImmediate`.
+
+##### Case `T-Free`:
+
+From premise:
+```
+Ρ(r_x) = τ ⊗ 1 ⊗ { Π_1 ↦ r_1, ..., Π_n ↦ r_n }
+r_1 ∉ Ρ ... r_n ∉ Ρ ;; i.e. all the referenced regions need to have been dropped already
+Ρ' = Ρ - r_x
+------------------------------------------------------------------------------------------ T-Free
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ'; Γ
+```
+
+We want to step with:
+```
+σ(x) = ρ
+R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
+ρ_1 ∉ R ... ρ_n ∉ R
+------------------------------------------ E-Free
+(σ, R, drop x) ↦ (σ / x, R / ρ, ())
+```
+
+From premise, we know `Γ ⊢ σ` and thus can conclude `x ∈ σ`. Looking up `x`, we get `σ(x) = ρ` for
+which we know `ρ ∈ R` from `Ρ ⊢ R`. From the premise, we also know that `R(ρ)` must be of the form
+`1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }` and that none of `ρ_1` through `ρ_n` are in `R`. Thus, we can
+apply `E-Free`.
 
 Case `T-LetImm`: `e = let imm x: τ = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In
 the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ` from case, by Canonical Forms, `e_1` is of the
