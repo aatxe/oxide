@@ -37,7 +37,7 @@ alone implies security. We'll also learn more about some of the theoretical work
 Rust's creation. Hopefully, by the end, everyone will be itching to try reasoning with equivalences
 for themselves!
 
-(It appears that they want something along the lines of "two paragraphs or less".)
+(It appears that they want something along the lines of "two paragraphs or less".)  
 [Include any pertinent details such as outlines, outcomes or intended audience.]
 
 ## (Way Too Many) Details
