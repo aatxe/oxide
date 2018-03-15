@@ -129,7 +129,7 @@ knowledge of type theory, and the goal is really to require just general mathema
 The Rust community is proud of its academic influences, and many seem to have an appetite for
 programming language theory. This talk provides an opportunity to both explore existing connections
 and etablish new ones between Rust and academia. Further, a major portion of the talk will be
-focused on how intuitions gleaned from and support by our formal semantics can be used to write
+focused on how intuitions gleaned from and supported by our formal semantics can be used to write
 programs that leverage the type system more heavily for enforcing security and correctness.
 
 ### Why me?
