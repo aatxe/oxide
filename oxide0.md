@@ -237,14 +237,14 @@ simple values sv ::= true | false
                    | n
                    | ()
                    | ptr ρ ƒ 
+                   | |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
+                   | move |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
+                   | Λς: κ. e
 
 values v ::= sv
            | (sv_1, ... sv_n)
            | S { x_1: sv_1, ... x_n: sv_n }
            | S(sv_1, ..., sv_n)
-           | |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
-           | move |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
-           | Λς: κ. e
 
 region sets R ::= ∅
                 | R ∪ { ρ ↦ ƒ ⊗ { Π ↦ ρ, ... }} 
@@ -386,9 +386,9 @@ we can use the type of `e'` and our Canonical Forms lemma to do find ways to ste
   5. `e' : (τ_1, ..., τ_n)` then `E-AllocTup` applies.
   6. `e' : S` then either `E-AllocStructTup` or `E-AllocStructRecord` applies, depending on the
      definition of `S` in `Σ`.
-  7. TODO: decide if this should be allowed or if we should guard against it in `T-Alloc`
-  8. TODO: decide if this should be allowed or if we should guard against it in `T-Alloc`
-  9. TODO: decide if this should be allowed or if we should guard against it in `T-Alloc`
+  7. `e' : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret` then `E-AllocSimple` applies.
+  8. `e' : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret` then `E-AllocSimple` applies.
+  9. `e' : ∀ς : κ. e` then `E-AllocSimple` applies.
 
 Case `T-BorrowImm`: `e = borrow imm x.π`. From premise, we know `Γ ⊢ σ` and `Ρ ⊢ R`. Thus, we know
 if `x : τ`, `x ∈ σ`. Looking up `x`, we get `σ(x) = ptr ρ ƒ`. With this info and `P ⊢ R` from our
