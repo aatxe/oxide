@@ -770,6 +770,129 @@ analagous change of adding `x ↦ ρ` to `Γ`.
 `e'` is well-typed: We know from the premises of `T-LetImm` and `T-LetMut` that `e_2` is well typed
 in our `Γ'`. Since `E-Let` steps to `e_2`, we then know that it's well-typed.
 
+##### Case `E-App`:
+
+From premise:
+```
+-------------------------------------------------------------------------------------------- E-App
+(σ, R, (|x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }) (ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n))
+  → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
+```
+
+From premise and knowledge that `e` is of the form `e_1 e_2`, either:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ⇒ Ρ_2; Γ_2
+------------------------------------------------------------------------- T-App
+Σ; Δ; Ρ; Γ ⊢ e_1 e_2 : τ_ret ⇒ Ρ_2; Γ_2
+```
+
+`Γ'`: In `E-App`, we add new bindings to `σ` for `x_1` through `x_n`. We can mirror this for `Γ` by
+picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`.
+
+`Ρ'`: `E-App` leaves `R` unchanged, and so we can pick `Ρ` as `Ρ'`.
+
+`e'` is well-typed: Since we know `e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret`, we know that
+`e`, the body of the function and the result of stepping by `E-App`, is well typed in our `Γ'`.
+
+##### Case `E-App`:
+
+From premise:
+```
+---------------------------------------------------------------- E-MoveApp
+(σ, R, (move |x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e })
+       (ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n))
+  → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
+```
+
+From premise and knowledge that `e` is of the form `e_1 e_2`, either:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ⇒ Ρ_2; Γ_2
+------------------------------------------------------------------------- T-MoveApp
+Σ; Δ; Ρ; Γ ⊢ e_1 e_2 : τ_ret ⇒ Ρ_2; Γ_2
+```
+
+`Γ'`: In `E-MoveApp`, we add new bindings to `σ` for `x_1` through `x_n`. We can mirror this for `Γ`
+by picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`.
+
+`Ρ'`: `E-MoveApp` leaves `R` unchanged, and so we can pick `Ρ` as `Ρ'`.
+
+`e'` is well-typed: Since we know `e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret`, we know that
+`e`, the body of the function and the result of stepping by `E-MoveApp`, is well typed in our `Γ'`.
+
+##### Case `E-LetUnit`:
+
+From premise:
+```
+------------------------------------- E-LetUnit
+(σ, R, let () = () in e) → (σ, R, e)
+```
+
+From premise and knowledge that `e` is of the form ``, either:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : unit ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+-------------------------------------------------- T-LetUnit
+Σ; Δ; Ρ; Γ ⊢ let () = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
+```
+
+`Γ'`: `E-LetUnit` leaves `σ` unchanged and so we can pick `Γ'` to be `Γ`.
+
+`Ρ'`: `E-LetUnit` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`.
+
+`e'` is well-typed: We know from the `T-LetUnit` that `e_2`, our result, is well-typed.
+
+##### Case `E-LetTup`:
+
+From premise:
+```
+----------------------------------------------------------------------- E-LetTup
+(σ, R, let (μ_1 x_1, ..., μ_n x_n) = (ptr ρ_1 1, ..., ptr ρ_n 1) in e)
+  → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
+```
+
+From premise and knowledge that `e` is of the form ``, either:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n) ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1, x_1 ↦ r_1, ... x_n ↦ r_n ⊢ e_2 : t_r ⇒ Ρ_2; Γ_2
+r ∉ Ρ_2
+----------------------------------------------------------------- T-LetTup
+Σ; Δ; Ρ; Γ ⊢ let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1
+             in e_2 : τ_r ⇒ Ρ_2; Γ_2
+```
+
+`Γ'`: `E-LetTup`, like `E-App`, adds bindings for `x_1` through `x_n` to `σ`. We can mirror this by
+picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`.
+
+`Ρ'`: `E-LetTup` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`.
+
+`e'` is well-typed: We know from `T-LetTup` that `e_2`, our result, is well-typed with the changes
+we made in `Γ'` (i.e. adding bindings for `x_1` through `x_n`).
+
+##### Case `E-TApp`:
+
+From premise:
+```
+------------------------------------------ E-TApp
+(σ, R, (Λς: κ. e) [τ]) → (σ, R, e[τ / ς])
+```
+
+From premise and knowledge that `e` is of the form ``, either:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : ∀ς: κ. τ ⇒ Ρ'; Γ'
+Δ ⊢ τ_2 : κ
+---------------------------------------------- T-TApp
+Σ; Δ; Ρ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς] ⇒ Ρ'; Γ'
+```
+
+`Γ'`: `E-TApp` leaves `σ` unchanged, and so we can pick `Γ'` to be `Γ`.
+
+`Ρ'`: `E-TApp` leaves `R` unchanged, and so we can pick `Ρ'` to be `Ρ`.
+
+`e'` is well-typed: Since we left `Γ'` and `Ρ'` unchanged, we still know from our premise that our
+result is well-typed.
+
 ### Old Proof.
 
 By induction on the derivation of `e : τ`.
