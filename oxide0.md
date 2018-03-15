@@ -524,38 +524,160 @@ which we know `ρ ∈ R` from `Ρ ⊢ R`. From the premise, we also know that `R
 `1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }` and that none of `ρ_1` through `ρ_n` are in `R`. Thus, we can
 apply `E-Free`.
 
+##### Case `T-LetImm`:
+
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
+f_1 ≠ 0
+Σ; Δ; Ρ_1; Γ_1, x : τ_1 ↦ r_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+r_1 ∉ Ρ_2
+----------------------------------------------------------- T-LetImm
+Σ; Δ; Ρ; Γ ⊢ let imm x: τ_1 = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
+```
+
+We want to step with:
+```
+μ = mut ⇒ ƒ = 1
+ƒ ≠ 0
+---------------------------------------------------------- E-Let
+(σ, R, let μ x: τ = ptr ρ ƒ in e) → (σ ∪ { x ↦ ρ }, R, e)
+```
+
 Case `T-LetImm`: `e = let imm x: τ = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In
 the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ` from case, by Canonical Forms, `e_1` is of the
 form `ptr ρ ƒ`. Thus, we can use `E-Let` to step.
+
+##### Case `T-LetMut`:
+
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1, x : τ_1 ↦ r_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+r_1 ∉ Ρ_2
+----------------------------------------------------------- T-LetMut
+Σ; Δ; Ρ; Γ ⊢ let mut x: τ_1 = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
+```
+
+We want to step with:
+```
+μ = mut ⇒ ƒ = 1
+ƒ ≠ 0
+---------------------------------------------------------- E-Let
+(σ, R, let μ x: τ = ptr ρ ƒ in e) → (σ ∪ { x ↦ ρ }, R, e)
+```
 
 Case `T-LetMut`: `e = let mut x: τ = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In
 the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ` from case, by Canonical Forms, `e_1` is of the
 form `ptr ρ ƒ`. Thus, we can use `E-Let` to step.
 
-Case `T-App`: `e = e_1 e_2`. By IH, either `e_1 ∈ 𝕍` and `e_2 ∈ 𝕍` or we can take a step. In the
-former case, we know `e_1 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n → τ_ret` and
+##### Case `T-App`:
+
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ⇒ Ρ_2; Γ_2
+------------------------------------------------------------------------- T-App
+Σ; Δ; Ρ; Γ ⊢ e_1 e_2 : τ_ret ⇒ Ρ_2; Γ_2
+```
+
+We want to step with:
+```
+-------------------------------------------------------------------------------------------- E-App
+(σ, R, (|x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }) (ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n))
+  → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
+```
+
+By IH, either `e_1 ∈ 𝕍` and `e_2 ∈ 𝕍` or we can take a step. In the former case, we know
+`e_1 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n → τ_ret` and
 `e_2 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n`, then by Canonical Forms `e_1` is of the form
 `|x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }` and `e_2` is of the form
 `(ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n)`. So, we can step using `E-App`.
 
-Case `T-MoveApp`: `e = e_1 e_2`. By IH, either `e_1 ∈ 𝕍` and `e_2 ∈ 𝕍` or we can take a step. In the
-former case, we know `e_1 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n ↝ τ_ret` and
-`e_2 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n`, then by Canonical Forms `e_1` is of the form
+##### Case `T-MoveApp`:
+
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ⇒ Ρ_2; Γ_2
+------------------------------------------------------------------------- T-MoveApp
+Σ; Δ; Ρ; Γ ⊢ e_1 e_2 : τ_ret ⇒ Ρ_2; Γ_2
+```
+
+We want to step with:
+```
+---------------------------------------------------------------- E-MoveApp
+(σ, R, (move |x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e })
+       (ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n))
+  → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
+```
+
+By IH, either `e_1 ∈ 𝕍` and `e_2 ∈ 𝕍` or we can take a step. In the former case, we know
+`e_1 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n ↝ τ_ret` and `e_2 : &ρ_1 ƒ_1 τ_1 ⊗ ... ⊗ &ρ_n ƒ_n τ_n`,
+then by Canonical Forms `e_1` is of the form
 `move |x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }` and `e_2` is of the form
 `(ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n)`. So, we can step using `E-MoveApp`.
 
-Case `T-LetUnit`: `e = let () = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In the
-former case, we know `e_1 : unit` and thus by Canonical Forms `e_1` is `()`. Thus, we can step using
-`E-LetUnit`.
+##### Case `T-LetUnit`:
 
-Case `T-LetTup`: `e = let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1 in e_2`. By IH, either
-`e_1 ∈ 𝕍` or we can step. In the former case, we know `e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n)` and
-thus by Canonical Forms, `e_1` is of the form `(ptr ρ_1 1, ..., ptr ρ_n 1)`. Thus, we can step using
-`E-LetTup`.
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : unit ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+-------------------------------------------------- T-LetUnit
+Σ; Δ; Ρ; Γ ⊢ let () = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
+```
 
-Case `T-TApp`: `e = e_1 [τ_2]`. By IH, either `e_1 ∈ 𝕍` or we can step. In the former case, we know
-`e_1 : ∀ς : κ. τ_1`. By Canonical Forms, `e_1` is of the form `Λς : κ. e` Thus, we can apply
-`E-TApp` to step forward.
+We want to step with:
+```
+------------------------------------- E-LetUnit
+(σ, R, let () = () in e) → (σ, R, e)
+```
+
+By IH, either `e_1 ∈ 𝕍` or we can take a step. In the former case, we know `e_1 : unit` and thus by
+Canonical Forms `e_1` is `()`. Thus, we can step using `E-LetUnit`.
+
+##### Case `T-LetTup`:
+
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n) ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1, x_1 ↦ r_1, ... x_n ↦ r_n ⊢ e_2 : t_r ⇒ Ρ_2; Γ_2
+r ∉ Ρ_2
+----------------------------------------------------------------- T-LetTup
+Σ; Δ; Ρ; Γ ⊢ let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1
+             in e_2 : τ_r ⇒ Ρ_2; Γ_2
+```
+
+We want to step with:
+```
+----------------------------------------------------------------------- E-LetTup
+(σ, R, let (μ_1 x_1, ..., μ_n x_n) = (ptr ρ_1 1, ..., ptr ρ_n 1) in e)
+  → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
+```
+
+By IH, either `e_1 ∈ 𝕍` or we can step. In the former case, we know
+`e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n)` and thus by Canonical Forms, `e_1` is of the form
+`(ptr ρ_1 1, ..., ptr ρ_n 1)`. Thus, we can step using `E-LetTup`.
+
+##### Case `T-TApp`:
+
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : ∀ς: κ. τ ⇒ Ρ'; Γ'
+Δ ⊢ τ_2 : κ
+---------------------------------------------- T-TApp
+Σ; Δ; Ρ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς] ⇒ Ρ'; Γ'
+```
+
+We want to step with:
+```
+------------------------------------------ E-TApp
+(σ, R, (Λς: κ. e) [τ]) → (σ, R, e[τ / ς])
+```
+
+By IH, either `e_1 ∈ 𝕍` or we can step. In the former case, we know `e_1 : ∀ς : κ. τ_1`. By
+Canonical Forms, `e_1` is of the form `Λς : κ. e` Thus, we can apply `E-TApp` to step forward.
 
 ### Preservation
 
