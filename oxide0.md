@@ -390,15 +390,68 @@ we can use the type of `e'` and our Canonical Forms lemma to do find ways to ste
   8. `e' : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret` then `E-AllocSimple` applies.
   9. `e' : ∀ς : κ. e` then `E-AllocSimple` applies.
 
-Case `T-BorrowImm`: `e = borrow imm x.π`. From premise, we know `Γ ⊢ σ` and `Ρ ⊢ R`. Thus, we know
-if `x : τ`, `x ∈ σ`. Looking up `x`, we get `σ(x) = ptr ρ ƒ`. With this info and `P ⊢ R` from our
-premise, we know that the `R(ρ)(π)` does give us a binding and thus,  we can use `E-BorrowImm` to
-step forward.
+##### Case `T-BorrowImm`:
 
-Case `T-BorrowMut`: `e = borrow mut x.π`. From premise, we know `Γ ⊢ σ` and `Ρ ⊢ R`. Thus, we know
-if `x : τ`, `x ∈ σ`. Looking up `x`, we get `σ(x) = ptr ρ ƒ`. With this info and `P ⊢ R` from our
-premise, we know that the `R(ρ)(π)` does give us a binding and thus,  we can use `E-BorrowMut` to
-step forward.
+From premise:
+```
+Ρ(Γ(x)) = τ_x ⊗ ƒ_x ⊗ path_set
+ƒ_x ≠ 0
+;; walk the path through Ρ, checking that f ≠ 0, and return r_π
+Ρ; path_set ⊢ π : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
+ƒ_π / 2 ↓ ƒ_n
+fresh ρ
+------------------------------------------------------------------------------- T-BorrowImm
+Σ; Δ; Ρ; Γ ⊢ borrow imm x.π : &ρ ƒ_π τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
+                                              ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π }; Γ
+```
+
+We want to step with:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
+ƒ_π / 2 ↓ ƒ_n
+fresh ρ
+----------------------------------------------------------------------- E-BorrowImm
+(σ, R, borrow imm x.π) →
+  (σ, R ∪ { ρ_π ↦ ƒ_n ⊗ path_set, ρ ↦ ƒ_n ⊗ { ε ↦ ρ_π } }, ptr ρ ƒ_n)
+```
+
+From premise, we also know `Γ ⊢ σ` and `Ρ ⊢ R`. The former tells us that we can look up `σ(x)` to
+get `ptr ρ_x ƒ_x`. With that and `Ρ ⊢ R`, we know `ρ_x ∈ Ρ` and that `R(ρ_x)(π)` is valid. From
+the typing rule's premise, we know that the fractions are non-zero along the path, and so this
+condition is met for `E-BorrowImm` as well. Thus, we can indeed step with `E-BorrowImm`.
+
+##### Case `T-BorrowMut`:
+
+From premise:
+```
+Ρ(Γ(x)) = τ_x ⊗ 1 ⊗ path_set
+;; walk the path through Ρ, checking that f = 1, and return r_π
+Ρ; path_set ⊢ π : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
+fresh ρ
+------------------------------------------------------------------------------- T-BorrowMut
+Σ; Δ; Ρ; Γ ⊢ borrow mut x.π : &ρ ƒ_π τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ 0 ⊗ π_path_set,
+                                              ρ ↦ τ_π ⊗ ƒ_π ⊗ { ε ↦ r_π }; Γ
+```
+
+We want to step with:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ = 1
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
+fresh ρ
+-------------------------------------------------------------------- E-BorrowMut
+(σ, R, borrow mut x.π) →
+  (σ, R ∪ { ρ_π ↦ 0 ⊗ path_set, ρ ↦ 1 ⊗ { ε ↦ ρ_π } }, ptr ρ ƒ_n)
+```
+
+From premise, we also know `Γ ⊢ σ` and `Ρ ⊢ R`. The former tells us that we can look up `σ(x)` to
+get `ptr ρ_x ƒ_x`. With that and `Ρ ⊢ R`, we know `ρ_x ∈ Ρ` and that `R(ρ_x)(π)` is valid. From
+the typing rule's premise, we know that the fractions are 1 along the path, and so this
+condition is met for `E-BorrowMut` as well. Thus, we can indeed step with `E-BorrowMut`.
 
 Case `T-Drop`: `e = drop x`. From premise, we know `Γ ⊢ σ` and can thus conclude `x ∈ σ`. Looking up
 `x`, we get `σ(x) = ρ` and then from `Ρ ⊢ R`, we know that  `ρ ∈ R` and we can safely apply
