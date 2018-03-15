@@ -12,10 +12,9 @@ As Rust programmers, we all have an intuitive sense that types are useful, and o
 Rust's ownership model and borrow checker to keep our programs free of data races. But what exactly
 do our types _mean_? Can a better understanding help us to build more correct and secure software?
 
-In this talk, we'll explore an ongoing effort to build an accessible formal semantics for Rust and
-its application to understanding the meaning of types in Rust programs. We'll then use this newfound
-understanding to explore interesting ways of enforcing correctness and security criteria through
-types.
+In this talk, we'll explore an ongoing effort to build a formal model of Rust and the intuitions it
+can give us about the meaning of types in Rust programs. We'll then use this newfound understanding
+to explore interesting ways of enforcing correctness and security criteria through types.
 
 [A concise, engaging description for the public program. Limited to 600 characters.]
 
