@@ -127,7 +127,7 @@ knowledge of type theory, and the goal is really to require just general mathema
 
 The Rust community is proud of its academic influences, and many seem to have an appetite for
 programming language theory. This talk provides an opportunity to both explore existing connections
-and etablish new ones between Rust and academia. Further, a major portion of the talk will be
+and establish new ones between Rust and academia. Further, a major portion of the talk will be
 focused on how intuitions gleaned from and supported by our formal semantics can be used to write
 programs that leverage the type system more heavily for enforcing security and correctness.
 
@@ -148,7 +148,7 @@ Aaron Weiss is a PhD student at Northeastern University working with Prof. Amal 
 intersection of programming languages and security. He's broadly interested in using programming
 language theory to expand programmers' ability to reason about programs and program security. As
 part of his research, Aaron is producing a formal model of Rust for use in extending the language
-with new features or use cases.
+with new features and use cases.
 
 [Your bio should be short, no longer than 500 characters. It's related to why you're speaking about
 this topic.]
