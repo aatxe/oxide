@@ -80,25 +80,24 @@ calculate-path-set(e) ⇒ path_set
 -------------------------------------------------------------- T-Alloc
 Σ; Δ; Ρ; Γ ⊢ alloc e : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ path_set; Γ'
 
-Ρ(Γ(x)) = τ_x ⊗ ƒ_x ⊗ path_set
-ƒ_x ≠ 0
-;; walk the path through Ρ, checking that f ≠ 0, and return r_π
-Ρ; path_set ⊢ π : τ_π ⇒ r_π
+Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
 ƒ_π / 2 ↓ ƒ_n
 fresh ρ
-------------------------------------------------------------------------------- T-BorrowImm
-Σ; Δ; Ρ; Γ ⊢ borrow imm x.π : &ρ ƒ_n τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
-                                              ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π }; Γ
+-------------------------------------------------------- T-BorrowImm
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow imm x.π : &ρ ƒ_n τ_π
+                    ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
+                         ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π };
+                      Γ, x ↦ r_x
                                               
-Ρ(Γ(x)) = τ_x ⊗ 1 ⊗ path_set
-;; walk the path through Ρ, checking that f = 1, and return r_π
-Ρ; path_set ⊢ π : τ_π ⇒ r_π
-Ρ(r_π) = τ_π ⊗ 1 ⊗ π_path_set
+Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
 fresh ρ
-------------------------------------------------------------------------------- T-BorrowMut
-Σ; Δ; Ρ; Γ ⊢ borrow mut x.π : &ρ 1 τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ 0 ⊗ π_path_set,
-                                            ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ r_π }; Γ
+------------------------------------------------------ T-BorrowMut
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow mut x.π : &ρ 1 τ_π
+                    ⇒ Ρ, r_π ↦ τ_π ⊗ 0 ⊗ π_path_set,
+                         ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ r_π };
+                      Γ, x ↦ r_x
 
 Ρ(r_x) = τ_x ⊗ ƒ_x ⊗ { ε ↦ r }
 Ρ(r) = τ_r ⊗ ƒ_r ⊗ path_set
@@ -211,6 +210,26 @@ r_1 ∉ Ρ_2 ... r_n ∉ Ρ_2
 ```
 
 ### Additional Judgments
+
+Judgment: `Ρ ⊢ μ π in r : τ_π ⇒ r_π`  
+Meaning: In a region environment `Ρ` with constraints for `μ` borrows, path `π` in `r` has the type
+`τ_π` in the region `r_π`.
+
+```
+μ = imm ⇒ ƒ ≠ 0   μ = mut ⇒ ƒ = 1
+-------------------------------------------- P-EpsilonPath
+Ρ, r ↦ τ ⊗ ƒ ⊗ { ε ↦ τ } ⊢ μ ε in r : τ ⇒ r
+
+μ = imm ⇒ ƒ ≠ 0   μ = mut ⇒ ƒ = 1
+Ρ, r ↦ τ ⊗ ƒ ⊗ { ε ↦ r_s } ⊢ μ π in r_s : τ ⇒ r_π
+--------------------------------------------------- P-AliasPath
+Ρ, r ↦ τ ⊗ ƒ ⊗ { ε ↦ r_s } ⊢ μ π in r : τ ⇒ r_π
+
+μ = imm ⇒ ƒ ≠ 0   μ = mut ⇒ ƒ = 1
+Ρ, r ↦ τ ⊗ ƒ ⊗ { Π_1 ↦ r_1, ..., Π ↦ r_Π, ..., Π_n ↦ r_n } ⊢ μ π in r_Π : τ_π ⇒ r_π
+-------------------------------------------------------------------------------------- P-FieldPath
+Ρ, r ↦ τ ⊗ ƒ ⊗ { Π_1 ↦ r_1, ..., Π ↦ r_Π, ..., Π_n ↦ r_n } ⊢ μ Π.π in r : τ_π ⇒ r_π
+```
 
 ...
 
@@ -395,16 +414,15 @@ we can use the type of `e'` and our Canonical Forms lemma to do find ways to ste
 
 From premise:
 ```
-Ρ(Γ(x)) = τ_x ⊗ ƒ_x ⊗ path_set
-ƒ_x ≠ 0
-;; walk the path through Ρ, checking that f ≠ 0, and return r_π
-Ρ; path_set ⊢ π : τ_π ⇒ r_π
+Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
 ƒ_π / 2 ↓ ƒ_n
 fresh ρ
-------------------------------------------------------------------------------- T-BorrowImm
-Σ; Δ; Ρ; Γ ⊢ borrow imm x.π : &ρ ƒ_π τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
-                                              ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π }; Γ
+-------------------------------------------------------- T-BorrowImm
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow imm x.π : &ρ ƒ_n τ_π
+                    ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
+                         ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π };
+                      Γ, x ↦ r_x
 ```
 
 We want to step with:
@@ -428,14 +446,14 @@ condition is met for `E-BorrowImm` as well. Thus, we can indeed step with `E-Bor
 
 From premise:
 ```
-Ρ(Γ(x)) = τ_x ⊗ 1 ⊗ path_set
-;; walk the path through Ρ, checking that f = 1, and return r_π
-Ρ; path_set ⊢ π : τ_π ⇒ r_π
+Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
 fresh ρ
-------------------------------------------------------------------------------- T-BorrowMut
-Σ; Δ; Ρ; Γ ⊢ borrow mut x.π : &ρ ƒ_π τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ 0 ⊗ π_path_set,
-                                              ρ ↦ τ_π ⊗ ƒ_π ⊗ { ε ↦ r_π }; Γ
+------------------------------------------------------ T-BorrowMut
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow mut x.π : &ρ 1 τ_π
+                    ⇒ Ρ, r_π ↦ τ_π ⊗ 0 ⊗ π_path_set,
+                         ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ r_π };
+                      Γ, x ↦ r_x
 ```
 
 We want to step with:
@@ -825,16 +843,15 @@ fresh ρ
 
 From premise and knowledge that `e` is of the form `borrow imm x.π`:
 ```
-Ρ(Γ(x)) = τ_x ⊗ ƒ_x ⊗ path_set
-ƒ_x ≠ 0
-;; walk the path through Ρ, checking that f ≠ 0, and return r_π
-Ρ; path_set ⊢ π : τ_π ⇒ r_π
+Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
 ƒ_π / 2 ↓ ƒ_n
 fresh ρ
-------------------------------------------------------------------------------- T-BorrowImm
-Σ; Δ; Ρ; Γ ⊢ borrow imm x.π : &ρ ƒ_π τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
-                                              ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π }; Γ
+-------------------------------------------------------- T-BorrowImm
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow imm x.π : &ρ ƒ_n τ_π
+                    ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
+                         ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π };
+                      Γ, x ↦ r_x
 ```
 
 `Γ'`: `E-BorrowImm` did not change `σ` and so we pick `Γ` as `Γ'`.
@@ -863,14 +880,14 @@ fresh ρ
 
 From premise and knowledge that `e` is of the form `borrow mut x.π`:
 ```
-Ρ(Γ(x)) = τ_x ⊗ 1 ⊗ path_set
-;; walk the path through Ρ, checking that f = 1, and return r_π
-Ρ; path_set ⊢ π : τ_π ⇒ r_π
+Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
 fresh ρ
-------------------------------------------------------------------------------- T-BorrowMut
-Σ; Δ; Ρ; Γ ⊢ borrow mut x.π : &ρ ƒ_π τ_π ⇒ Ρ, r_π ↦ τ_π ⊗ 0 ⊗ π_path_set,
-                                              ρ ↦ τ_π ⊗ ƒ_π ⊗ { ε ↦ r_π }; Γ
+------------------------------------------------------ T-BorrowMut
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow mut x.π : &ρ 1 τ_π
+                    ⇒ Ρ, r_π ↦ τ_π ⊗ 0 ⊗ π_path_set,
+                         ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ r_π };
+                      Γ, x ↦ r_x
 ```
 
 `Γ'`: `E-BorrowMut` did not change `σ` and so we pick `Γ` as `Γ'`.
