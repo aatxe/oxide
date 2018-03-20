@@ -453,6 +453,94 @@ we can use the type of `e'` and our Canonical Forms lemma to do find ways to ste
   8. `e' : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret` then `E-AllocSimple` applies.
   9. `e' : ∀ς : κ. e` then `E-AllocSimple` applies.
 
+##### Case `T-AllocPrim`:
+
+From premise:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
+------------------------------------------------------------------ T-AllocPrim
+Σ; Δ; Ρ; Γ ⊢ alloc prim : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ { ε ↦ τ }; Γ'
+```
+
+We want to step with:
+```
+fresh ρ
+------------------------------------------------------------- E-AllocSimple
+(σ, R, alloc sv) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv } }, ptr ρ 1)
+```
+
+It is easy to check that all primitives are included in `sv` (and `𝕍`) . Thus, we can step with
+`E-AllocSimple`.
+
+##### Case `T-AllocTup`:
+
+From premise:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+--------------------------------------------------------------------------- T-AllocTup
+Σ; Δ; Ρ; Γ ⊢ alloc (e_1, ..., e_n) : &ρ 1 (τ_1 ⊗ ... ⊗ τ_n)
+           ⇒ Ρ_n, ρ ↦ (τ_1 ⊗ ... ⊗ τ_n) ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n };
+             Γ_n
+```
+
+We want to step with:
+```
+fresh ρ
+------------------------------------------------------------ E-AllocTup
+(σ, R, alloc (ptr ρ_1 1, ..., ptr ρ_n 1)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
+```
+
+##### Case `T-AllocStructTup`:
+
+From premise:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ ⊢ S(τ_1, ..., τ_n)
+----------------------------------------------------------- T-AllocStructTup
+Σ; Δ; Ρ; Γ ⊢ alloc S(e_1, ..., e_n) : &ρ 1 S
+           ⇒ Ρ_n, ρ ↦ S ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n };
+             Γ_n
+```
+
+We want to step with:
+```
+fresh ρ
+------------------------------------------------------------ E-AllocStuctTup
+(σ, R, alloc S (ptr ρ_1 1, ..., ptr ρ_n 1)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
+```
+
+##### Case `T-AllocStructRecord`:
+
+From premise:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ ⊢ S { x_1: τ_1, ..., x_n: τ_n }
+--------------------------------------------------------------- T-AllocStructRecord
+Σ; Δ; Ρ; Γ ⊢ alloc S { x_1: e_1, ..., x_n: e_n } : &ρ 1 S
+           ⇒ Ρ_n, ρ ↦ S ⊗ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n };
+             Γ_n
+```
+
+We want to step with:
+```
+fresh ρ
+--------------------------------------------------------------- E-AllocStuctRecord
+(σ, R, alloc S { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
+```
+
 ##### Case `T-BorrowImm`:
 
 From premise:
@@ -761,20 +849,19 @@ fresh ρ
 (σ, R, alloc sv) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv } }, ptr ρ 1)
 ```
 
-From premise and knowledge that `e` is of the form `alloc e'`:
+From premise and knowledge that `e` is  form `alloc e'`:
 ```
 fresh ρ
 Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
-calculate-path-set(e) ⇒ path_set
--------------------------------------------------------------- T-Alloc
-Σ; Δ; Ρ; Γ ⊢ alloc e : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ path_set; Γ'
+------------------------------------------------------------------ T-AllocPrim
+Σ; Δ; Ρ; Γ ⊢ alloc prim : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ { ε ↦ τ }; Γ'
 ```
 
 `Γ'`: `E-AllocSimple` did not change `σ` and so we pick `Γ` as `Γ'`.
 
 `Ρ'`: `E-AllocSimple` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to be
 `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding `ρ ↦ τ ⊗ 1 ⊗ { ε ↦ τ }`. This
-corresponds to the same change we see being made in `T-Alloc`.
+corresponds to the same change we see being made in `T-AllocPrim`.
 
 `e'` is well-typed: From `E-AllocSimple`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'` that
 we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction `ƒ`)
@@ -790,13 +877,16 @@ fresh ρ
   (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
 ```
 
-From premise and knowledge that `e` is of the form `alloc e'`:
+From premise and knowledge that `e` is of the form `alloc (e_1, ..., e_n)`:
 ```
 fresh ρ
-Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
-calculate-path-set(e) ⇒ path_set
--------------------------------------------------------------- T-Alloc
-Σ; Δ; Ρ; Γ ⊢ alloc e : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ path_set; Γ'
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+--------------------------------------------------------------------------- T-AllocTup
+Σ; Δ; Ρ; Γ ⊢ alloc (e_1, ..., e_n) : &ρ 1 (τ_1 ⊗ ... ⊗ τ_n)
+           ⇒ Ρ_n, ρ ↦ (τ_1 ⊗ ... ⊗ τ_n) ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n };
+             Γ_n
 ```
 
 `Γ'`: `E-AllocTup` did not change `σ` and so we pick `Γ` as `Γ'`.
@@ -804,7 +894,7 @@ calculate-path-set(e) ⇒ path_set
 `Ρ'`: `E-AllocTup` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to be
 `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
 `ρ ↦ τ ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n }`. This corresponds to the same change we see being made in
-`T-Alloc`.
+`T-AllocTup`.
 
 `e'` is well-typed: From `E-AllocTup`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'` that
 we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction `ƒ`)
@@ -820,13 +910,17 @@ fresh ρ
   (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
 ```
 
-From premise and knowledge that `e` is of the form `alloc e'`:
+From premise and knowledge that `e` is of the form `alloc S(e_1, ..., e_n)`:
 ```
 fresh ρ
-Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
-calculate-path-set(e) ⇒ path_set
--------------------------------------------------------------- T-Alloc
-Σ; Δ; Ρ; Γ ⊢ alloc e : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ path_set; Γ'
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ ⊢ S(τ_1, ..., τ_n)
+----------------------------------------------------------- T-AllocStructTup
+Σ; Δ; Ρ; Γ ⊢ alloc S(e_1, ..., e_n) : &ρ 1 S
+           ⇒ Ρ_n, ρ ↦ S ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n };
+             Γ_n
 ```
 
 `Γ'`: `E-AllocStructTup` did not change `σ` and so we pick `Γ` as `Γ'`.
@@ -834,7 +928,7 @@ calculate-path-set(e) ⇒ path_set
 `Ρ'`: `E-AllocStructTup` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to be
 `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
 `ρ ↦ τ ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n }`. This corresponds to the same change we see being made in
-`T-Alloc`.
+`T-AllocStructTup`.
 
 `e'` is well-typed: From `E-AllocStructTup`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'`
 that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction
@@ -850,13 +944,17 @@ fresh ρ
   (σ, R ∪ { ρ ↦ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
 ```
 
-From premise and knowledge that `e` is of the form `alloc e'`:
+From premise and knowledge that `e` is of the form `alloc S { x_1: e_1, ..., x_n: e_n }`:
 ```
 fresh ρ
-Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
-calculate-path-set(e) ⇒ path_set
--------------------------------------------------------------- T-Alloc
-Σ; Δ; Ρ; Γ ⊢ alloc e : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ path_set; Γ'
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ ⊢ S { x_1: τ_1, ..., x_n: τ_n }
+--------------------------------------------------------------- T-AllocStructRecord
+Σ; Δ; Ρ; Γ ⊢ alloc S { x_1: e_1, ..., x_n: e_n } : &ρ 1 S
+           ⇒ Ρ_n, ρ ↦ S ⊗ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n };
+             Γ_n
 ```
 
 `Γ'`: `E-AllocStructRecord` did not change `σ` and so we pick `Γ` as `Γ'`.
@@ -864,7 +962,7 @@ calculate-path-set(e) ⇒ path_set
 `Ρ'`: `E-AllocStructRecord` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to
 be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
 `ρ ↦ τ ⊗ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }`. This corresponds to the same change we see being made
-in `T-Alloc`.
+in `T-AllocStructRecord`.
 
 `e'` is well-typed: From `E-AllocStructRecord`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
 `Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
