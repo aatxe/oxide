@@ -231,17 +231,17 @@ Meaning: In a region environment `Ρ` with constraints for `μ` borrows, path `�
 Ρ, r ↦ τ ⊗ ƒ ⊗ { Π_1 ↦ r_1, ..., Π ↦ r_Π, ..., Π_n ↦ r_n } ⊢ μ Π.π in r : τ_π ⇒ r_π
 ```
 
-##### `Σ ⊢ Sτ`
+#### `Σ ⊢ Sτ`
 Meaning: In a data structure context `Σ`, the long-form named data type `Sτ` is well-formed.
 
-Grammar:
 ```
+;; grammar "extensions"
 Sτ ::= S
      | S(τ_1, ..., τ_n)
      | S { x_1: τ_1, ..., x_n: τ_n }
-```
 
-```
+;; judgment rules
+
 ----------------------------------------------------------------------- WF-StructTuple
 Σ, struct S { x_1: τ_1, ..., x_n: τ_n) ⊢ S { x_1: τ_1, ..., x_n: τ_n }
 
