@@ -211,7 +211,7 @@ r_1 ∉ Ρ_2 ... r_n ∉ Ρ_2
 
 ### Additional Judgments
 
-Judgment: `Ρ ⊢ μ π in r : τ_π ⇒ r_π`  
+#### `Ρ ⊢ μ π in r : τ_π ⇒ r_π`
 Meaning: In a region environment `Ρ` with constraints for `μ` borrows, path `π` in `r` has the type
 `τ_π` in the region `r_π`.
 
@@ -229,6 +229,27 @@ Meaning: In a region environment `Ρ` with constraints for `μ` borrows, path `�
 Ρ, r ↦ τ ⊗ ƒ ⊗ { Π_1 ↦ r_1, ..., Π ↦ r_Π, ..., Π_n ↦ r_n } ⊢ μ π in r_Π : τ_π ⇒ r_π
 -------------------------------------------------------------------------------------- P-FieldPath
 Ρ, r ↦ τ ⊗ ƒ ⊗ { Π_1 ↦ r_1, ..., Π ↦ r_Π, ..., Π_n ↦ r_n } ⊢ μ Π.π in r : τ_π ⇒ r_π
+```
+
+##### `Σ ⊢ Sτ`
+Meaning: In a data structure context `Σ`, the long-form named data type `Sτ` is well-formed.
+
+Grammar:
+```
+Sτ ::= S
+     | S(τ_1, ..., τ_n)
+     | S { x_1: τ_1, ..., x_n: τ_n }
+```
+
+```
+----------------------------------------------------------------------- WF-StructTuple
+Σ, struct S { x_1: τ_1, ..., x_n: τ_n) ⊢ S { x_1: τ_1, ..., x_n: τ_n }
+
+---------------------------------------------- WF-StructTuple
+Σ, struct S(τ_1, ..., τ_n) ⊢ S(τ_1, ..., τ_n)
+
+---------------- WF-StructUnit
+Σ, struct S ⊢ S
 ```
 
 ...
