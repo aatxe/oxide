@@ -440,19 +440,6 @@ The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, `T-MvClosure`,
 `T-StructRecord`, `T-StructTup`, and `T-TAbs` cases are all immediate since `e` is in all these
 cases a value. The other cases follow.
 
-Case `T-Alloc`: `e = alloc e'`. By IH, either `e' ∈ 𝕍` or we can take a step. In the former case,
-we can use the type of `e'` and our Canonical Forms lemma to do find ways to step:
-  1. `e' : bool` then `E-AllocSimple` applies.
-  2. `e' : u32` then `E-AllocSimple` applies.
-  3. `e' : unit` then `E-AllocSimple` applies.
-  4. `e' : &ρ ƒ τ` then `E-AllocSimple` applies.
-  5. `e' : (τ_1, ..., τ_n)` then `E-AllocTup` applies.
-  6. `e' : S` then either `E-AllocStructTup` or `E-AllocStructRecord` applies, depending on the
-     definition of `S` in `Σ`.
-  7. `e' : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret` then `E-AllocSimple` applies.
-  8. `e' : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret` then `E-AllocSimple` applies.
-  9. `e' : ∀ς : κ. e` then `E-AllocSimple` applies.
-
 ##### Case `T-AllocPrim`:
 
 From premise:
@@ -470,7 +457,7 @@ fresh ρ
 (σ, R, alloc sv) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv } }, ptr ρ 1)
 ```
 
-It is easy to check that all primitives are included in `sv` (and `𝕍`) . Thus, we can step with
+It is easy to check that all primitives are included in `sv` (and `𝕍`). Thus, we can step with
 `E-AllocSimple`.
 
 ##### Case `T-AllocTup`:
@@ -495,6 +482,10 @@ fresh ρ
   (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
 ```
 
+By IH, either `e_1 ∈ 𝕍` through `e_n ∈ 𝕍` or we can take a step for one of them. If they're all
+values, we know from their types (`&ρ_1 1 τ_1` through `&ρ_n 1 τ_n`) and Canonical Forms, that `e_1`
+through `e_n` are `ptr ρ_1 1` through `ptr ρ_n 1`. Thus, we can step with `E-AllocTup`.
+
 ##### Case `T-AllocStructTup`:
 
 From premise:
@@ -518,6 +509,10 @@ fresh ρ
   (σ, R ∪ { ρ ↦ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
 ```
 
+By IH, either `e_1 ∈ 𝕍` through `e_n ∈ 𝕍` or we can take a step for one of them. If they're all
+values, we know from their types (`&ρ_1 1 τ_1` through `&ρ_n 1 τ_n`) and Canonical Forms, that `e_1`
+through `e_n` are `ptr ρ_1 1` through `ptr ρ_n 1`. Thus, we can step with `E-AllocStructTup`.
+
 ##### Case `T-AllocStructRecord`:
 
 From premise:
@@ -540,6 +535,10 @@ fresh ρ
 (σ, R, alloc S { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
   (σ, R ∪ { ρ ↦ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
 ```
+
+By IH, either `e_1 ∈ 𝕍` through `e_n ∈ 𝕍` or we can take a step for one of them. If they're all
+values, we know from their types (`&ρ_1 1 τ_1` through `&ρ_n 1 τ_n`) and Canonical Forms, that `e_1`
+through `e_n` are `ptr ρ_1 1` through `ptr ρ_n 1`. Thus, we can step with `E-AllocStructRecord`.
 
 ##### Case `T-BorrowImm`:
 
