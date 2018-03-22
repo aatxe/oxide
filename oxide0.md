@@ -161,7 +161,7 @@ r_1 ∉ Ρ_2
 Σ; Δ; Ρ; Γ ⊢ let mut x: τ_1 = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
 
 Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
-Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
+Ρ(r_π) = τ_π ⊗ 1 ⊗ π_path_set
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : τ_π ⇒ Ρ'; Γ'
 ------------------------------------------------ T-Assign
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.π := e : unit ⇒ Ρ'; Γ'
@@ -397,9 +397,9 @@ R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
 
 σ(x) = ρ
 ;; looking up the whole path through regions checks ƒ = 1
-R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ { ε ↦ sv_π }
+R(ρ_x)(π) = ρ_π ↦ 1 ⊗ { ε ↦ sv_π }
 ------------------------------------------------------------- E-AssignSimple
-(σ, R, x.π := sv) → (σ, R ∪ { ρ_π ↦ ƒ_π ⊗ { ε ↦ sv } }, ())
+(σ, R, x.π := sv) → (σ, R ∪ { ρ_π ↦ 1 ⊗ { ε ↦ sv } }, ())
 
 -------------------------------------------------------------------------------------------- E-App
 (σ, R, (|x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }) (ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n))
@@ -706,9 +706,8 @@ We want to step with:
 (σ, R, let μ x: τ = ptr ρ ƒ in e) → (σ ∪ { x ↦ ρ }, R, e)
 ```
 
-Case `T-LetImm`: `e = let imm x: τ = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In
-the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ` from case, by Canonical Forms, `e_1` is of the
-form `ptr ρ ƒ`. Thus, we can use `E-Let` to step.
+By IH, either `e_1 ∈ 𝕍` or we can take a step. In the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ`
+from case, by Canonical Forms, `e_1` is of the form `ptr ρ ƒ`. Thus, we can use `E-Let` to step.
 
 ##### Case `T-LetMut`:
 
@@ -729,9 +728,32 @@ We want to step with:
 (σ, R, let μ x: τ = ptr ρ ƒ in e) → (σ ∪ { x ↦ ρ }, R, e)
 ```
 
-Case `T-LetMut`: `e = let mut x: τ = e_1 in e_2`. By IH, either `e_1 ∈ 𝕍` or we can take a step. In
-the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ` from case, by Canonical Forms, `e_1` is of the
-form `ptr ρ ƒ`. Thus, we can use `E-Let` to step.
+By IH, either `e_1 ∈ 𝕍` or we can take a step. In the former case, `e_1 ∈ 𝕍` and of type `&ρ ƒ τ`
+from case, by Canonical Forms, `e_1` is of the form `ptr ρ ƒ`. Thus, we can use `E-Let` to step.
+
+##### Case `T-Assign`:
+
+From premise:
+```
+Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ 1 ⊗ π_path_set
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : τ_π ⇒ Ρ'; Γ'
+------------------------------------------------ T-Assign
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.π := e : unit ⇒ Ρ'; Γ'
+```
+
+We want to step with:
+```
+σ(x) = ρ
+;; looking up the whole path through regions checks ƒ = 1
+R(ρ_x)(π) = ρ_π ↦ 1 ⊗ { ε ↦ sv_π }
+------------------------------------------------------------- E-AssignSimple
+(σ, R, x.π := sv) → (σ, R ∪ { ρ_π ↦ 1 ⊗ { ε ↦ sv } }, ())
+```
+
+By IH, either `e ∈ 𝕍` or we can take a step. In the former case, if `τ_π` is a simple type (i.e.
+not a struct or tuple), then by Canonical Forms, we know that `e` is a simple value `sv`. Then, we
+can step using `E-AssignSimple`.
 
 ##### Case `T-App`:
 
