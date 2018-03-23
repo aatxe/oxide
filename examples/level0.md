@@ -113,4 +113,62 @@ in Point {
 
 ## Invalid Programs
 
-...
+### Partial Borrows
+
+#### Rust
+```rust
+struct Foo;
+
+struct Point {
+    x: Foo,
+    y: Foo,
+}
+
+let pt = Point {
+    x: Foo,
+    y: Foo,
+};
+
+// error[E0382]: use of partially moved value: `pt`
+let foo = pt.x;
+//  --- value moved here
+let pt2 = pt;
+//  ^^^ value used here after move
+```
+
+#### Oxide
+```rust
+struct Foo;
+
+struct Point {
+    x: Foo,
+    y: Foo,
+}
+
+// Ρ: {}
+let mut pt = alloc Point {
+    x: alloc Foo(),
+    // Ρ ∪ { ρ_x ↦ Foo ⊗ 1 ⊗ { ε ↦ Foo } }
+    y: alloc Foo(),
+    // Ρ ∪ { ρ_y ↦ Foo ⊗ 1 ⊗ { ε ↦ Foo } }
+};
+// Ρ ∪ { ρ_pt ↦ Point ⊗ 1 ⊗ { x ↦ ρ_x, y ↦ ρ_y } }
+
+/* Ρ: {
+ *   ρ_x ↦ Foo ⊗ 1 ⊗ { ε ↦ Foo },
+ *   ρ_y ↦ Foo ⊗ 1 ⊗ { ε ↦ Foo },
+ *   ρ_pt ↦ Point ⊗ 1 ⊗ { x ↦ ρ_x, y ↦ ρ_y },
+ * }
+ */
+let foo = borrow imm pt.x in
+/* Ρ: {
+ *   ρ_x ↦ Foo ⊗ 1 / 2 ⊗ { ε ↦ Foo },
+ *   ρ_y ↦ Foo ⊗ 1 ⊗ { ε ↦ Foo },
+ *   ρ_pt ↦ Point ⊗ 1 ⊗ { x ↦ ρ_x, y ↦ ρ_y },
+ *   foo ↦ Foo ⊗ 1 / 2 ⊗ { ε ↦ Foo },
+ * }
+ */
+let mut pt2 = borrow mut pt in
+//            ^^^^^^^^^^^^^ cannot borrow mut because a subpath did not have a `1` capability.
+()
+```
