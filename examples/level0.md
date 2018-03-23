@@ -2,10 +2,11 @@
 
 This document contains examples in Rust0 with their compiled forms in Oxide0.
 
-## Simple Points
+## Valid Programs
 
-### Rust
+### Simple Points
 
+#### Rust
 ```rust
 struct Point {
     x: u32,
@@ -19,8 +20,7 @@ Point {
 }
 ```
 
-### Oxide
-
+#### Oxide
 ```rust
 struct Point {
     x: u32,
@@ -36,10 +36,9 @@ in Point {
 }
 ```
 
-## Nested Structures
+### Nested Structures
 
-### Rust
-
+#### Rust
 ```rust
 struct Point {
     x: u32,
@@ -60,8 +59,7 @@ Rect(
 )
 ```
 
-### Oxide 
-
+#### Oxide
 ```rust
 struct Point {
     x: u32,
@@ -82,10 +80,9 @@ Rect(
 )
 ```
 
-## Mutation
+### Mutation
 
-### Rust
-
+#### Rust
 ```rust
 struct Point {
     x: u32,
@@ -99,8 +96,7 @@ Point {
 }
 ```
 
-### Oxide
-
+#### Oxide
 ```rust
 struct Point {
     x: u32,
@@ -114,3 +110,7 @@ in Point {
     y: alloc 9,
 }
 ```
+
+## Invalid Programs
+
+...
