@@ -1197,6 +1197,33 @@ analagous change of adding `x ↦ ρ` to `Γ`.
 `e'` is well-typed: We know from the premises of `T-LetImm` and `T-LetMut` that `e_2` is well typed
 in our `Γ'`. Since `E-Let` steps to `e_2`, we then know that it's well-typed.
 
+##### Case 'E-AssignSimple':
+
+From premise:
+```
+σ(x) = ρ
+;; looking up the whole path through regions checks ƒ = 1
+R(ρ_x)(π) = ρ_π ↦ 1 ⊗ { ε ↦ sv_π }
+------------------------------------------------------------- E-AssignSimple
+(σ, R, x.π := sv) → (σ, R ∪ { ρ_π ↦ 1 ⊗ { ε ↦ sv } }, ())
+```
+
+From premise and knowledge that `e` is of the form `x.π := e_1` then:
+```
+Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ 1 ⊗ π_path_set
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : τ_π ⇒ Ρ'; Γ'
+------------------------------------------------ T-Assign
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.π := e : unit ⇒ Ρ'; Γ'
+```
+
+`Γ'`: `E-AssignSimple` leaves `σ` unchanged, and so we can pick `Γ` as `Γ'`.
+
+`Ρ'`: In `E-AssignSimple`, we update the binding for `ρ_π` in `R` to point to the new value. Since
+the type of this value does not change, we can pick `Ρ` as `Ρ'`.
+
+`e'` is well-typed: Since the resulting expression is `()`, the result is well-typed by `T-Unit`.
+
 ##### Case `E-App`:
 
 From premise:
@@ -1206,7 +1233,7 @@ From premise:
   → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
 ```
 
-From premise and knowledge that `e` is of the form `e_1 e_2`, either:
+From premise and knowledge that `e` is of the form `e_1 e_2` then:
 ```
 Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ⇒ Ρ_2; Γ_2
@@ -1232,7 +1259,7 @@ From premise:
   → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
 ```
 
-From premise and knowledge that `e` is of the form `e_1 e_2`, either:
+From premise and knowledge that `e` is of the form `e_1 e_2` then:
 ```
 Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ⇒ Ρ_2; Γ_2
