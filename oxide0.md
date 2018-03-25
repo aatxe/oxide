@@ -70,7 +70,7 @@ region environments Ρ ::= •
 
 ## Static Semantics
 
-Judgment: `Σ; Δ; Ρ; Γ; e : τ ⇒ Ρ'; Γ'`  
+Judgment: `Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'`  
 Meaning: In a data environment Σ, kind environment Δ, region environment Ρ and type environment Γ,
 expression e has type τ and produces the updated environments Ρ' and Γ'.
 
