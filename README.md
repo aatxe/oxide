@@ -21,15 +21,15 @@ least be sufficient to understand why we're talking about "levels" of Rust.
 This repository is split into five parts:
 
 1. [`./`](./) -- the root, containing the latest version of our semantics
-  - Each language level has its own file starting with safe Rust in [`oxide0.md`](oxide0.md)
+    - Each language level has its own file starting with safe Rust in [`oxide0.md`](oxide0.md)
 2. [`notes/`](notes/) -- an assorted selection of my notes, some about the language levels of Rust
 3. [`examples/`](examples/) -- a collection of examples (and counter-examples) at each level
-  - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form.
+    - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form.
 4. [`history/`](history/) -- largely-iterative prior attempts at building [`oxide0`](oxide0.md)
-  - [`ownershipv1`](history/ownershipv1.md) and [`ownershipv2`](history/ownershipv1.md) both have
-    some notes included that might be insightful to some degree. I apparently got lazy afterward.
+    - [`ownershipv1`](history/ownershipv1.md) and [`ownershipv2`](history/ownershipv1.md) both have
+      some notes included that might be insightful to some degree. I apparently got lazy afterward.
 5. [`redex/`](redex/) -- an outdated attempt at mechanizing the semantics in Redex
-  - maybe I'll get back to this? maybe we'll mechanize it in Coq or F* instead?
+    - maybe I'll get back to this? maybe we'll mechanize it in Coq or F* instead?
 
 ## Related Works
 
