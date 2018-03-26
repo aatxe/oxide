@@ -13,7 +13,7 @@ other useful insights as well.
 
 - _Safe Rust_ -- the core of Rust, without _any_ unsafe code.
 - _Language level_ -- a combination of _safe Rust_ and a set of _unsafe abstractions_ that increase
-  the overall expressivity of the language.
+  the overall expressivity of the language, e.g. Rust1 is _safe Rust_ + `Vec<T>`.
 - _Unsafe abstraction_ -- an abstraction that cannot be implemented in _safe Rust_ (absolute) or the
   current _language level_ (relative) without the use of Rust's `unsafe` block.
 
