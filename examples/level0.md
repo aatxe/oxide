@@ -168,7 +168,7 @@ let foo = borrow imm pt.x in
  *   foo ↦ Foo ⊗ 1 / 2 ⊗ { ε ↦ Foo },
  * }
  */
-let mut pt2 = borrow mut pt in
-//            ^^^^^^^^^^^^^ cannot borrow mut because `ρ_pt` subpath `ρ_x` did not have a `1` capability.
+let mut pt2 = borrow mut pt.ε in
+//            ^^^^^^^^^^^^^^^ cannot borrow mut because `ρ_pt` subpath `ρ_x` did not have a `1` capability.
 ()
 ```
