@@ -169,6 +169,6 @@ let foo = borrow imm pt.x in
  * }
  */
 let mut pt2 = borrow mut pt in
-//            ^^^^^^^^^^^^^ cannot borrow mut because a subpath did not have a `1` capability.
+//            ^^^^^^^^^^^^^ cannot borrow mut because `ρ_pt` subpath `ρ_x` did not have a `1` capability.
 ()
 ```
