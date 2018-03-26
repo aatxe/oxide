@@ -6,6 +6,7 @@
   - [Syntax extensions for runtime](#syntax-extensions)
 - [Type System](#static-semantics)
   - [Typing extensions for runtime](#typing-extensions)
+  - [Minor judgments](#additional-judgments)
 - [Operational Semantics](#operational-semantics)
 - [Proof of Soundness](#proof-of-soundness)
   - [Progress](#progress)
