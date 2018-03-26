@@ -1,5 +1,17 @@
 # Oxide0 - Formal Rust0
 
+## Table of Contents
+
+- [Syntax](#syntax)
+  - [Syntax extensions for runtime](#syntax-extensions)
+- [Type System](#static-semantics)
+  - [Extensions for runtime](#typing-extensions)
+- [Operational Semantics](#operational-semantics)
+- [Proof of Soundness](#proof-of-soundness)
+  - [Progress](#progress)
+  - [Preservation](#preservation)
+
+
 ## Syntax
 
 ```
