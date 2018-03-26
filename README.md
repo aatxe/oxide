@@ -27,7 +27,7 @@ This repository is split into five parts:
 3. [`examples/`](examples/) -- a collection of examples (and counter-examples) at each level
     - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form.
 4. [`history/`](history/) -- largely-iterative prior attempts at building [`oxide0`](oxide0.md)
-    - [`ownershipv1`](history/ownershipv1.md) and [`ownershipv2`](history/ownershipv1.md) both have
+    - [`ownershipv1`](history/ownershipv1.md) and [`ownershipv2`](history/ownershipv2.md) both have
       some notes included that might be insightful to some degree. Evidently, I got lazy afterward
       and stopped writing actual prose in the models.
 5. [`redex/`](redex/) -- an outdated attempt at mechanizing the semantics in Redex
