@@ -4,9 +4,10 @@ The name is tentative, but the goal of building a Featherweight Rust is not.
 
 ## Background
 
-To get a sense of the terminology and why the semantics is structured how it is (into levels), I
-highly recommend reading [Niko's post about observational equivalence in Rust][niko]. This should at
-least be sufficient to understand why we're talking about "levels" of Rust.
+To get a sense of the terminology and why the semantics is structured how it is (i.e. into levels),
+I highly recommend reading [Niko's post about observational equivalence in Rust][niko]. This should
+at least be sufficient to understand why we're talking about levels of Rust, but it may well provide
+other useful insights as well.
 
 ## Terminology
 
@@ -27,9 +28,10 @@ This repository is split into five parts:
     - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form.
 4. [`history/`](history/) -- largely-iterative prior attempts at building [`oxide0`](oxide0.md)
     - [`ownershipv1`](history/ownershipv1.md) and [`ownershipv2`](history/ownershipv1.md) both have
-      some notes included that might be insightful to some degree. I apparently got lazy afterward.
+      some notes included that might be insightful to some degree. Evidently, I got lazy afterward
+      and stopped writing actual prose in the models.
 5. [`redex/`](redex/) -- an outdated attempt at mechanizing the semantics in Redex
-    - maybe I'll get back to this? maybe we'll mechanize it in Coq or F* instead?
+    - Maybe I'll get back to this? Maybe I'll mechanize it in Coq or F* instead?
 
 ## Related Works
 
