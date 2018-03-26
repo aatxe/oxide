@@ -160,7 +160,7 @@ let mut pt = alloc Point {
  *   ρ_pt ↦ Point ⊗ 1 ⊗ { x ↦ ρ_x, y ↦ ρ_y },
  * }
  */
-let foo = borrow imm pt.x in
+let foo = borrow imm pt.x.ε in
 /* Ρ: {
  *   ρ_x ↦ Foo ⊗ 1 / 2 ⊗ { ε ↦ Foo },
  *   ρ_y ↦ Foo ⊗ 1 ⊗ { ε ↦ Foo },
@@ -169,6 +169,6 @@ let foo = borrow imm pt.x in
  * }
  */
 let mut pt2 = borrow mut pt.ε in
-//            ^^^^^^^^^^^^^^^ cannot borrow mut because `ρ_pt` subpath `ρ_x` did not have a `1` capability.
+//            ^^^^^^^^^^^^^^^ cannot borrow mut because `ρ_pt` subpath `ρ_x` capability ≠ `1`.
 ()
 ```
