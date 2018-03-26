@@ -15,13 +15,13 @@
 
 ## Summary
 
-In `oxide`, we allocate every value on a region in the stack which is associated with a fractional
-capability for its use. The fractional aspect of this capability allows us to model mutable vs
-immutable borrows by tracking the existence of aliases (i.e. if a capability is `1`, we know that
-there are no aliases and a mutable borrow is safe). Composite structures (like tuples and structs)
-reference other smaller regions (each of which has its own capability). Perhaps notably, we simplify
-the move-vs-borrow distinction by treating all moves as mutable borrows --- a natural consequence of
-our fractional capabilities.
+In `oxide`, we allocate every value on a region in the stack, associating it with a fractional
+capability guarding its use. The fractional aspect of this capability allows us to model mutable vs
+immutable borrows by tracking the existence of aliases. That is, if a capability is `1`, we know
+that there are no aliases and a mutable borrow is safe. Composite structures (like tuples and
+structs) reference other smaller regions (each of which has its own capability). Perhaps notably, we
+simplify the move-vs-borrow distinction by treating all moves as mutable borrows — a natural
+consequence of our fractional capabilities.
 
 To keep the style of programming close to real Rust, capabilities are always packaged inside of our
 reference type (`&r f τ`). Consequently, every type is used under references. I think of this as

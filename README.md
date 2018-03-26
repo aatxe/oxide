@@ -11,26 +11,26 @@ other useful insights as well.
 
 ## Terminology
 
-- _Safe Rust_ -- the core of Rust, without _any_ unsafe code.
-- _Language level_ -- a combination of _safe Rust_ and a set of _unsafe abstractions_ that increase
+- _Safe Rust_ — the core of Rust, without _any_ unsafe code.
+- _Language level_ — a combination of _safe Rust_ and a set of _unsafe abstractions_ that increase
   the overall expressivity of the language, e.g. Rust1 is _safe Rust_ + `Vec<T>`.
-- _Unsafe abstraction_ -- an abstraction that cannot be implemented in _safe Rust_ (absolute) or the
+- _Unsafe abstraction_ — an abstraction that cannot be implemented in _safe Rust_ (absolute) or the
   current _language level_ (relative) without the use of Rust's `unsafe` block.
 
 ## Navigating this repository
 
 This repository is split into five parts:
 
-1. [`./`](./) -- the root, containing the latest version of our semantics
+1. [`./`](./) — the root, containing the latest version of our semantics
     - Each language level has its own file starting with safe Rust in [`oxide0.md`](oxide0.md)
-2. [`notes/`](notes/) -- an assorted selection of my notes, some about the language levels of Rust
-3. [`examples/`](examples/) -- a collection of examples (and counter-examples) at each level
+2. [`notes/`](notes/) — an assorted selection of my notes, some about the language levels of Rust
+3. [`examples/`](examples/) — a collection of examples (and counter-examples) at each level
     - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form.
-4. [`history/`](history/) -- largely-iterative prior attempts at building [`oxide0`](oxide0.md)
+4. [`history/`](history/) — largely-iterative prior attempts at building [`oxide0`](oxide0.md)
     - [`ownershipv1`](history/ownershipv1.md) and [`ownershipv2`](history/ownershipv2.md) both have
       some notes included that might be insightful to some degree. Evidently, I got lazy afterward
       and stopped writing actual prose in the models.
-5. [`redex/`](redex/) -- an outdated attempt at mechanizing the semantics in Redex
+5. [`redex/`](redex/) — an outdated attempt at mechanizing the semantics in Redex
     - Maybe I'll get back to this? Maybe I'll mechanize it in Coq or F* instead?
 
 ## Related Works
