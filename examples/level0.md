@@ -92,7 +92,7 @@ struct Point {
 let mut x = 5;
 x = 4;
 Point {
-    x, 9
+    x, y: 9,
 }
 ```
 
