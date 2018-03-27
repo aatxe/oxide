@@ -527,6 +527,8 @@ R(ρ_x)(π) = ρ_π ↦ 1 ⊗ { ε ↦ sv_π }
      the form `move |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
   9. if `v` is a value of type `∀ς : κ. e`, then `v` is of the form `Λς: κ. e`.
 
+[˄ Back to top][toc]
+
 ### Progress
 
 **Theorem**:
