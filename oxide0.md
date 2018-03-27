@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [Summary](#summary)
+  - [Bindings and borrowing](#bindings-and-borrowing)
 - [Syntax](#syntax)
   - [Syntax extensions for runtime](#syntax-extensions)
 - [Type System](#static-semantics)
@@ -31,6 +32,15 @@ allocation on the **stack**), and the use of the word `borrow` instead of `&` in
 of borrowing.
 
 You can find examples of Rust0 code and its corresponding `oxide0` form [here](examples/level0.md).
+
+### Bindings and borrowing
+
+As noted above, all values are used under references. This can be seen by looking at the typing
+rules for bindings: each binding expects to find a reference to a value at the right type. This is
+what enables/requires us to use `alloc` and `borrow` expressions, as these operations are the only
+ones that take something at a type `τ` and yield a reference at that type.
+
+[Back to top][toc]
 
 ## Syntax
 
@@ -99,6 +109,8 @@ region environments Ρ ::= •
                         | Ρ, r ↦ τ ⊗ ƒ ⊗ { ε ↦ τ }
                         | Ρ, r ↦ τ ⊗ ƒ ⊗ { ε ↦ r }
 ```
+
+[Back to top][toc]
 
 ## Static Semantics
 
@@ -278,6 +290,8 @@ r_1 ∉ Ρ_2 ... r_n ∉ Ρ_2
 Σ; Δ; Ρ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς] ⇒ Ρ'; Γ'
 ```
 
+[Back to top][toc]
+
 ### Additional Judgments
 
 #### `Ρ ⊢ μ π in r : τ_π ⇒ r_π`
@@ -352,6 +366,8 @@ Sτ ::= S(τ_1, ..., τ_n)
 ---------------------------------------------- WF-StructTuple
 Σ, struct S(τ_1, ..., τ_n) ⊢ S(τ_1, ..., τ_n)
 ```
+
+[Back to top][toc]
 
 ## Dynamic Semantics
 
@@ -490,6 +506,8 @@ R(ρ_x)(π) = ρ_π ↦ 1 ⊗ { ε ↦ sv_π }
 ------------------------------------------ E-TApp
 (σ, R, (Λς: κ. e) [τ]) → (σ, R, e[τ / ς])
 ```
+
+[Back to top][toc]
 
 ## Proof of Soundness
 
@@ -937,6 +955,8 @@ We want to step with:
 
 By IH, either `e_1 ∈ 𝕍` or we can step. In the former case, we know `e_1 : ∀ς : κ. τ_1`. By
 Canonical Forms, `e_1` is of the form `Λς : κ. e` Thus, we can apply `E-TApp` to step forward.
+
+[Back to top][toc]
 
 ### Preservation
 
@@ -1423,3 +1443,7 @@ From premise and knowledge that `e` is of the form ``, either:
 
 `e'` is well-typed: Since we left `Γ'` and `Ρ'` unchanged, we still know from our premise that our
 result is well-typed.
+
+[Back to top][toc]
+
+[toc]: #table-of-contents
