@@ -16,6 +16,9 @@ other useful insights as well.
   the overall expressivity of the language, e.g. Rust1 is _safe Rust_ + `Vec<T>`.
 - _Unsafe abstraction_ — an abstraction that cannot be implemented in _safe Rust_ (absolute) or the
   current _language level_ (relative) without the use of Rust's `unsafe` block.
+- _Lifetime_ — the span of time from when a value is allocated to when it is deallocated.
+- _Region_ — the space on the stack where a value is allocated for its _lifetime_ (see also:
+  [`why-regions.md`](notes/why-regions.md)).
 
 ## Navigating this repository
 
