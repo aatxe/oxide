@@ -191,7 +191,7 @@ r_1 ∉ Ρ ... r_n ∉ Ρ ;; i.e. all the referenced regions need to have been d
 ------------------------------------------------------------------------------------------ T-Free
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ'; Γ
 
-======================================================
+===================================================================================================
 
 Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
 f_1 ≠ 0
@@ -206,11 +206,20 @@ r_1 ∉ Ρ_2
 ----------------------------------------------------------- T-LetMut
 Σ; Δ; Ρ; Γ ⊢ let mut x: τ_1 = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
 
-Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
+Ρ ⊢ mut (Π.)*ε in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ 1 ⊗ π_path_set
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : τ_π ⇒ Ρ'; Γ'
------------------------------------------------- T-Assign
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.π := e : unit ⇒ Ρ'; Γ'
+Ρ ⊢ mut r_π
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : &r_n 1 τ_π ⇒ Ρ'; Γ'
+π_path_set ∪ { Π ↦ r_n } = new_path_set
+------------------------------------------------------ T-Assign
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.(Π.)*Π.ε := e
+                    : unit
+                    ⇒ Ρ', r_π ↦ τ_n ⊗ 1 ⊗ new_path_set; Γ'
+
+Ρ ⊢ mut r_x
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : &r_n 1 τ_π ⇒ Ρ'; Γ'
+--------------------------------------------------------- T-AssignEpsilon
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.ε := e : unit ⇒ Ρ'; Γ', x ↦ r_n
 
 Σ; Δ; Ρ; Γ, x_1 : τ_1 ↦ r_1, ..., x_n : τ_n ↦ r_n ⊢ e : τ_ret ⇒ Ρ'; Γ'
 ----------------------------------------------------------------------- T-Closure
@@ -481,11 +490,19 @@ R(ρ) = 1 ⊗ { Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
 ---------------------------------------------------------- E-Let
 (σ, R, let μ x: τ = ptr ρ ƒ in e) → (σ ∪ { x ↦ ρ }, R, e)
 
-σ(x) = ρ
+σ(x) = ρ_x
 ;; looking up the whole path through regions checks ƒ = 1
-R(ρ_x)(π) = ρ_π ↦ 1 ⊗ { ε ↦ sv_π }
-------------------------------------------------------------- E-AssignSimple
-(σ, R, x.π := sv) → (σ, R ∪ { ρ_π ↦ 1 ⊗ { ε ↦ sv } }, ())
+R(ρ_x)((Π.)*ε) = ρ_π ↦ 1 ⊗ path_set
+path_set ∪ { Π ↦ ρ } = new_path_set
+;; TODO(maybe): recursively remove ρ_π from R
+--------------------------------------------------------------------------- E-Assign
+(σ, R, x.(Π.)*Π.ε := ptr ρ 1) → (σ, R ∪ { ρ_π ↦ 1 ⊗ new_path_set }, ())
+
+σ(x) = ρ_x
+R(ρ_x) = 1 ⊗ path_set
+;; TODO(maybe): recursively remove ρ_x from R
+------------------------------------------------- E-AssignEpsilon
+(σ, R, x.ε := ptr ρ 1) → (σ ∪ { x ↦ ρ }, R, ())
 
 -------------------------------------------------------------------------------------------- E-App
 (σ, R, (|x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }) (ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n))
@@ -829,25 +846,55 @@ from case, by Canonical Forms, `e_1` is of the form `ptr ρ ƒ`. Thus, we can us
 
 From premise:
 ```
-Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
+Ρ ⊢ mut (Π.)*ε in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ 1 ⊗ π_path_set
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : τ_π ⇒ Ρ'; Γ'
------------------------------------------------- T-Assign
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.π := e : unit ⇒ Ρ'; Γ'
+Ρ ⊢ mut r_π
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : &r_n 1 τ_π ⇒ Ρ'; Γ'
+π_path_set ∪ { Π ↦ r_n } = new_path_set
+------------------------------------------------------ T-Assign
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.(Π.)*Π.ε := e
+                    : unit
+                    ⇒ Ρ', r_π ↦ τ_n ⊗ 1 ⊗ new_path_set; Γ'
 ```
 
 We want to step with:
 ```
-σ(x) = ρ
+σ(x) = ρ_x
 ;; looking up the whole path through regions checks ƒ = 1
-R(ρ_x)(π) = ρ_π ↦ 1 ⊗ { ε ↦ sv_π }
-------------------------------------------------------------- E-AssignSimple
-(σ, R, x.π := sv) → (σ, R ∪ { ρ_π ↦ 1 ⊗ { ε ↦ sv } }, ())
+R(ρ_x)((Π.)*ε) = ρ_π ↦ 1 ⊗ path_set
+path_set ∪ { Π ↦ ρ } = new_path_set
+;; TODO(maybe): recursively remove ρ_π from R
+--------------------------------------------------------------------------- E-Assign
+(σ, R, x.(Π.)*Π.ε := ptr ρ 1) → (σ, R ∪ { ρ_π ↦ 1 ⊗ new_path_set }, ())
 ```
 
-By IH, either `e ∈ 𝕍` or we can take a step. In the former case, if `τ_π` is a simple type (i.e.
-not a struct or tuple), then by Canonical Forms, we know that `e` is a simple value `sv`. Then, we
-can step using `E-AssignSimple`.
+By IH, either `e ∈ 𝕍` or we can take a step. In the former case, `e ∈ 𝕍` and of type `&r_n 1 τ`.
+Then, by Canonical Forms, `e` is of the form `ptr ρ 1`. Then, from
+`Ρ ⊢ mut (Π.)*ε in r_x : τ_π ⇒ r_π`, we know that `R(ρ_x)((Π.)*ε)` succeeds. Thus, we can step
+using `E-Assign`.
+
+##### Case `T-AssignEpsilon`:
+
+From premise:
+```
+Ρ ⊢ mut r_x
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : &r_n 1 τ_π ⇒ Ρ'; Γ'
+--------------------------------------------------------- T-AssignEpsilon
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.ε := e : unit ⇒ Ρ'; Γ', x ↦ r_n
+```
+
+We want to step with:
+```
+σ(x) = ρ_x
+R(ρ_x) = 1 ⊗ path_set
+;; TODO(maybe): recursively remove ρ_x from R
+------------------------------------------------- E-AssignEpsilon
+(σ, R, x.ε := ptr ρ 1) → (σ ∪ { x ↦ ρ }, R, ())
+```
+
+By IH, either `e ∈ 𝕍` or we can take a step. In the former case, `e ∈ 𝕍` and of type `&r_n 1 τ`.
+Then, by Canonical Forms, `e` is of the form `ptr ρ 1`. We know from `Ρ ⊢ mut r_x` that `ρ_x` has a
+capability of `1`. Thus, we can step using `E-AssignEpsilon`.
 
 ##### Case `T-App`:
 
@@ -1295,32 +1342,67 @@ analagous change of adding `x ↦ ρ` to `Γ`.
 `e'` is well-typed: We know from the premises of `T-LetImm` and `T-LetMut` that `e_2` is well typed
 in our `Γ'`. Since `E-Let` steps to `e_2`, we then know that it's well-typed.
 
-##### Case 'E-AssignSimple':
+##### Case 'E-Assign':
 
 From premise:
 ```
-σ(x) = ρ
+σ(x) = ρ_x
 ;; looking up the whole path through regions checks ƒ = 1
-R(ρ_x)(π) = ρ_π ↦ 1 ⊗ { ε ↦ sv_π }
-------------------------------------------------------------- E-AssignSimple
-(σ, R, x.π := sv) → (σ, R ∪ { ρ_π ↦ 1 ⊗ { ε ↦ sv } }, ())
+R(ρ_x)((Π.)*ε) = ρ_π ↦ 1 ⊗ path_set
+path_set ∪ { Π ↦ ρ } = new_path_set
+;; TODO(maybe): recursively remove ρ_π from R
+--------------------------------------------------------------------------- E-Assign
+(σ, R, x.(Π.)*Π.ε := ptr ρ 1) → (σ, R ∪ { ρ_π ↦ 1 ⊗ new_path_set }, ())
 ```
 
-From premise and knowledge that `e` is of the form `x.π := e_1` then:
+From premise and knowledge that `e` is of the form `x.(Π.)*Π.ε := ptr ρ 1` then:
 ```
-Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
+Ρ ⊢ mut (Π.)*ε in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ 1 ⊗ π_path_set
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : τ_π ⇒ Ρ'; Γ'
------------------------------------------------- T-Assign
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.π := e : unit ⇒ Ρ'; Γ'
+Ρ ⊢ mut r_π
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : &r_n 1 τ_π ⇒ Ρ'; Γ'
+π_path_set ∪ { Π ↦ r_n } = new_path_set
+------------------------------------------------------ T-Assign
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.(Π.)*Π.ε := e
+                    : unit
+                    ⇒ Ρ', r_π ↦ τ_n ⊗ 1 ⊗ new_path_set; Γ'
 ```
 
-`Γ'`: `E-AssignSimple` leaves `σ` unchanged, and so we can pick `Γ` as `Γ'`.
+`Γ'`: `E-Assign` leaves `σ` unchanged, and so we can pick `Γ'` to be `Γ`.
 
-`Ρ'`: In `E-AssignSimple`, we update the binding for `ρ_π` in `R` to point to the new value. Since
-the type of this value does not change, we can pick `Ρ` as `Ρ'`.
+`Ρ'`: In `E-Assign`, we look up the immediate parent of the node in the path (`(Π.)*ε`) and update
+its binding for `Π` to point to the new region `ρ`. We can mirror this change by picking `Ρ'` to be
+`Ρ` with `ρ_π ↦ τ_n ⊗ 1 ⊗ new_path_set` (where `new_path_set` is as appears in `T-Assign` premise).
 
-`e'` is well-typed: Since the resulting expression is `()`, the result is well-typed by `T-Unit`.
+`e'` is well-typed: The resulting expression of `E-Assign` is `()` which is well-typed by
+`T-Unit`.
+
+##### Case 'E-AssignEpsilon':
+
+From premise:
+```
+σ(x) = ρ_x
+R(ρ_x) = 1 ⊗ path_set
+;; TODO(maybe): recursively remove ρ_x from R
+------------------------------------------------- E-AssignEpsilon
+(σ, R, x.ε := ptr ρ 1) → (σ ∪ { x ↦ ρ }, R, ())
+```
+
+From premise and knowledge that `e` is of the form `x.ε := ptr ρ 1` then:
+```
+Ρ ⊢ mut r_x
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : &r_n 1 τ_π ⇒ Ρ'; Γ'
+--------------------------------------------------------- T-AssignEpsilon
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.ε := e : unit ⇒ Ρ'; Γ', x ↦ r_n
+```
+
+`Γ'`: In `E-AssignEpsilon`, we rebind `x` to the new region `ρ` from the pointer. We can mirror this
+by choosing `Γ'` to be `Γ` with `x ↦ ρ`.
+
+`Ρ'`: `E-AssignEpsilon` leaves `R` unchanged, and so we can pick `Ρ'` to be `Ρ`.
+
+`e'` is well-typed: The resulting expression of `E-AssignEpsilon` is `()` which is well-typed by
+`T-Unit`.
 
 ##### Case `E-App`:
 
