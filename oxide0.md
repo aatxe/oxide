@@ -40,7 +40,7 @@ rules for bindings: each binding expects to find a reference to a value at the r
 what enables/requires us to use `alloc` and `borrow` expressions, as these operations are the only
 ones that take something at a type `τ` and yield a reference at that type.
 
-[Back to top][toc]
+[˄ Back to top][toc]
 
 ## Syntax
 
@@ -110,7 +110,7 @@ region environments Ρ ::= •
                         | Ρ, r ↦ τ ⊗ ƒ ⊗ { ε ↦ r }
 ```
 
-[Back to top][toc]
+[˄ Back to top][toc]
 
 ## Static Semantics
 
@@ -290,7 +290,7 @@ r_1 ∉ Ρ_2 ... r_n ∉ Ρ_2
 Σ; Δ; Ρ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς] ⇒ Ρ'; Γ'
 ```
 
-[Back to top][toc]
+[˄ Back to top][toc]
 
 ### Additional Judgments
 
@@ -367,7 +367,7 @@ Sτ ::= S(τ_1, ..., τ_n)
 Σ, struct S(τ_1, ..., τ_n) ⊢ S(τ_1, ..., τ_n)
 ```
 
-[Back to top][toc]
+[˄ Back to top][toc]
 
 ## Dynamic Semantics
 
@@ -507,7 +507,7 @@ R(ρ_x)(π) = ρ_π ↦ 1 ⊗ { ε ↦ sv_π }
 (σ, R, (Λς: κ. e) [τ]) → (σ, R, e[τ / ς])
 ```
 
-[Back to top][toc]
+[˄ Back to top][toc]
 
 ## Proof of Soundness
 
@@ -956,7 +956,7 @@ We want to step with:
 By IH, either `e_1 ∈ 𝕍` or we can step. In the former case, we know `e_1 : ∀ς : κ. τ_1`. By
 Canonical Forms, `e_1` is of the form `Λς : κ. e` Thus, we can apply `E-TApp` to step forward.
 
-[Back to top][toc]
+[˄ Back to top][toc]
 
 ### Preservation
 
@@ -1444,6 +1444,6 @@ From premise and knowledge that `e` is of the form ``, either:
 `e'` is well-typed: Since we left `Γ'` and `Ρ'` unchanged, we still know from our premise that our
 result is well-typed.
 
-[Back to top][toc]
+[˄ Back to top][toc]
 
 [toc]: #table-of-contents
