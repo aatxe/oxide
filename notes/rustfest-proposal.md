@@ -41,6 +41,8 @@ for themselves!
 
 ## (Way Too Many) Details
 
+(This section was not actually included in the final submission.)
+
 ### Rough Outline
 
 1. Whirlwind Introduction to Semantics
