@@ -9,7 +9,7 @@
 - [Type System](#static-semantics)
   - [Typing extensions for runtime](#typing-extensions)
   - [Minor judgments](#additional-judgments)
-- [Operational Semantics](#operational-semantics)
+- [Operational Semantics](#dynamic-semantics)
 - [Proof of Soundness](#proof-of-soundness)
   - [Progress](#progress)
   - [Preservation](#preservation)
