@@ -1011,8 +1011,9 @@ Canonical Forms, `e_1` is of the form `Λς : κ. e` Thus, we can apply `E-TApp`
 
 **Theorem**:
 ```
-∀Σ, Ρ, Γ, σ, R, e, σ', R', e'. (Σ; •; Ρ; Γ ⊢ e : τ ⇒ Ρ_f; Γ_f) ∧ (σ, R, e) → (σ', R', e')
-                                 ⇒ ∃Ρ', Γ'. Σ; •; P'; Γ' ⊢ e' : τ ⇒ Ρ_f; Γ_f
+∀Σ, Ρ, Γ, σ, R, e, σ', R', e'.
+  (Σ; •; Ρ; Γ ⊢ e : τ ⇒ Ρ_f; Γ_f) ∧ (Ρ ⊢ R) ∧ (Γ ⊢ σ) ∧ (σ, R, e) → (σ', R', e')
+    ⇒ ∃Ρ', Γ'. (Γ' ⊢ σ') ∧ (Ρ' ⊢ R') ∧ (Σ; •; P'; Γ' ⊢ e' : τ ⇒ Ρ_f; Γ_f)
 ```
 
 #### Proof.
@@ -1036,11 +1037,13 @@ fresh ρ
 Σ; Δ; Ρ; Γ ⊢ alloc prim : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ { ε ↦ τ }; Γ'
 ```
 
-`Γ'`: `E-AllocSimple` did not change `σ` and so we pick `Γ` as `Γ'`.
+`Γ'` and `Γ' ⊢ σ'`: `E-AllocSimple` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'` and
+`Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'`: `E-AllocSimple` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to be
-`Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding `ρ ↦ τ ⊗ 1 ⊗ { ε ↦ τ }`. This
-corresponds to the same change we see being made in `T-AllocPrim`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-AllocSimple` changed `R` by adding a binding for a fresh `ρ`. So, we can pick
+`Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding `ρ ↦ τ ⊗ 1 ⊗ { ε ↦ τ }`.
+This corresponds to the same change we see being made in `T-AllocPrim`. Since we picked the change
+to mirror the one in `R`, `Ρ' ⊢ R'` still holds.
 
 `e'` is well-typed: From `E-AllocSimple`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'` that
 we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction `ƒ`)
@@ -1068,12 +1071,13 @@ fresh ρ
              Γ_n
 ```
 
-`Γ'`: `E-AllocTup` did not change `σ` and so we pick `Γ` as `Γ'`.
+`Γ'` and `Γ' ⊢ σ'`: `E-AllocTup` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'` and `Γ'`
+are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'`: `E-AllocTup` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to be
-`Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
+`Ρ'` and `Ρ' ⊢ R'`: `E-AllocTup` changed `R` by adding a binding for a fresh `ρ`. So, we can pick
+`Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
 `ρ ↦ τ ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n }`. This corresponds to the same change we see being made in
-`T-AllocTup`.
+`T-AllocTup`. Since we picked this change to mirror the one in `R`, `Ρ' ⊢ R'` still holds.
 
 `e'` is well-typed: From `E-AllocTup`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'` that
 we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction `ƒ`)
@@ -1102,12 +1106,13 @@ fresh ρ
              Γ_n
 ```
 
-`Γ'`: `E-AllocStructTup` did not change `σ` and so we pick `Γ` as `Γ'`.
+`Γ'` and `Γ' ⊢ σ'`: `E-AllocStructTup` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'`: `E-AllocStructTup` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to be
-`Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
+`Ρ'` and `Ρ' ⊢ R'`: `E-AllocStructTup` changed `R` by adding a binding for a fresh `ρ`. So, we can
+pick `Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
 `ρ ↦ τ ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n }`. This corresponds to the same change we see being made in
-`T-AllocStructTup`.
+`T-AllocStructTup`. Since we picked this change to mirror the one in `R`, `Ρ' ⊢ R'` still holds.
 
 `e'` is well-typed: From `E-AllocStructTup`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'`
 that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction
@@ -1136,12 +1141,14 @@ fresh ρ
              Γ_n
 ```
 
-`Γ'`: `E-AllocStructRecord` did not change `σ` and so we pick `Γ` as `Γ'`.
+`Γ'` and `Γ' ⊢ σ'`: `E-AllocStructRecord` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'`: `E-AllocStructRecord` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to
-be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
+`Ρ'` and `Ρ' ⊢ R'`: `E-AllocStructRecord` changed `R` by adding a binding for a fresh `ρ`. So, we
+can pick `Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
 `ρ ↦ τ ⊗ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }`. This corresponds to the same change we see being made
-in `T-AllocStructRecord`.
+in `T-AllocStructRecord`. Since we picked this change to mirror the one in `R`, `Ρ' ⊢ R'` still
+holds.
 
 `e'` is well-typed: From `E-AllocStructRecord`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
 `Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
@@ -1174,12 +1181,14 @@ fresh ρ
                       Γ, x ↦ r_x
 ```
 
-`Γ'`: `E-BorrowImm` did not change `σ` and so we pick `Γ` as `Γ'`.
+`Γ'` and `Γ' ⊢ σ'`: `E-BorrowImm` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'` and
+`Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'`: `E-BorrowImm` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to
-be `Ρ` (recall from the premise `Ρ ⊢ R`) with the changed binding for `ρ_π` modifying the fraction
-from `ƒ_π` to `ƒ_n` and the extra binding `ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ ρ_π }`. This corresponds to the
-same change we see being made in `T-BorrowImm`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-BorrowImm` changed `R` by adding a binding for a fresh `ρ`. So, we can pick
+`Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the changed binding for `ρ_π` modifying the
+fraction from `ƒ_π` to `ƒ_n` and the extra binding `ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ ρ_π }`. This corresponds
+to the same change we see being made in `T-BorrowImm`. Since we picked this change to mirror the one
+in `R`, `Ρ' ⊢ R'` still holds.
 
 `e'` is well-typed: From `E-BorrowImm`, we know `e' = ptr ρ ƒ_n`. Then, using the `Γ'` and
 `Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
@@ -1210,12 +1219,14 @@ fresh ρ
                       Γ, x ↦ r_x
 ```
 
-`Γ'`: `E-BorrowMut` did not change `σ` and so we pick `Γ` as `Γ'`.
+`Γ'` and `Γ' ⊢ σ'`: `E-BorrowMut` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'` and
+`Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'`: `E-BorrowMut` changed `R` by adding a binding for a fresh `ρ`. So, we can pick `Ρ'` to
-be `Ρ` (recall from the premise `Ρ ⊢ R`) with the changed binding for `ρ_π` modifying the fraction
-from `ƒ_π` to `1` and the extra binding `ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ ρ_π }`. This corresponds to the same
-change we see being made in `T-BorrowMut`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-BorrowMut` changed `R` by adding a binding for a fresh `ρ`. So, we can pick
+`Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the changed binding for `ρ_π` modifying the
+fraction from `ƒ_π` to `1` and the extra binding `ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ ρ_π }`. This corresponds to
+the same change we see being made in `T-BorrowMut`. Since we picked this change to mirror the one in
+`R`, `Ρ' ⊢ R'` still holds.
 
 `e'` is well-typed: From `E-BorrowMut`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
 `Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
@@ -1242,12 +1253,13 @@ From premise and knowledge that `e` is of the form `drop x`:
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ, r ↦ τ_r ⊗ ƒ_n ⊗ path_set; Γ
 ```
 
-`Γ'`: `E-Drop` changed `σ` by removing `x` and so we can mirror the change by picking `Γ'` to be
-`Γ / x`.
+`Γ'` and `Γ' ⊢ σ'`: `E-Drop` changed `σ` by removing `x` and so we can mirror the change by picking
+`Γ'` to be `Γ / x`. Since we picked this change to mirror the one in `σ'`, `Γ' ⊢ σ'` still holds.
 
-`Ρ'`: `E-Drop` changes `R` by removing `ρ_x` and updating the binding for `ρ_s` with the new
-fraction `ƒ_n`. So, we'll pick `Ρ'` that mirrors this by taking `Ρ`, removing `ρ_x` and adding
-`ρ_s ↦ τ_s ⊗ ƒ_n ⊗ path_set`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-Drop` changes `R` by removing `ρ_x` and updating the binding for `ρ_s` with
+the new fraction `ƒ_n`. So, we'll pick `Ρ'` that mirrors this by taking `Ρ`, removing `ρ_x` and
+adding `ρ_s ↦ τ_s ⊗ ƒ_n ⊗ path_set`. Since we picked this change to mirror the one in `R'`,
+`Ρ' ⊢ R'` still holds.
 
 `e'` is well-typed: From `E-Drop`, we know `e' = ()` and this is trivially well-typed by `T-Unit`.
 
@@ -1269,11 +1281,13 @@ From premise and knowledge that `e` is of the form `drop x`:
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ'; Γ
 ```
 
-`Γ'`: `E-FreeImmediate` changed `σ` by removing `x` and so we can mirror the change by picking `Γ'`
-to be `Γ / x`.
+`Γ'` and `Γ' ⊢ σ'`: `E-FreeImmediate` changed `σ` by removing `x` and so we can mirror the change by
+picking `Γ'` to be `Γ / x`. Since we picked this change to mirror the one in `σ'`, `Γ' ⊢ σ'` still
+holds.
 
-`Ρ'`: `E-FreeImmediate` changed `R` by removing `ρ` and so we can mirror the change by picking `Ρ'`
-to be `Ρ / x`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-FreeImmediate` changed `R` by removing `ρ` and so we can mirror the change by
+picking `Ρ'` to be `Ρ / x`. Since we picked this change to mirror the one in `R'`, `Ρ' ⊢ R'` still
+holds.
 
 `e'` is well-typed: From `E-FreeImmediate`, we know `e' = ()` and this is trivially well-typed by
 `T-Unit`.
@@ -1298,11 +1312,11 @@ r_1 ∉ Ρ ... r_n ∉ Ρ ;; i.e. all the referenced regions need to have been d
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ'; Γ
 ```
 
-`Γ'`: `E-Free` changed `σ` by removing `x` and so we can mirror the change by picking `Γ'` to be
-`Γ / x`.
+`Γ'` and `Γ' ⊢ σ'`: `E-Free` changed `σ` by removing `x` and so we can mirror the change by picking
+`Γ'` to be `Γ / x`. Since we picked this change to mirror the one in `σ'`, `Γ' ⊢ σ'` still holds.
 
-`Ρ'`: `E-Free` changed `R` by removing `ρ` and so we can mirror the change by picking `Ρ'` to be
-`Ρ / x`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-Free` changed `R` by removing `ρ` and so we can mirror the change by picking
+`Ρ'` to be `Ρ / x`. Since we picked this change to mirror the one in `R'`, `Ρ' ⊢ R'` still holds.
 
 `e'` is well-typed: From `E-Free`, we know `e' = ()` and this is trivially well-typed by `T-Unit`.
 
@@ -1334,10 +1348,13 @@ r_1 ∉ Ρ_2
 Σ; Δ; Ρ; Γ ⊢ let mut x: τ_1 = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
 ```
 
-`Γ'`: `E-Let` adds a new binding to `σ` for `x` to `ρ`, and so we can pick `Γ'` to have the
-analagous change of adding `x ↦ ρ` to `Γ`.
+`Γ'` and `Γ' ⊢ σ'`: `E-Let` adds a new binding to `σ` for `x` to `ρ`, and so we can pick `Γ'` to
+have the analagous change of adding `x ↦ ρ` to `Γ`. Since we picked this change to mirror the one in
+`σ'`, `Γ' ⊢ σ'` still holds.
 
-`Ρ'`: `E-Let` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-Let` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'` and
+`Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
+
 
 `e'` is well-typed: We know from the premises of `T-LetImm` and `T-LetMut` that `e_2` is well typed
 in our `Γ'`. Since `E-Let` steps to `e_2`, we then know that it's well-typed.
@@ -1368,14 +1385,15 @@ From premise and knowledge that `e` is of the form `x.(Π.)*Π.ε := ptr ρ 1` t
                     ⇒ Ρ', r_π ↦ τ_n ⊗ 1 ⊗ new_path_set; Γ'
 ```
 
-`Γ'`: `E-Assign` leaves `σ` unchanged, and so we can pick `Γ'` to be `Γ`.
+`Γ'` and `Γ' ⊢ σ'`: `E-Assign` leaves `σ` unchanged, and so we can pick `Γ'` to be `Γ`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'`: In `E-Assign`, we look up the immediate parent of the node in the path (`(Π.)*ε`) and update
-its binding for `Π` to point to the new region `ρ`. We can mirror this change by picking `Ρ'` to be
-`Ρ` with `ρ_π ↦ τ_n ⊗ 1 ⊗ new_path_set` (where `new_path_set` is as appears in `T-Assign` premise).
+`Ρ'` and `Ρ' ⊢ R'`: In `E-Assign`, we look up the immediate parent of the node in the path
+(`(Π.)*ε`) and update its binding for `Π` to point to the new region `ρ`. We can mirror this change
+by picking `Ρ'` to be `Ρ` with `ρ_π ↦ τ_n ⊗ 1 ⊗ new_path_set` (where `new_path_set` is as appears in
+`T-Assign` premise). Since we picked this change to mirror the one in `R'`, `Ρ' ⊢ R'` still holds.
 
-`e'` is well-typed: The resulting expression of `E-Assign` is `()` which is well-typed by
-`T-Unit`.
+`e'` is well-typed: The resulting expression of `E-Assign` is `()` which is well-typed by `T-Unit`.
 
 ##### Case 'E-AssignEpsilon':
 
@@ -1396,10 +1414,12 @@ From premise and knowledge that `e` is of the form `x.ε := ptr ρ 1` then:
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.ε := e : unit ⇒ Ρ'; Γ', x ↦ r_n
 ```
 
-`Γ'`: In `E-AssignEpsilon`, we rebind `x` to the new region `ρ` from the pointer. We can mirror this
-by choosing `Γ'` to be `Γ` with `x ↦ ρ`.
+`Γ'` and `Γ' ⊢ σ'`: In `E-AssignEpsilon`, we rebind `x` to the new region `ρ` from the pointer. We
+can mirror this by choosing `Γ'` to be `Γ` with `x ↦ ρ`. Since we picked this change to mirror the
+one in `σ'`, `Γ' ⊢ σ'` stll holds.
 
-`Ρ'`: `E-AssignEpsilon` leaves `R` unchanged, and so we can pick `Ρ'` to be `Ρ`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-AssignEpsilon` leaves `R` unchanged, and so we can pick `Ρ'` to be `Ρ`. Since
+`R'` and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 
 `e'` is well-typed: The resulting expression of `E-AssignEpsilon` is `()` which is well-typed by
 `T-Unit`.
@@ -1421,10 +1441,12 @@ From premise and knowledge that `e` is of the form `e_1 e_2` then:
 Σ; Δ; Ρ; Γ ⊢ e_1 e_2 : τ_ret ⇒ Ρ_2; Γ_2
 ```
 
-`Γ'`: In `E-App`, we add new bindings to `σ` for `x_1` through `x_n`. We can mirror this for `Γ` by
-picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`.
+`Γ'` and `Γ' ⊢ σ'`: In `E-App`, we add new bindings to `σ` for `x_1` through `x_n`. We can mirror
+this for `Γ` by picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`. Since we picked this change to
+mirror the one in `σ'`, `Γ' ⊢ σ'` still holds.
 
-`Ρ'`: `E-App` leaves `R` unchanged, and so we can pick `Ρ` as `Ρ'`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-App` leaves `R` unchanged, and so we can pick `Ρ` as `Ρ'`. Since `R'` and
+`Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 
 `e'` is well-typed: Since we know `e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret`, we know that
 `e`, the body of the function and the result of stepping by `E-App`, is well typed in our `Γ'`.
@@ -1447,10 +1469,12 @@ From premise and knowledge that `e` is of the form `e_1 e_2` then:
 Σ; Δ; Ρ; Γ ⊢ e_1 e_2 : τ_ret ⇒ Ρ_2; Γ_2
 ```
 
-`Γ'`: In `E-MoveApp`, we add new bindings to `σ` for `x_1` through `x_n`. We can mirror this for `Γ`
-by picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`.
+`Γ'` and `Γ' ⊢ σ'`: In `E-MoveApp`, we add new bindings to `σ` for `x_1` through `x_n`. We can
+mirror this for `Γ` by picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`. Since we picked this
+change to mirror the one in `σ'`, `Γ' ⊢ σ'` still holds.
 
-`Ρ'`: `E-MoveApp` leaves `R` unchanged, and so we can pick `Ρ` as `Ρ'`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-MoveApp` leaves `R` unchanged, and so we can pick `Ρ` as `Ρ'`. Since `R'` and
+`Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 
 `e'` is well-typed: Since we know `e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret`, we know that
 `e`, the body of the function and the result of stepping by `E-MoveApp`, is well typed in our `Γ'`.
@@ -1471,9 +1495,11 @@ From premise and knowledge that `e` is of the form ``, either:
 Σ; Δ; Ρ; Γ ⊢ let () = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
 ```
 
-`Γ'`: `E-LetUnit` leaves `σ` unchanged and so we can pick `Γ'` to be `Γ`.
+`Γ'` and `Γ' ⊢ σ'`: `E-LetUnit` leaves `σ` unchanged and so we can pick `Γ'` to be `Γ`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'`: `E-LetUnit` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-LetUnit` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'`
+and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 
 `e'` is well-typed: We know from the `T-LetUnit` that `e_2`, our result, is well-typed.
 
@@ -1496,10 +1522,12 @@ r ∉ Ρ_2
              in e_2 : τ_r ⇒ Ρ_2; Γ_2
 ```
 
-`Γ'`: `E-LetTup`, like `E-App`, adds bindings for `x_1` through `x_n` to `σ`. We can mirror this by
-picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`.
+`Γ'` and `Γ' ⊢ σ'`: `E-LetTup`, like `E-App`, adds bindings for `x_1` through `x_n` to `σ`. We can
+mirror this by picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`. Since we picked this change to
+mirror the one in `σ'`, `Γ' ⊢ σ'` still holds.
 
-`Ρ'`: `E-LetTup` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-LetTup` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'`
+and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 
 `e'` is well-typed: We know from `T-LetTup` that `e_2`, our result, is well-typed with the changes
 we made in `Γ'` (i.e. adding bindings for `x_1` through `x_n`).
@@ -1521,9 +1549,11 @@ From premise and knowledge that `e` is of the form ``, either:
 Σ; Δ; Ρ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς] ⇒ Ρ'; Γ'
 ```
 
-`Γ'`: `E-TApp` leaves `σ` unchanged, and so we can pick `Γ'` to be `Γ`.
+`Γ'` and `Γ' ⊢ σ'`: `E-TApp` leaves `σ` unchanged, and so we can pick `Γ'` to be `Γ`. Since `σ'` and
+`Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'`: `E-TApp` leaves `R` unchanged, and so we can pick `Ρ'` to be `Ρ`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-TApp` leaves `R` unchanged, and so we can pick `Ρ'` to be `Ρ`. Since `R'` and
+`Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 
 `e'` is well-typed: Since we left `Γ'` and `Ρ'` unchanged, we still know from our premise that our
 result is well-typed.
