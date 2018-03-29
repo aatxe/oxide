@@ -6,6 +6,7 @@
   - [Bindings and borrowing](#bindings-and-borrowing)
 - [Syntax](#syntax)
   - [Syntax extensions for runtime](#syntax-extensions)
+  - [Syntactic Sugar](#syntactic-sugar)
 - [Type System](#static-semantics)
   - [Invariants](#invariants)
   - [Main inference rules](#inference-rules)
@@ -112,6 +113,19 @@ region environments Ρ ::= •
                         | Ρ, r ↦ τ ⊗ ƒ ⊗ { Π ↦ r, ... }
                         | Ρ, r ↦ τ ⊗ ƒ ⊗ { ε ↦ τ }
                         | Ρ, r ↦ τ ⊗ ƒ ⊗ { ε ↦ r }
+```
+
+[˄ Back to top][toc]
+
+## Syntactic Sugar
+
+```
+x.ε             ↔    x
+x.(Π.)*Π.ε      ↔    x.(Π.)*Π
+e_1 (e_2, ...)  ↔    e_1(e_2, ...)
+Λα: ★. e       ↔    Λα. e
+Λϱ: RGN. e      ↔    Λϱ. e
+Λζ: FRAC. e     ↔    Λζ. e
 ```
 
 [˄ Back to top][toc]
