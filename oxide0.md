@@ -436,6 +436,20 @@ well-formed.
 Σ; Δ ⊢ Ρ, r ↦ τ ⊗ f ⊗ { ε ↦ ρ }
 ```
 
+#### `Σ; Δ; Ρ ⊢ Γ`
+Meaning: In a data structure context `Σ`, kind environment `Δ`, and region environment `Ρ`, the type
+environment `Γ` is well-formed.
+
+```
+------------ WF-EmptyTypeEnv
+Σ; Δ; Ρ ⊢ •
+
+Σ; Δ; Ρ ⊢ Γ
+Σ; Δ; Ρ ⊢ r : RGN
+-------------------- WF-IdentifierBound
+Σ; Δ; Ρ ⊢ Γ, x ↦ r
+```
+
 [˄ Back to top][toc]
 
 ## Dynamic Semantics
