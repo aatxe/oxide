@@ -73,16 +73,16 @@ fraction types f ::= ζ -- fraction variables
 primitives prim ::= true | false | n | ()
 base types bt ::= bool | u32 | unit
 
-χ ::= τ | ρ | ƒ
+all-kind types χ ::= ς | τ | ρ | ƒ
 
-types τ ::= ς
-          | bt
-          | &r f τ -- μ-reference in region r at type τ
-          | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n → τ_ret -- ordinary closure
-          | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret -- move closure
-          | ∀ς: κ. τ
-          | τ_1 ⊗ ... ⊗ τ_n
-          | S
+★-kind types τ ::= α
+                  | bt
+                  | &r f τ -- μ-reference in region r at type τ
+                  | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n → τ_ret -- ordinary closure
+                  | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret -- move closure
+                  | ∀ς: κ. τ
+                  | τ_1 ⊗ ... ⊗ τ_n
+                  | S
 
 expressions e ::= prim
                 | alloc e
@@ -99,7 +99,7 @@ expressions e ::= prim
                 | S { x_1: e_1, ..., x_n: e_n }
                 | S(e_1, ..., e_n)
                 | Λς: κ. e
-                | e [τ]
+                | e [χ]
 
 type environments Γ ::= • | Γ, x ↦ r
 kind environments Δ ::= • | Δ, ς : κ
@@ -308,11 +308,11 @@ r_1 ∉ Ρ_2 ... r_n ∉ Ρ_2
 -------------------------------------------- T-TAbs
 Σ; Δ; Ρ; Γ ⊢ Λς: κ. e : ∀ς : κ. τ ⇒ Ρ'; Γ'
 
-Σ; Δ; Ρ; Γ ⊢ e_1 : ∀ς: κ. τ ⇒ Ρ'; Γ'
-Δ ⊢ τ_2 : κ
-τ_2 ∈ { f } ⇒ τ_2 ≠ 0
----------------------------------------------- T-TApp
-Σ; Δ; Ρ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς] ⇒ Ρ'; Γ'
+Σ; Δ; Ρ; Γ ⊢ e : ∀ς: κ. τ ⇒ Ρ'; Γ'
+Δ ⊢ χ : κ
+χ ~ f ⇒ χ ≠ 0
+---------------------------------------- T-TApp
+Σ; Δ; Ρ; Γ ⊢ e [χ] : τ[χ / ς] ⇒ Ρ'; Γ'
 ```
 
 [˄ Back to top][toc]
@@ -442,7 +442,7 @@ evaluation contexts E ::= []
                         | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = E; e
                         | S { x: ptr ρ ƒ, ... x: E, x: e ... }
                         | S(ptr ρ ƒ, ... E, e ...)
-                        | E [τ]
+                        | E [χ]
 
 simple values sv ::= true | false
                    | n
@@ -567,7 +567,7 @@ R(ρ_x) = 1 ⊗ path_set
   → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
 
 ------------------------------------------ E-TApp
-(σ, R, (Λς: κ. e) [τ]) → (σ, R, e[τ / ς])
+(σ, R, (Λς: κ. e) [χ]) → (σ, R, e[χ / ς])
 ```
 
 [˄ Back to top][toc]
@@ -1043,21 +1043,21 @@ By IH, either `e_1 ∈ 𝕍` or we can step. In the former case, we know
 
 From premise:
 ```
-Σ; Δ; Ρ; Γ ⊢ e_1 : ∀ς: κ. τ ⇒ Ρ'; Γ'
-Δ ⊢ τ_2 : κ
-τ_2 ∈ { f } ⇒ τ_2 ≠ 0
----------------------------------------------- T-TApp
-Σ; Δ; Ρ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς] ⇒ Ρ'; Γ'
+Σ; Δ; Ρ; Γ ⊢ e : ∀ς: κ. τ ⇒ Ρ'; Γ'
+Δ ⊢ χ : κ
+χ ~ f ⇒ χ ≠ 0
+---------------------------------------- T-TApp
+Σ; Δ; Ρ; Γ ⊢ e [χ] : τ[χ / ς] ⇒ Ρ'; Γ'
 ```
 
 We want to step with:
 ```
 ------------------------------------------ E-TApp
-(σ, R, (Λς: κ. e) [τ]) → (σ, R, e[τ / ς])
+(σ, R, (Λς: κ. e) [χ]) → (σ, R, e[χ / ς])
 ```
 
-By IH, either `e_1 ∈ 𝕍` or we can step. In the former case, we know `e_1 : ∀ς : κ. τ_1`. By
-Canonical Forms, `e_1` is of the form `Λς : κ. e` Thus, we can apply `E-TApp` to step forward.
+By IH, either `e ∈ 𝕍` or we can step. In the former case, we know `e : ∀ς : κ. τ`. By Canonical
+Forms, `e` is of the form `Λς : κ. e` Thus, we can apply `E-TApp` to step forward.
 
 [˄ Back to top][toc]
 
@@ -1592,16 +1592,16 @@ we made in `Γ'` (i.e. adding bindings for `x_1` through `x_n`).
 From premise:
 ```
 ------------------------------------------ E-TApp
-(σ, R, (Λς: κ. e) [τ]) → (σ, R, e[τ / ς])
+(σ, R, (Λς: κ. e) [χ]) → (σ, R, e[χ / ς])
 ```
 
 From premise and knowledge that `e` is of the form ``, either:
 ```
-Σ; Δ; Ρ; Γ ⊢ e_1 : ∀ς: κ. τ ⇒ Ρ'; Γ'
-Δ ⊢ τ_2 : κ
-τ_2 ∈ { f } ⇒ τ_2 ≠ 0
----------------------------------------------- T-TApp
-Σ; Δ; Ρ; Γ ⊢ e_1 [τ_2] : τ[τ_2 / ς] ⇒ Ρ'; Γ'
+Σ; Δ; Ρ; Γ ⊢ e : ∀ς: κ. τ ⇒ Ρ'; Γ'
+Δ ⊢ χ : κ
+χ ~ f ⇒ χ ≠ 0
+---------------------------------------- T-TApp
+Σ; Δ; Ρ; Γ ⊢ e [χ] : τ[χ / ς] ⇒ Ρ'; Γ'
 ```
 
 `Γ'` and `Γ' ⊢ σ'`: `E-TApp` leaves `σ` unchanged, and so we can pick `Γ'` to be `Γ`. Since `σ'` and
