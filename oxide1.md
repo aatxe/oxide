@@ -13,7 +13,7 @@ just a sketch right now, but I'm working on it. 😊
 
 ## Notes
 
-- It seems like we probably want ranges as well to work with `Vecs** in a lot of ways.
+- It seems like we probably want ranges as well to work with `Vecs` in a lot of ways.
 - It appears that we might actually be able to just call `Ρ` something like "static memory" and `R`
   "memory" and put both the stack and heap inside of it without problems. This might be a nice
   simplification. It seems more promising, but also like it might make us more forgiving than Rust?
