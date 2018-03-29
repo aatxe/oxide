@@ -28,9 +28,9 @@ struct Point {
 }
 
 // We require `mut` here because moves and mutable borrows are the same.
-let mut x = alloc 5
-in let mut y = alloc 9
-in Point {
+let mut x = alloc 5;
+let mut y = alloc 9;
+Point {
     x: borrow mut x.ε,
     y: borrow mut y.ε,
 }
@@ -103,7 +103,7 @@ struct Point {
     y: u32,
 }
 
-let mut x = 5 in
+let mut x = 5;
 x.ε := 4;
 Point {
     x: borrow mut x.ε,
@@ -160,7 +160,7 @@ let mut pt = alloc Point {
  *   ρ_pt ↦ Point ⊗ 1 ⊗ { x ↦ ρ_x, y ↦ ρ_y },
  * }
  */
-let foo = borrow imm pt.x.ε in
+let foo = borrow imm pt.x.ε;
 /* Ρ: {
  *   ρ_x ↦ Foo ⊗ 1 / 2 ⊗ { ε ↦ Foo },
  *   ρ_y ↦ Foo ⊗ 1 ⊗ { ε ↦ Foo },
@@ -168,7 +168,7 @@ let foo = borrow imm pt.x.ε in
  *   foo ↦ Foo ⊗ 1 / 2 ⊗ { ε ↦ Foo },
  * }
  */
-let mut pt2 = borrow mut pt.ε in
+let mut pt2 = borrow mut pt.ε;
 //            ^^^^^^^^^^^^^^^ cannot borrow mut because `ρ_pt` subpath `ρ_x` capability ≠ `1`.
 ()
 ```
