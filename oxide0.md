@@ -73,6 +73,8 @@ fraction types f ::= ζ -- fraction variables
 primitives prim ::= true | false | n | ()
 base types bt ::= bool | u32 | unit
 
+χ ::= τ | ρ | ƒ
+
 types τ ::= ς
           | bt
           | &r f τ -- μ-reference in region r at type τ
@@ -125,7 +127,8 @@ environment `Γ`, expression `e` has type `τ` and produces the updated environm
 ```
 Σ; Δ ⊢ Ρ
 Σ; Δ; Ρ ⊢ Γ
-Σ; Δ; Ρ; Γ ⊢ τ
+Σ; Δ; Ρ ⊢ τ : ★
+⊢ Σ
 ```
 
 ### Inference Rules
@@ -387,6 +390,36 @@ Sτ ::= S(τ_1, ..., τ_n)
 
 ---------------------------------------------- WF-StructTuple
 Σ, struct S(τ_1, ..., τ_n) ⊢ S(τ_1, ..., τ_n)
+```
+
+#### `Σ; Δ ⊢ Ρ`
+Meaning: In a data structure context `Σ` and kind environment `Δ`, the region environment `Ρ` is
+well-formed.
+
+```
+--------- WF-EmptyRegionEnv
+Σ; Δ ⊢ •
+
+Σ; Δ ⊢ Ρ
+Σ; Δ; Ρ ⊢ τ : ★
+Σ; Δ; Ρ ⊢ f : FRAC
+Σ ⊢ Π_1 in τ             ...             Σ ⊢ Π_n in τ
+Σ; Δ; Ρ ⊢ r_1 : RGN      ...      Σ; Δ; Ρ ⊢ r_n : RGN
+------------------------------------------------------- WF-NestedRegion
+Σ; Δ ⊢ Ρ, r ↦ τ ⊗ f ⊗ { Π_1 ↦ r_1, ..., Π_n ↦ r_n }
+
+Σ; Δ ⊢ Ρ
+Σ; Δ; Ρ ⊢ τ : ★
+Σ; Δ; Ρ ⊢ f : FRAC
+--------------------------------- WF-ImmediateRegion
+Σ; Δ ⊢ Ρ, r ↦ τ ⊗ f ⊗ { ε ↦ τ }
+
+Σ; Δ ⊢ Ρ
+Σ; Δ; Ρ ⊢ τ : ★
+Σ; Δ; Ρ ⊢ f : FRAC
+Σ; Δ; Ρ ⊢ ρ : RGN
+--------------------------------- WF-AliasRegion
+Σ; Δ ⊢ Ρ, r ↦ τ ⊗ f ⊗ { ε ↦ ρ }
 ```
 
 [˄ Back to top][toc]
