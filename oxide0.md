@@ -115,12 +115,12 @@ region environments Ρ ::= •
 ## Static Semantics
 
 Judgment: `Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'`  
-Meaning: In a data environment Σ, kind environment Δ, region environment Ρ and type environment Γ,
-expression e has type τ and produces the updated environments Ρ' and Γ'.
+Meaning: In a data environment `Σ`, kind environment `Δ`, region environment `Ρ` and type
+environment `Γ`, expression `e` has type `τ` and produces the updated environments `Ρ'` and `Γ'`.
 
 ```
 fresh ρ
-Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
+Σ; Δ; Ρ; Γ ⊢ prim : τ ⇒ Ρ; Γ
 ------------------------------------------------------------------ T-AllocPrim
 Σ; Δ; Ρ; Γ ⊢ alloc prim : &ρ 1 τ ⇒ Ρ', ρ ↦ τ ⊗ 1 ⊗ { ε ↦ τ }; Γ'
 
@@ -211,10 +211,11 @@ r_1 ∉ Ρ_2
 Ρ ⊢ mut r_π
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : &r_n 1 τ_π ⇒ Ρ'; Γ'
 π_path_set ∪ { Π ↦ r_n } = new_path_set
------------------------------------------------------- T-Assign
+--------------------------------------------------------- T-Assign
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ x.(Π.)*Π.ε := e
                     : unit
-                    ⇒ Ρ', r_π ↦ τ_n ⊗ 1 ⊗ new_path_set; Γ'
+                    ⇒ Ρ', r_π ↦ τ_n ⊗ 1 ⊗ new_path_set;
+                      Γ'
 
 Ρ ⊢ mut r_x
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e : &r_n 1 τ_π ⇒ Ρ'; Γ'
@@ -270,7 +271,7 @@ r_1 ∉ Ρ_2
 Σ; Δ; Ρ; Γ ⊢ e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n) ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1, x_1 ↦ r_1, ... x_n ↦ r_n ⊢ e_2 : t_r ⇒ Ρ_2; Γ_2
 r_1 ∉ Ρ_2 ... r_n ∉ Ρ_2
------------------------------------------------------------------ T-LetTup
+------------------------------------------------------------------ T-LetTup
 Σ; Δ; Ρ; Γ ⊢ let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1
              in e_2 : τ_r ⇒ Ρ_2; Γ_2
 
@@ -285,11 +286,11 @@ r_1 ∉ Ρ_2 ... r_n ∉ Ρ_2
 ...
 Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &r_n 1 τ_n ⇒ Ρ_n; Γ_n
 Σ ⊢ S(τ_1, ..., τ_n)
---------------------------------------------- T-StructTup
+-------------------------------------------------- T-StructTup
 Σ; Δ; Ρ; Γ ⊢ S(e_1, ..., e_n) : S ⇒ Ρ_n; Γ_n
 
 Σ; Δ, ς : κ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
------------------------------------ T-TAbs
+-------------------------------------------- T-TAbs
 Σ; Δ; Ρ; Γ ⊢ Λς: κ. e : ∀ς : κ. τ ⇒ Ρ'; Γ'
 
 Σ; Δ; Ρ; Γ ⊢ e_1 : ∀ς: κ. τ ⇒ Ρ'; Γ'
