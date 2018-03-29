@@ -120,12 +120,12 @@ region environments Ρ ::= •
 ## Syntactic Sugar
 
 ```
-x.ε             ↔    x
-x.(Π.)*Π.ε      ↔    x.(Π.)*Π
-e_1 (e_2, ...)  ↔    e_1(e_2, ...)
-Λα: ★. e        ↔    Λα. e
-Λϱ: RGN. e      ↔    Λϱ. e
-Λζ: FRAC. e     ↔    Λζ. e
+x.ε             ↔  x
+x.(Π.)*Π.ε      ↔  x.(Π.)*Π
+e_1 (e_2, ...)  ↔  e_1(e_2, ...)
+Λα: ★. e        ↔  Λα. e
+Λϱ: RGN. e      ↔  Λϱ. e
+Λζ: FRAC. e     ↔  Λζ. e
 ```
 
 [˄ Back to top][toc]
