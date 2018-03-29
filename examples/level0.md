@@ -103,9 +103,9 @@ struct Point {
     y: u32,
 }
 
-let mut x = 5
-in let () = x.ε := 4
-in Point {
+let mut x = 5 in
+x.ε := 4;
+Point {
     x: borrow mut x.ε,
     y: alloc 9,
 }

@@ -89,7 +89,7 @@ expressions e ::= prim
                 | |x_1: &r_1 f_1 τ_1, ... x_n: &r_n f_n τ_n| { e }
                 | move |x_1: &r_1 f_1 τ_1, ... x_n: &r_n f_n τ_n| { e }
                 | e_1 e_2
-                | let () = e_1 in e_2
+                | e_1; e_2
                 | (e_1, ..., e_n)
                 | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1 in e_2
                 | S { x_1: e_1, ..., x_n: e_n }
@@ -259,8 +259,8 @@ r_1 ∉ Ρ_2
 
 Σ; Δ; Ρ; Γ ⊢ e_1 : unit ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
--------------------------------------------------- T-LetUnit
-Σ; Δ; Ρ; Γ ⊢ let () = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
+---------------------------------------- T-Seq
+Σ; Δ; Ρ; Γ ⊢ e_1; e_2 : τ_2 ⇒ Ρ_2; Γ_2
 
 Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
 ...
@@ -514,8 +514,8 @@ R(ρ_x) = 1 ⊗ path_set
        (ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n))
   → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
 
-------------------------------------- E-LetUnit
-(σ, R, let () = () in e) → (σ, R, e)
+-------------------------- E-Seq
+(σ, R, (); e) → (σ, R, e)
 
 ----------------------------------------------------------------------- E-LetTup
 (σ, R, let (μ_1 x_1, ..., μ_n x_n) = (ptr ρ_1 1, ..., ptr ρ_n 1) in e)
@@ -945,24 +945,24 @@ then by Canonical Forms `e_1` is of the form
 `move |x_1: &ρ_1 ƒ_1 τ_1, ..., x_n: &ρ_n ƒ_n τ_n| { e }` and `e_2` is of the form
 `(ptr ρ_1 ƒ_1, ..., ptr ρ_n ƒ_n)`. So, we can step using `E-MoveApp`.
 
-##### Case `T-LetUnit`:
+##### Case `T-Seq`:
 
 From premise:
 ```
 Σ; Δ; Ρ; Γ ⊢ e_1 : unit ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
--------------------------------------------------- T-LetUnit
-Σ; Δ; Ρ; Γ ⊢ let () = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
+---------------------------------------- T-Seq
+Σ; Δ; Ρ; Γ ⊢ e_1; e_2 : τ_2 ⇒ Ρ_2; Γ_2
 ```
 
 We want to step with:
 ```
-------------------------------------- E-LetUnit
-(σ, R, let () = () in e) → (σ, R, e)
+-------------------------- E-Seq
+(σ, R, (); e) → (σ, R, e)
 ```
 
 By IH, either `e_1 ∈ 𝕍` or we can take a step. In the former case, we know `e_1 : unit` and thus by
-Canonical Forms `e_1` is `()`. Thus, we can step using `E-LetUnit`.
+Canonical Forms `e_1` is `()`. Thus, we can step using `E-Seq`.
 
 ##### Case `T-LetTup`:
 
@@ -1482,29 +1482,29 @@ change to mirror the one in `σ'`, `Γ' ⊢ σ'` still holds.
 `e'` is well-typed: Since we know `e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret`, we know that
 `e`, the body of the function and the result of stepping by `E-MoveApp`, is well typed in our `Γ'`.
 
-##### Case `E-LetUnit`:
+##### Case `E-Seq`:
 
 From premise:
 ```
-------------------------------------- E-LetUnit
-(σ, R, let () = () in e) → (σ, R, e)
+-------------------------- E-Seq
+(σ, R, (); e) → (σ, R, e)
 ```
 
 From premise and knowledge that `e` is of the form ``, either:
 ```
 Σ; Δ; Ρ; Γ ⊢ e_1 : unit ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
--------------------------------------------------- T-LetUnit
-Σ; Δ; Ρ; Γ ⊢ let () = e_1 in e_2 : τ_2 ⇒ Ρ_2; Γ_2
+---------------------------------------- T-Seq
+Σ; Δ; Ρ; Γ ⊢ e_1; e_2 : τ_2 ⇒ Ρ_2; Γ_2
 ```
 
-`Γ'` and `Γ' ⊢ σ'`: `E-LetUnit` leaves `σ` unchanged and so we can pick `Γ'` to be `Γ`. Since `σ'`
-and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+`Γ'` and `Γ' ⊢ σ'`: `E-Seq` leaves `σ` unchanged and so we can pick `Γ'` to be `Γ`. Since `σ'` and
+`Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 
-`Ρ'` and `Ρ' ⊢ R'`: `E-LetUnit` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'`
-and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
+`Ρ'` and `Ρ' ⊢ R'`: `E-Seq` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'` and
+`Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 
-`e'` is well-typed: We know from the `T-LetUnit` that `e_2`, our result, is well-typed.
+`e'` is well-typed: We know from the `T-Seq` that `e_2`, our result, is well-typed.
 
 ##### Case `E-LetTup`:
 
