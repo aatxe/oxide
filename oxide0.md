@@ -7,6 +7,8 @@
 - [Syntax](#syntax)
   - [Syntax extensions for runtime](#syntax-extensions)
 - [Type System](#static-semantics)
+  - [Invariants](#invariants)
+  - [Main inference rules](#inference-rules)
   - [Typing extensions for runtime](#typing-extensions)
   - [Minor judgments](#additional-judgments)
 - [Operational Semantics](#dynamic-semantics)
@@ -117,6 +119,16 @@ region environments Ρ ::= •
 Judgment: `Σ; Δ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'`  
 Meaning: In a data environment `Σ`, kind environment `Δ`, region environment `Ρ` and type
 environment `Γ`, expression `e` has type `τ` and produces the updated environments `Ρ'` and `Γ'`.
+
+### Invariants
+
+```
+Σ; Δ ⊢ Ρ
+Σ; Δ; Ρ ⊢ Γ
+Σ; Δ; Ρ; Γ ⊢ τ
+```
+
+### Inference Rules
 
 ```
 fresh ρ
@@ -544,6 +556,11 @@ R(ρ_x) = 1 ⊗ path_set
   8. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret`, then `v` is of
      the form `move |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
   9. if `v` is a value of type `∀ς : κ. e`, then `v` is of the form `Λς: κ. e`.
+
+**Lemma** (Type Substitution):
+
+  If `Σ; Δ, ς : κ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'` and `Σ; Δ; Ρ; Γ ⊢ χ`,
+  then `Σ; Δ; Ρ[χ / ς]; Γ[χ / ς] ⊢ e[χ / ς] : τ[χ / ς] ⇒ Ρ'[χ / ς]; Γ'[χ / ς]`
 
 [˄ Back to top][toc]
 
