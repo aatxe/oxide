@@ -450,6 +450,14 @@ environment `Γ` is well-formed.
 Σ; Δ; Ρ ⊢ Γ, x ↦ r
 ```
 
+#### `Σ; Δ; Ρ ⊢ χ : κ`
+Meaning: In a data structure context `Σ`, kind environment `Δ`, and region environment `Ρ`, the
+generalized type `χ` has the kind `κ`.
+
+#### `⊢ Σ`
+Meaning: The data structure context `Σ` is well-formed. That is, all of the names are unique, and
+all of the component types are well-formed with respect to type variables bound in the definition.
+
 [˄ Back to top][toc]
 
 ## Dynamic Semantics
