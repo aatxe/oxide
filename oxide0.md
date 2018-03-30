@@ -841,7 +841,7 @@ From premise:
 f_π / 2 ↓ f_n
 fresh ρ
 -------------------------------------------------------- T-BorrowImm
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow imm x.π : &ρ ƒ_n τ_π
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow imm x.π : &ρ f_n τ_π
                     ⇒ Ρ, r_π ↦ τ_π ⊗ f_n ⊗ π_path_set,
                          ρ ↦ τ_π ⊗ f_n ⊗ { ε ↦ r_π };
                       Γ, x ↦ r_x
