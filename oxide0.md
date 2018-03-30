@@ -454,6 +454,47 @@ environment `Γ` is well-formed.
 Meaning: In a data structure context `Σ`, kind environment `Δ`, and region environment `Ρ`, the
 generalized type `χ` has the kind `κ`.
 
+```
+------------------------ K-TVar
+Σ; Δ, ς : κ; Ρ ⊢ ς : κ
+
+------------------ K-BaseType
+Σ; Δ; Ρ ⊢ bt : ★
+
+Σ; Δ; Ρ ⊢ r : RGN
+Σ; Δ; Ρ ⊢ f : FRAC
+---------------------- K-Ref
+Σ; Δ; Ρ ⊢ &r f τ : ★
+
+Σ; Δ; Ρ ⊢ r_1 : RGN    Σ; Δ; Ρ ⊢ f_1 : FRAC
+...
+Σ; Δ; Ρ ⊢ r_n : RGN    Σ; Δ; Ρ ⊢ f_n : FRAC
+Σ; Δ; Ρ ⊢ τ_ret : ★
+------------------------------------------------------ K-Closure
+Σ; Δ; Ρ ⊢ &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n → τ_ret : ★
+
+Σ; Δ; Ρ ⊢ r_1 : RGN    Σ; Δ; Ρ ⊢ f_1 : FRAC
+...
+Σ; Δ; Ρ ⊢ r_n : RGN    Σ; Δ; Ρ ⊢ f_n : FRAC
+Σ; Δ; Ρ ⊢ τ_ret : ★
+------------------------------------------------------ K-MoveClosure
+Σ; Δ; Ρ ⊢ &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret : ★
+
+Σ; Δ, ς : κ; Ρ ⊢ τ : ★
+------------------------- K-Universal
+Σ; Δ; Ρ ⊢ ∀ς : κ. τ : ★
+
+Σ; Δ; Ρ ⊢ τ_1 : ★
+...
+Σ; Δ; Ρ ⊢ τ_n : ★
+-------------------------------- K-Tuple
+Σ; Δ; Ρ ⊢ τ_1 ⊗ ... ⊗ τ_n : ★
+
+S ∈ Σ
+----------------- K-Struct
+Σ; Δ; Ρ ⊢ S : ★
+```
+
 #### `⊢ Σ`
 Meaning: The data structure context `Σ` is well-formed. That is, all of the names are unique, and
 all of the component types are well-formed with respect to type variables bound in the definition.
