@@ -527,7 +527,7 @@ all of the component types are well-formed with respect to type variables bound 
 ---- WF-EmptyStructContext
 ⊢ •
 
-⊢ Σ
+⊢ Σ    S ∉ Σ
 Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n };
   •, ς_1 : κ_1, ..., ς_n : κ_n; •
 ⊢ τ_1 : ★
@@ -538,7 +538,7 @@ all of the component types are well-formed with respect to type variables bound 
 --------------------------------------------------------------------- WF-DefnStructRecord
 ⊢ Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n }
 
-⊢ Σ
+⊢ Σ    S ∉ Σ
 Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n>(τ_1, ..., τ_n);
   •, ς_1 : κ_1, ..., ς_n : κ_n; •
 ⊢ τ_1 : ★
