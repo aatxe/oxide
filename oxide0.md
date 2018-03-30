@@ -1781,4 +1781,6 @@ fresh ρ
            ⇒ Ρ', ρ ↦ u32 ⊗ 1 ⊗ { ε ↦ u32 }; Γ'
 ```
 
+[˄ Back to top][toc]
+
 [toc]: #table-of-contents
