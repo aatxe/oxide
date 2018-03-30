@@ -1450,7 +1450,7 @@ have the analagous change of adding `x ↦ ρ` to `Γ`. Since we picked this cha
 `e'` is well-typed: We know from the premises of `T-LetImm` and `T-LetMut` that `e_2` is well typed
 in our `Γ'`. Since `E-Let` steps to `e_2`, we then know that it's well-typed.
 
-##### Case 'E-Assign':
+##### Case `E-Assign`:
 
 From premise:
 ```
@@ -1486,7 +1486,7 @@ by picking `Ρ'` to be `Ρ` with `ρ_π ↦ τ_n ⊗ 1 ⊗ new_path_set` (where 
 
 `e'` is well-typed: The resulting expression of `E-Assign` is `()` which is well-typed by `T-Unit`.
 
-##### Case 'E-AssignEpsilon':
+##### Case `E-AssignEpsilon`:
 
 From premise:
 ```
