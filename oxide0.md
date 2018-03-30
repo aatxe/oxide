@@ -838,12 +838,12 @@ From premise:
 Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
 Ρ ⊢ imm r_π
-ƒ_π / 2 ↓ ƒ_n
+f_π / 2 ↓ f_n
 fresh ρ
 -------------------------------------------------------- T-BorrowImm
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow imm x.π : &ρ ƒ_n τ_π
-                    ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
-                         ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π };
+                    ⇒ Ρ, r_π ↦ τ_π ⊗ f_n ⊗ π_path_set,
+                         ρ ↦ τ_π ⊗ f_n ⊗ { ε ↦ r_π };
                       Γ, x ↦ r_x
 ```
 
@@ -869,7 +869,7 @@ condition is met for `E-BorrowImm` as well. Thus, we can indeed step with `E-Bor
 From premise:
 ```
 Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
-Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
+Ρ(r_π) = τ_π ⊗ f_π ⊗ π_path_set
 Ρ ⊢ mut r_π
 fresh ρ
 ------------------------------------------------------ T-BorrowMut
@@ -899,11 +899,11 @@ condition is met for `E-BorrowMut` as well. Thus, we can indeed step with `E-Bor
 
 From premise:
 ```
-Ρ(r_x) = τ_x ⊗ ƒ_x ⊗ { ε ↦ r }
-Ρ(r) = τ_r ⊗ ƒ_r ⊗ path_set
-ƒ_r + ƒ_x ↓ ƒ_n
+Ρ(r_x) = τ_x ⊗ f_x ⊗ { ε ↦ r }
+Ρ(r) = τ_r ⊗ f_r ⊗ path_set
+f_r + f_x ↓ f_n
 ----------------------------------------------------------------------- T-Drop
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ, r ↦ τ_r ⊗ ƒ_n ⊗ path_set; Γ
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ, r ↦ τ_r ⊗ f_n ⊗ path_set; Γ
 ```
 
 We want to step with:
@@ -1341,13 +1341,13 @@ fresh ρ
 From premise and knowledge that `e` is of the form `borrow imm x.π`:
 ```
 Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
-Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
-ƒ_π / 2 ↓ ƒ_n
+Ρ(r_π) = τ_π ⊗ f_π ⊗ π_path_set
+f_π / 2 ↓ f_n
 fresh ρ
 -------------------------------------------------------- T-BorrowImm
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow imm x.π : &ρ ƒ_n τ_π
-                    ⇒ Ρ, r_π ↦ τ_π ⊗ ƒ_n ⊗ π_path_set,
-                         ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ r_π };
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow imm x.π : &ρ f_n τ_π
+                    ⇒ Ρ, r_π ↦ τ_π ⊗ f_n ⊗ π_path_set,
+                         ρ ↦ τ_π ⊗ f_n ⊗ { ε ↦ r_π };
                       Γ, x ↦ r_x
 ```
 
@@ -1380,7 +1380,7 @@ fresh ρ
 From premise and knowledge that `e` is of the form `borrow mut x.π`:
 ```
 Ρ ⊢ mut π in r_x : τ_π ⇒ r_π
-Ρ(r_π) = τ_π ⊗ ƒ_π ⊗ π_path_set
+Ρ(r_π) = τ_π ⊗ 1 ⊗ π_path_set
 fresh ρ
 ------------------------------------------------------ T-BorrowMut
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ borrow mut x.π : &ρ 1 τ_π
@@ -1416,11 +1416,11 @@ R(ρ_x) = ƒ_x ⊗ { ε ↦ ρ_s }
 
 From premise and knowledge that `e` is of the form `drop x`:
 ```
-Ρ(r_x) = τ_x ⊗ ƒ_x ⊗ { ε ↦ r }
-Ρ(r) = τ_r ⊗ ƒ_r ⊗ path_set
-ƒ_r + ƒ_x ↓ ƒ_n
+Ρ(r_x) = τ_x ⊗ f_x ⊗ { ε ↦ r }
+Ρ(r) = τ_r ⊗ f_r ⊗ path_set
+f_r + f_x ↓ f_n
 ----------------------------------------------------------------------- T-Drop
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ, r ↦ τ_r ⊗ ƒ_n ⊗ path_set; Γ
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ, r ↦ τ_r ⊗ f_n ⊗ path_set; Γ
 ```
 
 `Γ'` and `Γ' ⊢ σ'`: `E-Drop` changed `σ` by removing `x` and so we can mirror the change by picking
