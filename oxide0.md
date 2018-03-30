@@ -1757,6 +1757,7 @@ result is well-typed.
 ## A less minimal Oxide0
 
 ### Syntax
+
 ```
 unary operators unop ::= ! | -
 binary operators bop ::= + | * | == | != | && | ||
@@ -1767,6 +1768,7 @@ expressions e ::= ...
 ```
 
 ### Statics
+
 ```
 binop ∈ { +, * }
 Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_1 1 u32 ⇒ Ρ_1; Γ_1
