@@ -461,6 +461,13 @@ generalized type `χ` has the kind `κ`.
 ------------------------ K-TVar
 Σ; Δ, ς : κ; Ρ ⊢ ς : κ
 
+ρ ∈ Ρ
+------------------ K-ConcreteRegion
+Σ; Δ; Ρ ⊢ ρ : RGN
+
+------------------- K-ConcreteFraction
+Σ; Δ; Ρ ⊢ ƒ : FRAC
+
 ------------------ K-BaseType
 Σ; Δ; Ρ ⊢ bt : ★
 
@@ -501,6 +508,33 @@ S ∈ Σ
 #### `⊢ Σ`
 Meaning: The data structure context `Σ` is well-formed. That is, all of the names are unique, and
 all of the component types are well-formed with respect to type variables bound in the definition.
+
+```
+---- WF-EmptyStructContext
+⊢ •
+
+⊢ Σ
+Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n };
+  •, ς_1 : κ_1, ..., ς_n : κ_n; •
+⊢ τ_1 : ★
+...
+Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n };
+  •, ς_1 : κ_1, ..., ς_n : κ_n; •
+⊢ τ_n : ★
+--------------------------------------------------------------------- WF-DefnStructRecord
+⊢ Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n }
+
+⊢ Σ
+Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n>(τ_1, ..., τ_n);
+  •, ς_1 : κ_1, ..., ς_n : κ_n; •
+⊢ τ_1 : ★
+...
+Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n>(τ_1, ..., τ_n);
+  •, ς_1 : κ_1, ..., ς_n : κ_n; •
+⊢ τ_1 : ★
+------------------------------------------------------- WF-DefnStructTuple
+⊢ Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n>(τ_1, ..., τ_n)
+```
 
 [˄ Back to top][toc]
 
