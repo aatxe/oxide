@@ -16,6 +16,7 @@
 - [Proof of Soundness](#proof-of-soundness)
   - [Progress](#progress)
   - [Preservation](#preservation)
+- [Extensions to make oxide0 less minimal](#a-less-minimal-oxide0)
 
 ## Summary
 
@@ -1728,5 +1729,44 @@ From premise and knowledge that `e` is of the form ``, either:
 result is well-typed.
 
 [˄ Back to top][toc]
+
+## A less minimal Oxide0
+
+### Syntax
+```
+unary operators unop ::= ! | -
+binary operators bop ::= + | * | == | != | && | ||
+
+expressions e ::= ...
+                | e_1 bop e_2
+                | unop e
+```
+
+### Statics
+```
+binop ∈ { +, * }
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_1 1 u32 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &ρ_2 1 u32 ⇒ Ρ_2; Γ_2
+fresh ρ
+---------------------------------------------------- T-AddMul
+Σ; Δ; Ρ; Γ ⊢ e_1 binop e_2 : &ρ 1 u32
+           ⇒ Ρ_2, ρ ↦ u32 ⊗ 1 ⊗ { ε ↦ u32 }; Γ_2
+
+binop ∈ { ==, != }
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_1 1 τ ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &ρ_2 1 τ ⇒ Ρ_2; Γ_2
+fresh ρ
+------------------------------------------------------ T-EqNotEq
+Σ; Δ; Ρ; Γ ⊢ e_1 binop e_2 : &ρ 1 bool
+           ⇒ Ρ_2, ρ ↦ bool ⊗ 1 ⊗ { ε ↦ bool }; Γ_2
+
+binop ∈ { &&, || }
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_1 1 bool ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &ρ_2 1 bool ⇒ Ρ_2; Γ_2
+fresh ρ
+------------------------------------------------------ T-AndOr
+Σ; Δ; Ρ; Γ ⊢ e_1 binop e_2 : &ρ 1 bool
+           ⇒ Ρ_2, ρ ↦ bool ⊗ 1 ⊗ { ε ↦ bool }; Γ_2
+```
 
 [toc]: #table-of-contents
