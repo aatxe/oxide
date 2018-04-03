@@ -121,6 +121,10 @@ region environments Ρ ::= •
 
 ## Syntactic Sugar
 
+For each of the following examples of syntactic sugar, the left-hand side is the desugared form, and
+the right-hand side is the sugar. The sugar exists largely to make code easier to read, but also to
+bridge the gap between oxide core syntax and Rust.
+
 ```
 x.ε             ↔  x
 x.(Π.)*Π.ε      ↔  x.(Π.)*Π
