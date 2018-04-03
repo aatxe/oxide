@@ -137,11 +137,19 @@ e_1 (e_2, ...)  ↔  e_1(e_2, ...)
 Λα: ★. e        ↔  Λα. e
 Λϱ: RGN. e      ↔  Λϱ. e
 Λζ: FRAC. e     ↔  Λζ. e
+{ e }           ↔  e;
 
 S::<> { x_1: e_1, ..., x_n: e_n }        ↔  S { x_1: e_1, ..., x_n: e_n }
 S::<>(e_1, ..., e_n)                     ↔  S(e_1, ..., e_n)
 if e { ... } else { if e' { ... } ... }  ↔  if { ... } else if e' { ... } ...
 if e { ... } else { () }                 ↔  if e { ... }
+
+;; fixed-sized arrays are just sugar for tuples!
+[τ; n]                     ↔  (τ_0, ..., τ_n)
+x[n]                       ↔  x.n.ε
+x.(Π.)*Π[n]                ↔  x.(Π.)*Π.n.ε
+for x in e_a for n { e_b } ↔  let mut x = borrow mut e_a[0]; e_b; ...
+                              let mut x = borrow mut e_a[n-1]; e_b;
 ```
 
 [˄ Back to top][toc]
