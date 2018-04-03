@@ -75,7 +75,12 @@ fraction types f ::= ζ -- fraction variables
 primitives prim ::= true | false | n | ()
 base types bt ::= bool | u32 | unit
 
-all-kind types χ ::= ς | τ | ρ | ƒ
+all-kind types χ ::= ς
+                   | τ
+                   | ρ
+                   | ƒ
+                   | rgn of x.π
+                   | cap of x.π
 
 ★-kind types τ ::= α
                   | bt
@@ -436,23 +441,23 @@ well-formed.
 Σ; Δ ⊢ •
 
 Σ; Δ ⊢ Ρ
-Σ; Δ; Ρ ⊢ τ : ★
-Σ; Δ; Ρ ⊢ f : FRAC
+Σ; Δ; Ρ; • ⊢ τ : ★
+Σ; Δ; Ρ; • ⊢ f : FRAC
 Σ ⊢ Π_1 in τ             ...             Σ ⊢ Π_n in τ
-Σ; Δ; Ρ ⊢ r_1 : RGN      ...      Σ; Δ; Ρ ⊢ r_n : RGN
+Σ; Δ; Ρ; • ⊢ r_1 : RGN   ...   Σ; Δ; Ρ; • ⊢ r_n : RGN
 ------------------------------------------------------- WF-NestedRegion
 Σ; Δ ⊢ Ρ, r ↦ τ ⊗ f ⊗ { Π_1 ↦ r_1, ..., Π_n ↦ r_n }
 
 Σ; Δ ⊢ Ρ
-Σ; Δ; Ρ ⊢ τ : ★
-Σ; Δ; Ρ ⊢ f : FRAC
+Σ; Δ; Ρ; • ⊢ τ : ★
+Σ; Δ; Ρ; • ⊢ f : FRAC
 --------------------------------- WF-ImmediateRegion
 Σ; Δ ⊢ Ρ, r ↦ τ ⊗ f ⊗ { ε ↦ τ }
 
 Σ; Δ ⊢ Ρ
-Σ; Δ; Ρ ⊢ τ : ★
-Σ; Δ; Ρ ⊢ f : FRAC
-Σ; Δ; Ρ ⊢ ρ : RGN
+Σ; Δ; Ρ; • ⊢ τ : ★
+Σ; Δ; Ρ; • ⊢ f : FRAC
+Σ; Δ; Ρ; • ⊢ ρ : RGN
 --------------------------------- WF-AliasRegion
 Σ; Δ ⊢ Ρ, r ↦ τ ⊗ f ⊗ { ε ↦ ρ }
 ```
@@ -466,61 +471,69 @@ environment `Γ` is well-formed.
 Σ; Δ; Ρ ⊢ •
 
 Σ; Δ; Ρ ⊢ Γ
-Σ; Δ; Ρ ⊢ r : RGN
--------------------- WF-IdentifierBound
+Σ; Δ; Ρ; Γ ⊢ r : RGN
+---------------------- WF-IdentifierBound
 Σ; Δ; Ρ ⊢ Γ, x ↦ r
 ```
 
-#### `Σ; Δ; Ρ ⊢ χ : κ`
-Meaning: In a data structure context `Σ`, kind environment `Δ`, and region environment `Ρ`, the
-generalized type `χ` has the kind `κ`.
+#### `Σ; Δ; Ρ; Γ ⊢ χ : κ`
+Meaning: In a data structure context `Σ`, kind environment `Δ`, region environment `Ρ`, and type
+environment `Γ`, the generalized type `χ` has the kind `κ`.
 
 ```
------------------------- K-TVar
-Σ; Δ, ς : κ; Ρ ⊢ ς : κ
+--------------------------- K-TVar
+Σ; Δ, ς : κ; Ρ; Γ ⊢ ς : κ
 
 ρ ∈ Ρ
------------------- K-ConcreteRegion
-Σ; Δ; Ρ ⊢ ρ : RGN
+---------------------- K-ConcreteRegion
+Σ; Δ; Ρ; Γ ⊢ ρ : RGN
 
-------------------- K-ConcreteFraction
-Σ; Δ; Ρ ⊢ ƒ : FRAC
+---------------------- K-ConcreteFraction
+Σ; Δ; Ρ; Γ ⊢ ƒ : FRAC
 
------------------- K-BaseType
-Σ; Δ; Ρ ⊢ bt : ★
+Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
+---------------------------------------- K-RgnOf
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ rgn of x.π : RGN
 
-Σ; Δ; Ρ ⊢ r : RGN
-Σ; Δ; Ρ ⊢ f : FRAC
----------------------- K-Ref
-Σ; Δ; Ρ ⊢ &r f τ : ★
+Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
+----------------------------------------- K-CapOf
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ cap of x.π : FRAC
 
-Σ; Δ; Ρ ⊢ r_1 : RGN    Σ; Δ; Ρ ⊢ f_1 : FRAC
+--------------------- K-BaseType
+Σ; Δ; Ρ; Γ ⊢ bt : ★
+
+Σ; Δ; Ρ; Γ ⊢ r : RGN
+Σ; Δ; Ρ; Γ ⊢ f : FRAC
+-------------------------- K-Ref
+Σ; Δ; Ρ; Γ ⊢ &r f τ : ★
+
+Σ; Δ; Ρ; Γ ⊢ r_1 : RGN    Σ; Δ; Ρ ⊢ f_1 : FRAC
 ...
-Σ; Δ; Ρ ⊢ r_n : RGN    Σ; Δ; Ρ ⊢ f_n : FRAC
-Σ; Δ; Ρ ⊢ τ_ret : ★
------------------------------------------------------- K-Closure
-Σ; Δ; Ρ ⊢ &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n → τ_ret : ★
+Σ; Δ; Ρ; Γ ⊢ r_n : RGN    Σ; Δ; Ρ ⊢ f_n : FRAC
+Σ; Δ; Ρ; Γ ⊢ τ_ret : ★
+---------------------------------------------------------- K-Closure
+Σ; Δ; Ρ; Γ ⊢ &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n → τ_ret : ★
 
-Σ; Δ; Ρ ⊢ r_1 : RGN    Σ; Δ; Ρ ⊢ f_1 : FRAC
+Σ; Δ; Ρ; Γ ⊢ r_1 : RGN    Σ; Δ; Ρ; Γ ⊢ f_1 : FRAC
 ...
-Σ; Δ; Ρ ⊢ r_n : RGN    Σ; Δ; Ρ ⊢ f_n : FRAC
-Σ; Δ; Ρ ⊢ τ_ret : ★
------------------------------------------------------- K-MoveClosure
-Σ; Δ; Ρ ⊢ &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret : ★
+Σ; Δ; Ρ; Γ ⊢ r_n : RGN    Σ; Δ; Ρ; Γ ⊢ f_n : FRAC
+Σ; Δ; Ρ; Γ ⊢ τ_ret : ★
+---------------------------------------------------------- K-MoveClosure
+Σ; Δ; Ρ; Γ ⊢ &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret : ★
 
-Σ; Δ, ς : κ; Ρ ⊢ τ : ★
-------------------------- K-Universal
-Σ; Δ; Ρ ⊢ ∀ς : κ. τ : ★
+Σ; Δ, ς : κ; Ρ; Γ ⊢ τ : ★
+----------------------------- K-Universal
+Σ; Δ; Ρ; Γ ⊢ ∀ς : κ. τ : ★
 
-Σ; Δ; Ρ ⊢ τ_1 : ★
+Σ; Δ; Ρ; Γ ⊢ τ_1 : ★
 ...
-Σ; Δ; Ρ ⊢ τ_n : ★
--------------------------------- K-Tuple
-Σ; Δ; Ρ ⊢ τ_1 ⊗ ... ⊗ τ_n : ★
+Σ; Δ; Ρ; Γ ⊢ τ_n : ★
+----------------------------------- K-Tuple
+Σ; Δ; Ρ; Γ ⊢ τ_1 ⊗ ... ⊗ τ_n : ★
 
 S ∈ Σ
------------------ K-Struct
-Σ; Δ; Ρ ⊢ S : ★
+-------------------- K-Struct
+Σ; Δ; Ρ; Γ ⊢ S : ★
 ```
 
 #### `⊢ Σ`
