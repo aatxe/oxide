@@ -722,8 +722,21 @@ R(ρ) = ƒ ⊗ { ε ↦ false }
 (σ, R, let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = (ptr ρ_1 1, ..., ptr ρ_n 1); e)
   → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
 
+χ ≠ rgn of x.π ∧ χ ≠ cap of x.π
 ------------------------------------------ E-TApp
 (σ, R, (Λς: κ. e) [χ]) → (σ, R, e[χ / ς])
+
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
+------------------------------------------------------ E-TAppRgnOf
+(σ, R, (Λς: κ. e) [rgn of x.π]) → (σ, R, e[ρ_π / ς])
+
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
+------------------------------------------------------ E-TAppCapOf
+(σ, R, (Λς: κ. e) [cap of x.π]) → (σ, R, e[ƒ_π / ς])
 ```
 
 [˄ Back to top][toc]
