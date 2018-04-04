@@ -40,9 +40,11 @@ This repository is split into five parts:
 
 - [Linear Regions Are All You Need][linrgn]
 - [L3: A Linear Language with Locations][linloc]
+- [A Step-Indexed Model of Substructural State][substruct]
 - [Checking Interference with Fractional Permissions][fracperm]
 
 [niko]: http://smallcultfollowing.com/babysteps/blog/2016/10/02/observational-equivalence-and-unsafe-code/
 [linrgn]: http://www.ccs.neu.edu/home/amal/papers/linrgn.pdf
 [linloc]: http://www.ccs.neu.edu/home/amal/papers/linloc-techrpt.pdf
+[substruct]: http://www.ccs.neu.edu/home/amal/papers/substruct.pdf
 [fracperm]: https://link.springer.com/content/pdf/10.1007%2F3-540-44898-5_4.pdf
