@@ -29,8 +29,8 @@ simplify the move-vs-borrow distinction by treating all moves as mutable borrows
 consequence of our fractional capabilities.
 
 To keep the style of programming close to real Rust, capabilities are always packaged inside of our
-reference type (`&r f τ`). Consequently, every type is used under references. I think of this as
-making their existence somewhere on the stack explicit in some sense. The major differences
+reference type (`&r f τ`). Consequently, every type is always used under references. I think of this
+as making their existence somewhere on the stack explicit in some sense. The major differences
 syntactically from Rust are the placement of `alloc` expressions around values (which represent
 allocation on the **stack**), and the use of the word `borrow` instead of `&` in the expression form
 of borrowing.
@@ -42,7 +42,7 @@ You can find examples of Rust0 code and its corresponding `oxide0` form [here](e
 As noted above, all values are used under references. This can be seen by looking at the typing
 rules for bindings: each binding expects to find a reference to a value at the right type. This is
 what enables/requires us to use `alloc` and `borrow` expressions, as these operations are the only
-ones that take something at a type `τ` and yield a reference at that type.
+ones that yield a reference at some type `τ`.
 
 [˄ Back to top][toc]
 
@@ -583,7 +583,7 @@ all of the component types are well-formed with respect to type variables bound 
 
 ```
 expresions e ::= ...
-               | ptr ρ ƒ 
+               | ptr ρ ƒ
 
 evaluation contexts E ::= []
                         | alloc E
@@ -601,7 +601,7 @@ evaluation contexts E ::= []
 simple values sv ::= true | false
                    | n
                    | ()
-                   | ptr ρ ƒ 
+                   | ptr ρ ƒ
                    | |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
                    | move |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
                    | Λς: κ. e
@@ -810,8 +810,21 @@ fresh ρ
 (σ, R, alloc sv) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv } }, ptr ρ 1)
 ```
 
-It is easy to check that all primitives are included in `sv` (and `𝕍`). Thus, we can step with
-`E-AllocSimple`.
+Relevant extra info:
+```
+primitives prim ::= true | false | n | ()
+
+simple values sv ::= true | false
+                   | n
+                   | ()
+                   | ptr ρ ƒ
+                   | |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
+                   | move |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
+                   | Λς: κ. e
+```
+
+It is easy to check (by looking at the grammar) that all primitives are included in `sv` (and `𝕍`).
+Thus, we can step with `E-AllocSimple`.
 
 ##### Case `T-AllocTup`:
 
@@ -1793,6 +1806,11 @@ result is well-typed.
 [˄ Back to top][toc]
 
 ## A less minimal Oxide0
+
+`Oxide0` as described throughout this document is still a very minimal language, and lacks many of
+the operations we need to write meaningful programs. The following presents some extensions to the
+language that make it closer to a "real" language. Notably, we continue to replicate the pattern of
+using every value behind a reference type so that it is packaged with its capability.
 
 ### Syntax
 
