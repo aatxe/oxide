@@ -83,13 +83,13 @@ all-kind types χ ::= ς
                    | cap of x.π
 
 ★-kind types τ ::= α
-                  | bt
-                  | &r f τ -- μ-reference in region r at type τ
-                  | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n → τ_ret -- ordinary closure
-                  | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret -- move closure
-                  | ∀ς: κ. τ
-                  | τ_1 ⊗ ... ⊗ τ_n
-                  | S
+                 | bt
+                 | &r f τ -- μ-reference in region r at type τ
+                 | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n → τ_ret -- ordinary closure
+                 | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret -- move closure
+                 | ∀ς: κ. τ
+                 | τ_1 ⊗ ... ⊗ τ_n
+                 | S
 
 expressions e ::= prim
                 | alloc e
