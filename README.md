@@ -5,9 +5,10 @@ The name is tentative, but the goal of building a Featherweight Rust is not.
 ## Background
 
 To get a sense of the terminology and why the semantics is structured how it is (i.e. into levels),
-I highly recommend reading [Niko's post about observational equivalence in Rust][niko]. This should
+I highly recommend reading [Niko's post about observational equivalence in Rust][obseq]. This should
 at least be sufficient to understand why we're talking about levels of Rust, but it may well provide
-other useful insights as well.
+other useful insights as well. [A recent description of the non-lexical lifetimes analysis][nll]
+also appears to be very relevant to our approach, and may add in its understanding.
 
 ## Terminology
 
@@ -43,7 +44,8 @@ This repository is split into five parts:
 - [A Step-Indexed Model of Substructural State][substruct]
 - [Checking Interference with Fractional Permissions][fracperm]
 
-[niko]: http://smallcultfollowing.com/babysteps/blog/2016/10/02/observational-equivalence-and-unsafe-code/
+[obseq]: http://smallcultfollowing.com/babysteps/blog/2016/10/02/observational-equivalence-and-unsafe-code/
+[nll]: https://internals.rust-lang.org/t/lets-push-non-lexical-lifetimes-nll-over-the-finish-line/7115/8
 [linrgn]: http://www.ccs.neu.edu/home/amal/papers/linrgn.pdf
 [linloc]: http://www.ccs.neu.edu/home/amal/papers/linloc-techrpt.pdf
 [substruct]: http://www.ccs.neu.edu/home/amal/papers/substruct.pdf
