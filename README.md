@@ -8,7 +8,7 @@ To get a sense of the terminology and why the semantics is structured how it is 
 I highly recommend reading [Niko's post about observational equivalence in Rust][obseq]. This should
 at least be sufficient to understand why we're talking about levels of Rust, but it may well provide
 other useful insights as well. [A recent description of the non-lexical lifetimes analysis][nll]
-also appears to be very relevant to our approach, and may add in its understanding.
+also appears to be very relevant to our approach, and may aid in its understanding.
 
 ## Terminology
 
