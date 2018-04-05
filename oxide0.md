@@ -89,7 +89,7 @@ all-kind types χ ::= ς
                  | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret -- move closure
                  | ∀ς: κ. τ
                  | τ_1 ⊗ ... ⊗ τ_n
-                 | S<χ_1, ... χ_n>
+                 | S<χ_1, ..., χ_n>
 
 expressions e ::= prim
                 | alloc e
@@ -438,14 +438,14 @@ Sτ ::= S::<χ_1, ..., χ_n>(τ_1, ..., τ_n)
 
 ;; judgment rules
 
-⊢ Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n)
-Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n); Δ; Ρ; Γ
+⊢ Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n }
+Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n }; Δ; Ρ; Γ
   ⊢ χ_1 : κ_1
 ...
-Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n); Δ; Ρ; Γ
+Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n }; Δ; Ρ; Γ
   ⊢ χ_n : κ_n
 ---------------------------------------------------------------------------- WF-StructTuple
-Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n); Δ; Ρ; Γ
+Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n }; Δ; Ρ; Γ
   ⊢ S::<χ_1, ..., χ_n> { x_1: τ_1, ..., x_n: τ_n }
 
 ⊢ Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n>(τ_1, ..., τ_n)
@@ -595,6 +595,33 @@ all of the component types are well-formed with respect to type variables bound 
 ⊢ τ_n : ★
 ------------------------------------------------------- WF-DefnStructTuple
 ⊢ Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n>(τ_1, ..., τ_n)
+```
+
+#### `Σ; Δ; Ρ; Γ ⊢ τ copyable`
+Meaning: In the data structure context `Σ`, the kind environment `Δ`, the region environment `Ρ`,
+and the type environment `Γ`, values at the type `τ` are safely copyable.
+
+```
+-------------------------- CP-BaseType
+Σ; Δ; Ρ; Γ ⊢ bt copyable
+
+Σ; Δ, ς : κ; Ρ; Γ ⊢ τ copyable
+-------------------------------- CP-Universal
+Σ; Δ; Ρ; Γ ⊢ ∀ς: κ. τ copyable
+
+Σ; Δ; Ρ; Γ ⊢ τ_1 copyable
+...
+Σ; Δ; Ρ; Γ ⊢ τ_n copyable
+---------------------------------------- CP-Tuple
+Σ; Δ; Ρ; Γ ⊢ τ_1 ⊗ ... ⊗ τ_n copyable
+
+Σ(S) = struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n }
+Σ; Δ; Ρ; Γ ⊢ χ_1 : κ_1  ...  Σ; Δ; Ρ; Γ ⊢ χ_n : κ_n
+Σ; Δ; Ρ; Γ ⊢ τ_1[χ_1 / ς_1, ..., χ_n / ς_n] copyable
+...
+Σ; Δ; Ρ; Γ ⊢ τ_n[χ_1 / ς_1, ..., χ_n / ς_n] copyable
+---------------------------------------------------------------------- CP-StructRecord
+Σ; Δ; Ρ; Γ ⊢ S<χ_1, ..., χ_n> copyable
 ```
 
 [˄ Back to top][toc]
