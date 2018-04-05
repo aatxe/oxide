@@ -111,6 +111,45 @@ Point {
 }
 ```
 
+### Mutating a struct with references
+
+#### Rust
+```rust
+#![feature(nll)]
+
+struct PointRef<'a> {
+    x: &'a mut u32,
+    y: &'a mut u32,
+}
+
+let mut x = 5;
+let mut y = 6;
+let mut point = PointRef {
+    x: &mut x,
+    y: &mut y,
+};
+let mut z = 3;
+point.x = &mut z;
+```
+
+#### Oxide
+```rust
+struct PointRef<ϱ_x, ζ_x, ϱ_y, ζ_y> {
+    x: &ϱ_x ζ_x u32,
+    y: &ϱ_y ζ_y u32,
+}
+
+let mut x = alloc 5;
+let mut y = alloc 6;
+// this isn't quite right, it should really be `rgn of` and `cap of` the borrows
+let mut point = PointRef::<rgn of x, cap of x, rgn of y, cap of y> {
+    x: borrow mut x,
+    y: borrow mut y,
+};
+let mut z = alloc 3;
+point.x := borrow mut z;
+```
+
 ## Invalid Programs
 
 ### Partial Borrows
