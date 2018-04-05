@@ -141,10 +141,11 @@ struct PointRef<ϱ_x, ζ_x, ϱ_y, ζ_y> {
 
 let mut x = alloc 5;
 let mut y = alloc 6;
-// this isn't quite right, it should really be `rgn of` and `cap of` the borrows
-let mut point = PointRef::<rgn of x, cap of x, rgn of y, cap of y> {
-    x: borrow mut x,
-    y: borrow mut y,
+let mut brw_x = borrow mut x;
+let mut brw_y = borrow mut y;
+let mut point = PointRef::<rgn of brw_x, cap of brw_x, rgn of brw_y, cap of brw_y> {
+    x: borrow mut brw_x,
+    y: borrow mut brw_y,
 };
 let mut z = alloc 3;
 point.x := borrow mut z;
