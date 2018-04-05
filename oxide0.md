@@ -93,6 +93,7 @@ all-kind types χ ::= ς
 
 expressions e ::= prim
                 | alloc e
+                | copy x
                 | borrow μ x.π -- Rust syntax: &μ x / &μ x.π
                 | drop x
                 | let μ x: τ = e_1; e_2
@@ -208,6 +209,16 @@ fresh ρ
            : &ρ 1 S<χ_1, ..., χ_n>
            ⇒ Ρ_n, ρ ↦ S::<χ_1, ..., χ_n> ⊗ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n };
              Γ_n
+
+Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ f_π ⊗ π_path_set
+f_π ≠ 0
+τ_π ~ bt
+fresh ρ
+------------------------------------------------------ T-Copy
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ copy x.π : &ρ 1 τ_π
+                    ⇒ Ρ, ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ τ_π };
+                      Γ, x ↦ r_x
 
 Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ f_π ⊗ π_path_set
@@ -597,33 +608,6 @@ all of the component types are well-formed with respect to type variables bound 
 ⊢ Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n>(τ_1, ..., τ_n)
 ```
 
-#### `Σ; Δ; Ρ; Γ ⊢ τ copyable`
-Meaning: In the data structure context `Σ`, the kind environment `Δ`, the region environment `Ρ`,
-and the type environment `Γ`, values at the type `τ` are safely copyable.
-
-```
--------------------------- CP-BaseType
-Σ; Δ; Ρ; Γ ⊢ bt copyable
-
-Σ; Δ, ς : κ; Ρ; Γ ⊢ τ copyable
--------------------------------- CP-Universal
-Σ; Δ; Ρ; Γ ⊢ ∀ς: κ. τ copyable
-
-Σ; Δ; Ρ; Γ ⊢ τ_1 copyable
-...
-Σ; Δ; Ρ; Γ ⊢ τ_n copyable
----------------------------------------- CP-Tuple
-Σ; Δ; Ρ; Γ ⊢ τ_1 ⊗ ... ⊗ τ_n copyable
-
-Σ(S) = struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n }
-Σ; Δ; Ρ; Γ ⊢ χ_1 : κ_1  ...  Σ; Δ; Ρ; Γ ⊢ χ_n : κ_n
-Σ; Δ; Ρ; Γ ⊢ τ_1[χ_1 / ς_1, ..., χ_n / ς_n] copyable
-...
-Σ; Δ; Ρ; Γ ⊢ τ_n[χ_1 / ς_1, ..., χ_n / ς_n] copyable
----------------------------------------------------------------------- CP-StructRecord
-Σ; Δ; Ρ; Γ ⊢ S<χ_1, ..., χ_n> copyable
-```
-
 [˄ Back to top][toc]
 
 ## Dynamic Semantics
@@ -698,6 +682,14 @@ fresh ρ
 --------------------------------------------------------------------------- E-AllocStuctRecord
 (σ, R, alloc S::<χ_1, ..., χ_n> { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
   (σ, R ∪ { ρ ↦ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
+
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ { ε ↦ sv }
+sv ~ prim
+fresh ρ
+------------------------------------------------------------ E-Copy
+(σ, R, copy x.π) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv }}, ptr ρ 1)
 
 σ(x) = ρ_x
 ;; looking up the whole path through regions checks ƒ ≠ 0
@@ -956,6 +948,39 @@ fresh ρ
 By IH, either `e_1 ∈ 𝕍` through `e_n ∈ 𝕍` or we can take a step for one of them. If they're all
 values, we know from their types (`&ρ_1 1 τ_1` through `&ρ_n 1 τ_n`) and Canonical Forms, that `e_1`
 through `e_n` are `ptr ρ_1 1` through `ptr ρ_n 1`. Thus, we can step with `E-AllocStructRecord`.
+
+##### Case `T-Copy`:
+
+From premise:
+```
+Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ f_π ⊗ π_path_set
+f_π ≠ 0
+τ_π ~ bt
+fresh ρ
+------------------------------------------------------ T-Copy
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ copy x.π : &ρ 1 τ_π
+                    ⇒ Ρ, ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ τ_π };
+                      Γ, x ↦ r_x
+```
+
+We want to step with:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ { ε ↦ sv }
+sv ~ prim
+fresh ρ
+------------------------------------------------------------ E-Copy
+(σ, R, copy x.π) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv }}, ptr ρ 1)
+```
+
+From premise, we also know `Γ ⊢ σ` and `Ρ ⊢ R`. The former tells us that we can look up `σ(x)` to
+get `ptr ρ_x ƒ_x`. With that and `Ρ ⊢ R`, we know `ρ_x ∈ Ρ` and that `R(ρ_x)(π)` is valid. From
+the typing rule's premise, we know that the fractions are non-zero along the path, and so this
+condition is met for `E-Copy` as well. We can also see from the grammar and Canonical Forms that if
+the type `τ_π` is a base type `bt`, then a simple value `sv` at that type must be a `prim`. Thus, we
+can indeed step with `E-Copy`.
 
 ##### Case `T-BorrowImm`:
 
@@ -1451,6 +1476,43 @@ holds.
 `e'` is well-typed: From `E-AllocStructRecord`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
 `Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
 fraction `ƒ`) to derive `e' : &ρ 1 τ`.
+
+##### Case `E-Copy`:
+
+From premise:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ { ε ↦ sv }
+sv ~ prim
+fresh ρ
+------------------------------------------------------------ E-Copy
+(σ, R, copy x.π) → (σ, R ∪ { ρ ↦ 1 ⊗ { ε ↦ sv }}, ptr ρ 1)
+```
+
+From premise and knowledge that `e` is of the form `copy x.π`:
+```
+Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
+Ρ(r_π) = τ_π ⊗ f_π ⊗ π_path_set
+f_π ≠ 0
+τ_π ~ bt
+fresh ρ
+------------------------------------------------------ T-Copy
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ copy x.π : &ρ 1 τ_π
+                    ⇒ Ρ, ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ τ_π };
+                      Γ, x ↦ r_x
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-Copy` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'` and
+`Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-Copy` changed `R` by adding a binding for a fresh `ρ`. This corresponds
+to the same change we see being made in `T-Copy`. Since we picked this change to mirror the one
+in `R`, `Ρ' ⊢ R'` still holds.
+
+`e'` is well-typed: From `E-Copy`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
+`Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
+fraction `ƒ`) to derive `e' : &ρ 1 τ_π`.
 
 ##### Case `E-BorrowImm`:
 
