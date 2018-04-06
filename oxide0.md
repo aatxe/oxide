@@ -56,7 +56,7 @@ region names ρ
 
 naturals n ∈ ℕ
 concrete fractions ƒ ::= n | ƒ / ƒ | ƒ + ƒ
-immediate path Π ::= x | n
+immediate path Π ::= x | n | [n]
 paths π ::= ε | Π.π ;; π is (Π.)*ε
 
 mutability μ ::= imm | mut
@@ -84,17 +84,21 @@ all-kind types χ ::= ς
 
 ★-kind types τ ::= α
                  | bt
-                 | &r f τ -- μ-reference in region r at type τ
-                 | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n → τ_ret -- ordinary closure
-                 | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret -- move closure
+                 | &r f τ                                  -- μ-reference in region r at type τ
+                 | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n → τ_ret  -- ordinary closure
+                 | &r_1 f τ_1 ⊗ ... ⊗ &r_n f τ_n ↝ τ_ret  -- move closure
                  | ∀ς: κ. τ
+                 | [τ; n]  -- fixed-sized arrays
+                 | [τ]     -- slices
                  | τ_1 ⊗ ... ⊗ τ_n
                  | S<χ_1, ..., χ_n>
 
 expressions e ::= prim
+                | [e_1, ..., e_n]
                 | alloc e
                 | copy x
-                | borrow μ x.π -- Rust syntax: &μ x / &μ x.π
+                | borrow μ x.π         -- Rust syntax: &μ x / &μ x.π
+                | slice μ x.π e_1 e_2  -- Rust syntax: &x.π[e_1..e_2]
                 | drop x
                 | let μ x: τ = e_1; e_2
                 | x.π := e
@@ -103,6 +107,7 @@ expressions e ::= prim
                 | e_1 e_2
                 | e_1; e_2
                 | if e_1 { e_2 } else { e_3 }
+                | for μ x in e_1 { e_2 }
                 | (e_1, ..., e_n)
                 | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1; e_2
                 | S::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
@@ -145,13 +150,6 @@ S::<> { x_1: e_1, ..., x_n: e_n }        ↔  S { x_1: e_1, ..., x_n: e_n }
 S::<>(e_1, ..., e_n)                     ↔  S(e_1, ..., e_n)
 if e { ... } else { if e' { ... } ... }  ↔  if { ... } else if e' { ... } ...
 if e { ... } else { () }                 ↔  if e { ... }
-
-;; fixed-sized arrays are just sugar for tuples!
-[τ; n]                     ↔  (τ_0, ..., τ_n)
-x[n]                       ↔  x.n.ε
-x.(Π.)*Π[n]                ↔  x.(Π.)*Π.n.ε
-for x in e_a for n { e_b } ↔  let mut x = borrow mut e_a[0]; e_b; ...
-                              let mut x = borrow mut e_a[n-1]; e_b;
 ```
 
 [˄ Back to top][toc]
@@ -210,6 +208,15 @@ fresh ρ
            ⇒ Ρ_n, ρ ↦ S::<χ_1, ..., χ_n> ⊗ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n };
              Γ_n
 
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ ⇒ Ρ_n; Γ_n
+--------------------------------------------------------------------------- T-AllocArray
+Σ; Δ; Ρ; Γ ⊢ alloc [e_1, ..., e_n] : &ρ 1 [τ; n]
+           ⇒ Ρ_n, ρ ↦ [τ; n] ⊗ 1 ⊗ { [0] ↦ ρ_1, ..., [n-1] ↦ ρ_n };
+             Γ_n
+
 Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ f_π ⊗ π_path_set
 f_π ≠ 0
@@ -241,6 +248,25 @@ fresh ρ
                          ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ r_π };
                       Γ, x ↦ r_x
 
+Ρ ⊢ imm π in r_x : [τ_e; n] ⇒ r_π
+Ρ(r_π) = [τ_e; n] ⊗ f_π ⊗ π_path_set
+f_π / 2 ↓ f_n
+fresh ρ
+-------------------------------------------------------------- T-SliceImm
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice μ x.π e_1 e_2 : &ρ [τ]
+                    ⇒ Ρ, r_π ↦ [τ_e; n] ⊗ f_n ⊗ π_path_set,
+                         ρ ↦ [τ_e] ⊗ f_n ⊗ { ε ↦ r_π };
+                      Γ, x ↦ r_x
+
+Ρ ⊢ mut π in r_x : [τ_e; n] ⇒ r_π
+Ρ(r_π) = [τ_e; n] ⊗ 1 ⊗ π_path_set
+fresh ρ
+------------------------------------------------------------ T-SliceMut
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice μ x.π e_1 e_2 : &ρ [τ]
+                    ⇒ Ρ, r_π ↦ [τ_e; n] ⊗ 0 ⊗ π_path_set,
+                         ρ ↦ [τ_e] ⊗ 1 ⊗ { ε ↦ r_π };
+                      Γ, x ↦ r_x
+
 Ρ(r_x) = τ_x ⊗ f_x ⊗ { ε ↦ r }
 Ρ(r) = τ_r ⊗ f_r ⊗ path_set
 f_r + f_x ↓ f_n
@@ -259,6 +285,19 @@ r_1 ∉ dom(Ρ) ... r_n ∉ dom(Ρ) ;; i.e. all the referenced regions have alre
 Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ drop x : unit ⇒ Ρ'; Γ
 
 ===================================================================================================
+
+--------------------------------- T-True
+Σ; Δ; Ρ; Γ ⊢ true : bool ⇒ Ρ; Γ
+
+--------------------------------- T-False
+Σ; Δ; Ρ; Γ ⊢ false : bool ⇒ Ρ; Γ
+
+n ∈ [0, 2^32)
+------------------------------ T-u32
+Σ; Δ; Ρ; Γ ⊢ n : u32 ⇒ Ρ; Γ
+
+------------------------------- T-Unit
+Σ; Δ; Ρ; Γ ⊢ () : unit ⇒ Ρ; Γ
 
 Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
 f_1 ≠ 0
@@ -301,7 +340,7 @@ r_1 ∉ dom(Ρ_2)
 Σ; Δ; Ρ; Γ ⊢ move |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }
            : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret
            ⇒ Ρ'; Γ_2
-           
+
 Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ⇒ Ρ_2; Γ_2
 ------------------------------------------------------------------------- T-App
@@ -338,6 +377,27 @@ f_1 ≠ 0
 ;; and e_2, but we should be able to join ρ's in each
 -------------------------------------------------------- T-If
 Σ; Δ; Ρ; Γ ⊢ if e_1 { e_2 } else { e_3 } : τ ⇒ Ρ'; Γ_1
+
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
+τ_1 ~ [τ; n] ∨ τ_1 ~ [τ]
+Ρ ⊢ imm r_1    f_1 ≠ 0
+Ρ(r_1) = τ_1 ⊗ f_1 ⊗ path_set_1
+fresh ρ
+f_1 / 2 ↓ f_n
+Ρ' ≝ Ρ_1, r_1 ↦ τ_1 ⊗ f_n ⊗ path_set_1, ρ ↦ τ ⊗ f_n ⊗ { ε ↦ r_1 }
+Σ; Δ; Ρ'; Γ, x ↦ ρ ⊢ e_2 : unit ⇒ Ρ'; Γ
+--------------------------------------------------------------------- T-ForImm
+Σ; Δ; Ρ; Γ ⊢ for imm x in e_1 { e_2 } : unit ⇒ Ρ'; Γ_1
+
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
+τ_1 ~ [τ; n] ∨ τ_1 ~ [τ]
+Ρ ⊢ mut r_1
+Ρ(r_1) = τ_1 ⊗ 1 ⊗ path_set_1
+fresh ρ
+Ρ' ≝ Ρ_1, r_1 ↦ τ_1 ⊗ 0 ⊗ path_set_1, ρ ↦ τ ⊗ 1 ⊗ { ε ↦ r_1 }
+Σ; Δ; Ρ'; Γ, x ↦ ρ ⊢ e_2 : unit ⇒ Ρ'; Γ
+----------------------------------------------------------------- T-ForMut
+Σ; Δ; Ρ; Γ ⊢ for mut x in e_1 { e_2 } : unit ⇒ Ρ'; Γ_1
 
 Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
 ...
