@@ -94,7 +94,6 @@ all-kind types χ ::= ς
                  | S<χ_1, ..., χ_n>
 
 expressions e ::= prim
-                | [e_1, ..., e_n]
                 | alloc e
                 | copy x
                 | borrow μ x.π         -- Rust syntax: &μ x / &μ x.π
@@ -110,6 +109,7 @@ expressions e ::= prim
                 | for μ x in e_1 { e_2 }
                 | (e_1, ..., e_n)
                 | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1; e_2
+                | [e_1, ..., e_n]
                 | S::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
                 | S::<χ_1, ..., χ_n>(e_1, ..., e_n)
                 | Λς: κ. e
