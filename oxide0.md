@@ -2311,7 +2311,142 @@ and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
 `Ρ'` and `Ρ' ⊢ R'`: `E-IfFalse` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'`
 and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 
-`e'` is well-typed: We knoe from `T-If` that our result from the second branch is well-typed.
+`e'` is well-typed: We know from `T-If` that our result from the second branch is well-typed.
+
+##### Case `E-ForArray`:
+
+From premise:
+```
+R(ρ_1) = ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+ƒ_1 ≠ 0
+R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
+...
+R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
+------------------------------------------------------------------------------- E-ForArray
+(σ, R, for μ x in (ptr ρ_1 ƒ_1) { e_2 }) →
+  (σ, R, (let μ x = ptr ρ_ε_0 ƒ_ε_0; e_2); ...
+         (let μ x = ptr ρ_ε_n-1 ƒ_ε_n-1; e_2); ())
+```
+
+From premise and knowledge that `e` is of the form `for μ x in e_1 { e_2 }`, either:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
+τ_1 ~ [τ; n] ∨ τ_1 ~ [τ]
+Ρ ⊢ imm r_1    f_1 ≠ 0
+Ρ(r_1) = τ_1 ⊗ f_1 ⊗ path_set_1
+fresh ρ
+f_1 / 2 ↓ f_n
+Ρ' ≝ Ρ_1, r_1 ↦ τ_1 ⊗ f_n ⊗ path_set_1, ρ ↦ τ ⊗ f_n ⊗ { ε ↦ r_1 }
+Σ; Δ; Ρ'; Γ, x ↦ ρ ⊢ e_2 : unit ⇒ Ρ'; Γ
+--------------------------------------------------------------------- T-ForImm
+Σ; Δ; Ρ; Γ ⊢ for imm x in e_1 { e_2 } : unit ⇒ Ρ'; Γ_1
+
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
+τ_1 ~ [τ; n] ∨ τ_1 ~ [τ]
+Ρ ⊢ mut r_1
+Ρ(r_1) = τ_1 ⊗ 1 ⊗ path_set_1
+fresh ρ
+Ρ' ≝ Ρ_1, r_1 ↦ τ_1 ⊗ 0 ⊗ path_set_1, ρ ↦ τ ⊗ 1 ⊗ { ε ↦ r_1 }
+Σ; Δ; Ρ'; Γ, x ↦ ρ ⊢ e_2 : unit ⇒ Ρ'; Γ
+----------------------------------------------------------------- T-ForMut
+Σ; Δ; Ρ; Γ ⊢ for mut x in e_1 { e_2 } : unit ⇒ Ρ'; Γ_1
+```
+
+It's also useful here to see:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
+f_1 ≠ 0
+Σ; Δ; Ρ_1; Γ_1, x : τ_1 ↦ r_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+r_1 ∉ dom(Ρ_2)
+----------------------------------------------------------- T-LetImm
+Σ; Δ; Ρ; Γ ⊢ let imm x: τ_1 = e_1; e_2 : τ_2 ⇒ Ρ_2; Γ_2
+
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1, x : τ_1 ↦ r_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+r_1 ∉ dom(Ρ_2)
+----------------------------------------------------------- T-LetMut
+Σ; Δ; Ρ; Γ ⊢ let mut x: τ_1 = e_1; e_2 : τ_2 ⇒ Ρ_2; Γ_2
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-ForArray` leaves `σ` unchanged and so we can pick `Γ'` to be `Γ`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-ForArray` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'`
+and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
+
+`e'` is well-typed: We have to consider each case separately, though they are quite similar. In
+`T-ForImm`, `Ρ ⊢ imm r_1` tells us that the subregions all have non-zero capabilities. This means
+that the parameters to each of the let bindings in `e'` are well typed. Then, we also know that
+`e_2` is well-typed if `x` is bound which is happening in the let binding as well. The same process
+is repeated for `T-ForMut`, but we instead know that all the capabilities are one.
+
+##### Case `E-ForSlice`:
+
+From premise:
+```
+;; using an ε path here resolves the slice to its backing array
+R(ρ_1)(ε) = ρ_ε ↦ ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+ƒ_1 ≠ 0
+R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
+...
+R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
+---------------------------------------------------------------- E-ForSlice
+(σ, R, for μ x in (fatptr ρ_1 ƒ_1 n_1 n_2) { e_2 }) →
+  (σ, R, (let μ x = ptr ρ_ε_n_1 ƒ_ε_n_1; e_2); ...
+         (let μ x = ptr ρ_ε_n_2 ƒ_ε_n_2; e_2); ())
+```
+
+From premise and knowledge that `e` is of the form `for μ x in e_1 { e_2 }`, either:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
+τ_1 ~ [τ; n] ∨ τ_1 ~ [τ]
+Ρ ⊢ imm r_1    f_1 ≠ 0
+Ρ(r_1) = τ_1 ⊗ f_1 ⊗ path_set_1
+fresh ρ
+f_1 / 2 ↓ f_n
+Ρ' ≝ Ρ_1, r_1 ↦ τ_1 ⊗ f_n ⊗ path_set_1, ρ ↦ τ ⊗ f_n ⊗ { ε ↦ r_1 }
+Σ; Δ; Ρ'; Γ, x ↦ ρ ⊢ e_2 : unit ⇒ Ρ'; Γ
+--------------------------------------------------------------------- T-ForImm
+Σ; Δ; Ρ; Γ ⊢ for imm x in e_1 { e_2 } : unit ⇒ Ρ'; Γ_1
+
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
+τ_1 ~ [τ; n] ∨ τ_1 ~ [τ]
+Ρ ⊢ mut r_1
+Ρ(r_1) = τ_1 ⊗ 1 ⊗ path_set_1
+fresh ρ
+Ρ' ≝ Ρ_1, r_1 ↦ τ_1 ⊗ 0 ⊗ path_set_1, ρ ↦ τ ⊗ 1 ⊗ { ε ↦ r_1 }
+Σ; Δ; Ρ'; Γ, x ↦ ρ ⊢ e_2 : unit ⇒ Ρ'; Γ
+----------------------------------------------------------------- T-ForMut
+Σ; Δ; Ρ; Γ ⊢ for mut x in e_1 { e_2 } : unit ⇒ Ρ'; Γ_1
+```
+
+It's also useful here to see:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
+f_1 ≠ 0
+Σ; Δ; Ρ_1; Γ_1, x : τ_1 ↦ r_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+r_1 ∉ dom(Ρ_2)
+----------------------------------------------------------- T-LetImm
+Σ; Δ; Ρ; Γ ⊢ let imm x: τ_1 = e_1; e_2 : τ_2 ⇒ Ρ_2; Γ_2
+
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1, x : τ_1 ↦ r_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
+r_1 ∉ dom(Ρ_2)
+----------------------------------------------------------- T-LetMut
+Σ; Δ; Ρ; Γ ⊢ let mut x: τ_1 = e_1; e_2 : τ_2 ⇒ Ρ_2; Γ_2
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-ForSlice` leaves `σ` unchanged and so we can pick `Γ'` to be `Γ`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-ForSlice` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'`
+and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
+
+`e'` is well-typed: We have to consider each case separately, though they are quite similar. In
+`T-ForImm`, `Ρ ⊢ imm r_1` tells us that the subregions all have non-zero capabilities. This means
+that the parameters to each of the let bindings in `e'` are well typed. Then, we also know that
+`e_2` is well-typed if `x` is bound which is happening in the let binding as well. The same process
+is repeated for `T-ForMut`, but we instead know that all the capabilities are one.
 
 ##### Case `E-LetTup`:
 
