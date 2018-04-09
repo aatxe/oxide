@@ -1892,6 +1892,94 @@ the same change we see being made in `T-BorrowMut`. Since we picked this change 
 `Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
 fraction `ƒ`) to derive `e' : &ρ 1 τ`.
 
+##### Case `E-SliceImm`:
+
+From premise:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
+R(ρ_1) = ƒ_1 ⊗ { ε ↦ n_1 }    ƒ_1 ≠ 0
+R(ρ_2) = ƒ_2 ⊗ { ε ↦ n_2 }    ƒ_2 ≠ 0
+[n_1] ∈ dom(path_set) [n_2] ∈ dom(path_set)
+ƒ_π / 2 ↓ ƒ_n
+fresh ρ
+----------------------------------------------------------------------------------- E-SliceImm
+(σ, R, slice imm x.π (ptr ρ_1 ƒ_1) (ptr ρ_2 ƒ_2)) →
+  (σ, R ∪ { ρ_π ↦ ƒ_n ⊗ path_set, ρ ↦ ƒ_n ⊗ { ε ↦ ρ_π } }, fatptr ρ ƒ_n n_1 n_2)
+```
+
+From premise and knowledge that `e` is of the form `slice imm x.π e_1 e_2`:
+```
+Ρ ⊢ imm π in r_x : [τ_e; n] ⇒ r_π
+Ρ(r_π) = [τ_e; n] ⊗ f_π ⊗ π_path_set
+f_π / 2 ↓ f_n
+fresh ρ
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e_1 : &r_1 f_1 u32 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_2 f_2 u32 ⇒ Ρ_2; Γ_2
+-------------------------------------------------------------- T-SliceImm
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice imm x.π e_1 e_2 : &ρ [τ]
+                    ⇒ Ρ_2, r_π ↦ [τ_e; n] ⊗ f_n ⊗ π_path_set,
+                           ρ ↦ [τ_e] ⊗ f_n ⊗ { ε ↦ r_π };
+                      Γ_2, x ↦ r_x
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-SliceImm` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'` and `Γ'`
+are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-SliceImm` changed `R` by adding a binding for a fresh `ρ`. So, we can pick
+`Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the changed binding for `ρ_π` modifying the
+fraction from `ƒ_π` to `ƒ_n` and the extra binding `ρ ↦ τ_π ⊗ ƒ_n ⊗ { ε ↦ ρ_π }`. This corresponds
+to the same change we see being made in `T-SliceImm`. Since we picked this change to mirror the one
+in `R`, `Ρ' ⊢ R'` still holds.
+
+`e'` is well-typed: From `E-SliceImm`, we know `e' = fatptr ρ ƒ_n n_1 n_2`. Then, using the `Γ'` and
+`Ρ'` that we picked, we can apply `T-FatPtr` (whose only requirement is that `ρ` is bound to the
+same fraction `ƒ`) to derive `e' : &ρ ƒ_n [τ]`.
+
+##### Case `E-SliceMut`:
+
+From premise:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ = 1
+R(ρ_x)(π) = ρ_π ↦  ⊗ ρath_set
+R(ρ_1) = ƒ_1 ⊗ { ε ↦ n_1 }    ƒ_1 ≠ 0
+R(ρ_2) = ƒ_2 ⊗ { ε ↦ n_2 }    ƒ_2 ≠ 0
+[n_1] ∈ dom(path_set) [n_2] ∈ dom(path_set)
+fresh ρ
+------------------------------------------------------------------------------- E-SliceMut
+(σ, R, slice mut x.π (ptr ρ_1 ƒ_1) (ptr ρ_2 ƒ_2)) →
+  (σ, R ∪ { ρ_π ↦ 0 ⊗ path_set, ρ ↦ 1 ⊗ { ε ↦ ρ_π } }, fatptr ρ ƒ_n n_1 n_2)
+```
+
+From premise and knowledge that `e` is of the form `slice mut x.π e_1 e_2`:
+```
+Ρ ⊢ mut π in r_x : [τ_e; n] ⇒ r_π
+Ρ(r_π) = [τ_e; n] ⊗ 1 ⊗ π_path_set
+fresh ρ
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e_1 : &r_1 f_1 u32 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_2 f_2 u32 ⇒ Ρ_2; Γ_2
+------------------------------------------------------------- T-SliceMut
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice mut x.π e_1 e_2 : &ρ [τ]
+                    ⇒ Ρ_2, r_π ↦ [τ_e; n] ⊗ 0 ⊗ π_path_set,
+                           ρ ↦ [τ_e] ⊗ 1 ⊗ { ε ↦ r_π };
+                      Γ_2, x ↦ r_x
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-SliceMut` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'` and `Γ'`
+are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-SliceMut` changed `R` by adding a binding for a fresh `ρ`. So, we can pick
+`Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the changed binding for `ρ_π` modifying the
+fraction from `ƒ_π` to `0` and the extra binding `ρ ↦ τ_π ⊗ 1 ⊗ { ε ↦ ρ_π }`. This corresponds
+to the same change we see being made in `T-SliceMut`. Since we picked this change to mirror the one
+in `R`, `Ρ' ⊢ R'` still holds.
+
+`e'` is well-typed: From `E-SliceMut`, we know `e' = fatptr ρ 1 n_1 n_2`. Then, using the `Γ'` and
+`Ρ'` that we picked, we can apply `T-FatPtr` (whose only requirement is that `ρ` is bound to the
+same fraction `ƒ`) to derive `e' : &ρ 1 [τ]`.
+
 ##### Case `E-Drop`:
 
 From premise:
