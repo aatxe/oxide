@@ -921,9 +921,8 @@ If Σ; Δ, ς : κ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ' and Σ; Δ; Ρ; Γ ⊢ χ the
 
 By induction on the derivation of `e : τ`.
 
-The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-Closure`, `T-MvClosure`, `T-Tup`,
-`T-StructRecord`, `T-StructTup`, and `T-TAbs` cases are all immediate since `e` is in all these
-cases a value. The other cases follow.
+The `T-True`, `T-False`, `T-Unit`, `T-u32`, `T-Ptr`, `T-FatPtr`, `T-Closure`, `T-MvClosure`, and
+`T-TAbs` cases are all immediate since `e` is in all these cases a value. The other cases follow.
 
 ##### Case `T-AllocPrim`:
 
