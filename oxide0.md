@@ -2457,7 +2457,8 @@ From premise:
   → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
 ```
 
-From premise and knowledge that `e` is of the form ``, either:
+From premise and knowledge that `e` is of the form `let (μ x, ..., μ x): τ ⊗ ... ⊗ τ = e_1; e_2`,
+either:
 ```
 Σ; Δ; Ρ; Γ ⊢ e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n) ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1, x_1 ↦ r_1, ... x_n ↦ r_n ⊢ e_2 : t_r ⇒ Ρ_2; Γ_2
@@ -2485,7 +2486,7 @@ From premise:
 (σ, R, (Λς: κ. e) [χ]) → (σ, R, e[χ / ς])
 ```
 
-From premise and knowledge that `e` is of the form ``, either:
+From premise and knowledge that `e` is of the form `e [χ]`, either:
 ```
 Σ; Δ; Ρ; Γ ⊢ e : ∀ς: κ. τ ⇒ Ρ'; Γ'
 Δ ⊢ χ : κ
