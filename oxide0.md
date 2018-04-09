@@ -23,7 +23,7 @@
 In `oxide`, we allocate every value on a region in the stack, associating it with a fractional
 capability guarding its use. The fractional aspect of this capability allows us to model mutable vs
 immutable borrows by tracking the existence of aliases. That is, if a capability is `1`, we know
-that there are no aliases and a mutable borrow is safe. Composite structures (like tuples and
+that there are no aliases and a mutable borrow is safe. Aggregate structures (like tuples and
 structs) reference other smaller regions (each of which has its own capability). Perhaps notably, we
 simplify the move-vs-borrow distinction by treating all moves as mutable borrows — a natural
 consequence of our fractional capabilities.
