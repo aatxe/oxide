@@ -252,20 +252,24 @@ fresh ρ
 Ρ(r_π) = [τ_e; n] ⊗ f_π ⊗ π_path_set
 f_π / 2 ↓ f_n
 fresh ρ
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e_1 : &r_1 f_1 u32 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_2 f_2 u32 ⇒ Ρ_2; Γ_2
 -------------------------------------------------------------- T-SliceImm
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice μ x.π e_1 e_2 : &ρ [τ]
-                    ⇒ Ρ, r_π ↦ [τ_e; n] ⊗ f_n ⊗ π_path_set,
-                         ρ ↦ [τ_e] ⊗ f_n ⊗ { ε ↦ r_π };
-                      Γ, x ↦ r_x
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice imm x.π e_1 e_2 : &ρ [τ]
+                    ⇒ Ρ_2, r_π ↦ [τ_e; n] ⊗ f_n ⊗ π_path_set,
+                           ρ ↦ [τ_e] ⊗ f_n ⊗ { ε ↦ r_π };
+                      Γ_2, x ↦ r_x
 
 Ρ ⊢ mut π in r_x : [τ_e; n] ⇒ r_π
 Ρ(r_π) = [τ_e; n] ⊗ 1 ⊗ π_path_set
 fresh ρ
------------------------------------------------------------- T-SliceMut
-Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice μ x.π e_1 e_2 : &ρ [τ]
-                    ⇒ Ρ, r_π ↦ [τ_e; n] ⊗ 0 ⊗ π_path_set,
-                         ρ ↦ [τ_e] ⊗ 1 ⊗ { ε ↦ r_π };
-                      Γ, x ↦ r_x
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e_1 : &r_1 f_1 u32 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_2 f_2 u32 ⇒ Ρ_2; Γ_2
+------------------------------------------------------------- T-SliceMut
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice mut x.π e_1 e_2 : &ρ [τ]
+                    ⇒ Ρ_2, r_π ↦ [τ_e; n] ⊗ 0 ⊗ π_path_set,
+                           ρ ↦ [τ_e] ⊗ 1 ⊗ { ε ↦ r_π };
+                      Γ_2, x ↦ r_x
 
 Ρ(r_x) = τ_x ⊗ f_x ⊗ { ε ↦ r }
 Ρ(r) = τ_r ⊗ f_r ⊗ path_set
@@ -1135,6 +1139,86 @@ From premise, we also know `Γ ⊢ σ` and `Ρ ⊢ R`. The former tells us that 
 get `ptr ρ_x ƒ_x`. With that and `Ρ ⊢ R`, we know `ρ_x ∈ Ρ` and that `R(ρ_x)(π)` is valid. From
 the typing rule's premise, we know that the fractions are 1 along the path, and so this
 condition is met for `E-BorrowMut` as well. Thus, we can indeed step with `E-BorrowMut`.
+
+##### Case `T-SliceImm`:
+
+From premise:
+```
+Ρ ⊢ imm π in r_x : [τ_e; n] ⇒ r_π
+Ρ(r_π) = [τ_e; n] ⊗ f_π ⊗ π_path_set
+f_π / 2 ↓ f_n
+fresh ρ
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e_1 : &r_1 f_1 u32 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_2 f_2 u32 ⇒ Ρ_2; Γ_2
+-------------------------------------------------------------- T-SliceImm
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice imm x.π e_1 e_2 : &ρ [τ]
+                    ⇒ Ρ_2, r_π ↦ [τ_e; n] ⊗ f_n ⊗ π_path_set,
+                           ρ ↦ [τ_e] ⊗ f_n ⊗ { ε ↦ r_π };
+                      Γ_2, x ↦ r_x
+```
+
+We want to step with:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
+R(ρ_1) = ƒ_1 ⊗ { ε ↦ n_1 }    ƒ_1 ≠ 0
+R(ρ_2) = ƒ_2 ⊗ { ε ↦ n_2 }    ƒ_2 ≠ 0
+[n_1] ∈ dom(path_set) [n_2] ∈ dom(path_set)
+ƒ_π / 2 ↓ ƒ_n
+fresh ρ
+----------------------------------------------------------------------------------- E-SliceImm
+(σ, R, slice imm x.π (ptr ρ_1 ƒ_1) (ptr ρ_2 ƒ_2)) →
+  (σ, R ∪ { ρ_π ↦ ƒ_n ⊗ path_set, ρ ↦ ƒ_n ⊗ { ε ↦ ρ_π } }, fatptr ρ ƒ_n n_1 n_2)
+```
+
+From premise, we also know `Γ ⊢ σ` and `Ρ ⊢ R`. The former tells us that we can look up `σ(x)` to
+get `ρ_x`, `ρ_1`, and `ρ_2`. With that and `Ρ ⊢ R`, we know that `R(ρ_x)(π)` is valid. From the
+typing rule's premise, we know that the fractions are non-zero along the path. We also know from the
+types that `r_1` and `r_2` are at the type `u32`, and thus we can determine using Canonical Forms
+that the simple value for those regions is of the form `n`. Thus, as long as these numbers are in
+bounds for the array, we can step using `E-SliceImm`.
+
+TODO: deal with the out of bounds case.
+
+##### Case `T-SliceMut`:
+
+From premise:
+```
+Ρ ⊢ mut π in r_x : [τ_e; n] ⇒ r_π
+Ρ(r_π) = [τ_e; n] ⊗ 1 ⊗ π_path_set
+fresh ρ
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ e_1 : &r_1 f_1 u32 ⇒ Ρ_1; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : &r_2 f_2 u32 ⇒ Ρ_2; Γ_2
+------------------------------------------------------------- T-SliceMut
+Σ; Δ; Ρ; Γ, x ↦ r_x ⊢ slice mut x.π e_1 e_2 : &ρ [τ]
+                    ⇒ Ρ_2, r_π ↦ [τ_e; n] ⊗ 0 ⊗ π_path_set,
+                           ρ ↦ [τ_e] ⊗ 1 ⊗ { ε ↦ r_π };
+                      Γ_2, x ↦ r_x
+```
+
+We want to step with:
+```
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ = 1
+R(ρ_x)(π) = ρ_π ↦  ⊗ ρath_set
+R(ρ_1) = ƒ_1 ⊗ { ε ↦ n_1 }    ƒ_1 ≠ 0
+R(ρ_2) = ƒ_2 ⊗ { ε ↦ n_2 }    ƒ_2 ≠ 0
+[n_1] ∈ dom(path_set) [n_2] ∈ dom(path_set)
+fresh ρ
+------------------------------------------------------------------------------- E-SliceMut
+(σ, R, slice mut x.π (ptr ρ_1 ƒ_1) (ptr ρ_2 ƒ_2)) →
+  (σ, R ∪ { ρ_π ↦ 0 ⊗ path_set, ρ ↦ 1 ⊗ { ε ↦ ρ_π } }, fatptr ρ ƒ_n n_1 n_2)
+```
+
+From premise, we also know `Γ ⊢ σ` and `Ρ ⊢ R`. The former tells us that we can look up `σ(x)` to
+get `ρ_x`, `ρ_1`, and `ρ_2`. With that and `Ρ ⊢ R`, we know that `R(ρ_x)(π)` is valid. From the
+typing rule's premise, we know that the fractions are non-zero along the path. We also know from the
+types that `r_1` and `r_2` are at the type `u32`, and thus we can determine using Canonical Forms
+that the simple value for those regions is of the form `n`. Thus, as long as these numbers are in
+bounds for the array, we can step using `E-SliceMut`.
+
+TODO: deal with the out of bounds case.
 
 ##### Case `T-Drop`:
 
