@@ -842,25 +842,26 @@ R(ρ) = ƒ ⊗ { ε ↦ false }
 ------------------------------------------------------ E-IfFalse
 (σ, R, if ptr ρ ƒ { e_1 } else { e_2 }) → (σ, R, e_2)
 
-;; using an ε path means resolving any aliasing, e.g. for references to arrays
-R(ρ_1)(ε) = ρ_ε ↦ ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+R(ρ_1) = ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+ƒ_1 ≠ 0
 R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
 ...
 R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
 ------------------------------------------------------------------------------- E-ForArray
 (σ, R, for μ x in (ptr ρ_1 ƒ_1) { e_2 }) →
   (σ, R, (let μ x = ptr ρ_ε_0 ƒ_ε_0; e_2); ...
-         (let μ x = ptr ρ_ε_n-1 ƒ_ε_n-1; e_2))
+         (let μ x = ptr ρ_ε_n-1 ƒ_ε_n-1; e_2); ())
 
-;; using an ε path means resolving any aliasing 
+;; using an ε path here resolves the slice to its backing array
 R(ρ_1)(ε) = ρ_ε ↦ ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+ƒ_1 ≠ 0
 R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
 ...
 R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
 ---------------------------------------------------------------- E-ForSlice
 (σ, R, for μ x in (fatptr ρ_1 ƒ_1 n_1 n_2) { e_2 }) →
   (σ, R, (let μ x = ptr ρ_ε_n_1 ƒ_ε_n_1; e_2); ...
-         (let μ x = ptr ρ_ε_n_2 ƒ_ε_n_2; e_2))
+         (let μ x = ptr ρ_ε_n_2 ƒ_ε_n_2; e_2); ())
 
 --------------------------------------------------------------------------------------- E-LetTup
 (σ, R, let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = (ptr ρ_1 1, ..., ptr ρ_n 1); e)
@@ -890,18 +891,20 @@ R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
 ### Important Lemmas
 
 **Lemma** (Canonical Forms):
-  1. if `v` is a value of type `bool`, then `v` is either `true` or `false`.
-  2. if `v` is a value of type `u32`, then `v` is a numeric value on the range `[0, 2^32)`.
-  3. if `v` is a value of type `unit`, then `v` is `()`.
-  4. if `v` is a value of type `&ρ ƒ τ`, then `v` is `ptr ρ ƒ`.
-  5. if `v` is a value of type `(τ_1, ..., τ_n)`, then `v` is of the form `(sv_1, ..., sv_n)`.
-  6. if `v` is a value of type `S`, then `v` is either of the form `S(sv_1, ..., sv_n)` or
+   1. if `v` is a value of type `bool`, then `v` is either `true` or `false`.
+   2. if `v` is a value of type `u32`, then `v` is a numeric value on the range `[0, 2^32)`.
+   3. if `v` is a value of type `unit`, then `v` is `()`.
+   4. if `v` is a value of type `&ρ ƒ τ`, then `v` is `ptr ρ ƒ`.
+   5. if `v` is a value of type `&ρ ƒ [τ]`, then `v` is of the form `fatptr ρ ƒ n_1 n_2`.
+   6. if `v` is a value of type `[τ; n]`, then `v` is of the form `[sv_1, ..., sv_n]`.
+   7. if `v` is a value of type `(τ_1, ..., τ_n)`, then `v` is of the form `(sv_1, ..., sv_n)`.
+   8. if `v` is a value of type `S`, then `v` is either of the form `S(sv_1, ..., sv_n)` or
      `S { x_1: sv_1, ..., x_n: sv_n }` depending on its definition in `Σ`.
-  7. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret`, then `v` is of
+   9. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret`, then `v` is of
      the form `|x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
-  8. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret`, then `v` is of
+  10. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret`, then `v` is of
      the form `move |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
-  9. if `v` is a value of type `∀ς : κ. e`, then `v` is of the form `Λς: κ. e`.
+  11. if `v` is a value of type `∀ς : κ. e`, then `v` is of the form `Λς: κ. e`.
 
 **Lemma** (Type Substitution):
 
@@ -1455,6 +1458,129 @@ We want to step with:
 
 By IH, either `e_1 ∈ 𝕍` or we can take a step. In the former case, we know `e_1 : unit` and thus by
 Canonical Forms `e_1` is `()`. Thus, we can step using `E-Seq`.
+
+##### Case `T-If`:
+
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 bool ⇒ Ρ_1; Γ_1
+f_1 ≠ 0
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : τ ⇒ Ρ_2; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_3 : τ ⇒ Ρ_3; Γ_1
+;; FIXME: we need to somehow unify Ρ_2 and Ρ_3
+;; in particular, τ is not necessarily identical in e_2
+;; and e_2, but we should be able to join ρ's in each
+-------------------------------------------------------- T-If
+Σ; Δ; Ρ; Γ ⊢ if e_1 { e_2 } else { e_3 } : τ ⇒ Ρ'; Γ_1
+```
+
+We want to step with either of:
+```
+ƒ ≠ 0
+R(ρ) = ƒ ⊗ { ε ↦ true }
+------------------------------------------------------ E-IfTrue
+(σ, R, if ptr ρ ƒ { e_1 } else { e_2 }) → (σ, R, e_1)
+
+ƒ ≠ 0
+R(ρ) = ƒ ⊗ { ε ↦ false }
+------------------------------------------------------ E-IfFalse
+(σ, R, if ptr ρ ƒ { e_1 } else { e_2 }) → (σ, R, e_2)
+```
+
+By IH, either `e_1 ∈ 𝕍` or we can take a step. In the former case, we know that
+`e_1 : &r_1 f_1 bool` which tells us that the value stored in its region is a `bool`. Thus,
+we know by Canonical Forms that this simple value is either `true` or `false`. Then, we can step
+using `E-IfTrue` or `E-IfFalse` respectively.
+
+##### Case `T-ForImm`:
+
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
+τ_1 ~ [τ; n] ∨ τ_1 ~ [τ]
+Ρ ⊢ imm r_1    f_1 ≠ 0
+Ρ(r_1) = τ_1 ⊗ f_1 ⊗ path_set_1
+fresh ρ
+f_1 / 2 ↓ f_n
+Ρ' ≝ Ρ_1, r_1 ↦ τ_1 ⊗ f_n ⊗ path_set_1, ρ ↦ τ ⊗ f_n ⊗ { ε ↦ r_1 }
+Σ; Δ; Ρ'; Γ, x ↦ ρ ⊢ e_2 : unit ⇒ Ρ'; Γ
+--------------------------------------------------------------------- T-ForImm
+Σ; Δ; Ρ; Γ ⊢ for imm x in e_1 { e_2 } : unit ⇒ Ρ'; Γ_1
+```
+
+We want to step with either of:
+```
+R(ρ_1) = ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+ƒ_1 ≠ 0
+R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
+...
+R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
+------------------------------------------------------------------------------- E-ForArray
+(σ, R, for μ x in (ptr ρ_1 ƒ_1) { e_2 }) →
+  (σ, R, (let μ x = ptr ρ_ε_0 ƒ_ε_0; e_2); ...
+         (let μ x = ptr ρ_ε_n-1 ƒ_ε_n-1; e_2); ())
+
+;; using an ε path here resolves the slice to its backing array
+R(ρ_1)(ε) = ρ_ε ↦ ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+ƒ_1 ≠ 0
+R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
+...
+R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
+---------------------------------------------------------------- E-ForSlice
+(σ, R, for μ x in (fatptr ρ_1 ƒ_1 n_1 n_2) { e_2 }) →
+  (σ, R, (let μ x = ptr ρ_ε_n_1 ƒ_ε_n_1; e_2); ...
+         (let μ x = ptr ρ_ε_n_2 ƒ_ε_n_2; e_2); ())
+```
+
+By IH, either `e_1 ∈ 𝕍` or we can take a step. In the former case, we know that `e_1 : &r_1 f_1 τ_1`
+where `τ_1` is either of the form `[τ; n]` or `[τ]` (that is, it's either an array or a slice). From
+the typing rule premise `Ρ ⊢ imm r_1`, we know that all of the subregions for arrays have non-zero
+fractions and thus can be immutably bound to `x` in the let results. Thus, we can step with either
+`E-ForArray` or `E-ForSlice`, depending on which of the types we have for `τ_1`.
+
+##### Case `T-ForMut`:
+
+From premise:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 1 τ_1 ⇒ Ρ_1; Γ_1
+τ_1 ~ [τ; n] ∨ τ_1 ~ [τ]
+Ρ ⊢ mut r_1
+Ρ(r_1) = τ_1 ⊗ 1 ⊗ path_set_1
+fresh ρ
+Ρ' ≝ Ρ_1, r_1 ↦ τ_1 ⊗ 0 ⊗ path_set_1, ρ ↦ τ ⊗ 1 ⊗ { ε ↦ r_1 }
+Σ; Δ; Ρ'; Γ, x ↦ ρ ⊢ e_2 : unit ⇒ Ρ'; Γ
+----------------------------------------------------------------- T-ForMut
+Σ; Δ; Ρ; Γ ⊢ for mut x in e_1 { e_2 } : unit ⇒ Ρ'; Γ_1
+```
+
+We want to step with either of:
+```
+;; using an ε path means resolving any aliasing, e.g. for references to arrays
+R(ρ_1)(ε) = ρ_ε ↦ ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
+...
+R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
+------------------------------------------------------------------------------- E-ForArray
+(σ, R, for μ x in (ptr ρ_1 ƒ_1) { e_2 }) →
+  (σ, R, (let μ x = ptr ρ_ε_0 ƒ_ε_0; e_2); ...
+         (let μ x = ptr ρ_ε_n-1 ƒ_ε_n-1; e_2); ())
+
+;; using an ε path means resolving any aliasing 
+R(ρ_1)(ε) = ρ_ε ↦ ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
+...
+R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
+---------------------------------------------------------------- E-ForSlice
+(σ, R, for μ x in (fatptr ρ_1 ƒ_1 n_1 n_2) { e_2 }) →
+  (σ, R, (let μ x = ptr ρ_ε_n_1 ƒ_ε_n_1; e_2); ...
+         (let μ x = ptr ρ_ε_n_2 ƒ_ε_n_2; e_2); ())
+```
+
+By IH, either `e_1 ∈ 𝕍` or we can take a step. In the former case, we know that `e_1 : &r_1 f_1 τ_1`
+where `τ_1` is either of the form `[τ; n]` or `[τ]` (that is, it's either an array or a slice). From
+the typing rule premise `Ρ ⊢ mut r_1`, we know that all of the subregions for arrays have fractions
+of 1 and thus can be immutably bound to `x` in the let results. Thus, we can step with either
+`E-ForArray` or `E-ForSlice`, depending on which of the types we have for `τ_1`.
 
 ##### Case `T-LetTup`:
 
