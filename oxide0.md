@@ -110,16 +110,21 @@ expressions e ::= prim
                 | e_1 e_2
                 | e_1; e_2
                 | if e_1 { e_2 } else { e_3 }
+                | match e_d { pat_1 => e_1, ..., pat_n => e_n }
                 | for μ x in e_1 { e_2 }
                 | (e_1, ..., e_n)
                 | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1; e_2
                 | [e_1, ..., e_n]
                 | S::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
                 | S::<χ_1, ..., χ_n>(e_1, ..., e_n)
-                | S::ev::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
-                | S::ev::<χ_1, ..., χ_n>(e_1, ..., e_n)
+                | S::E::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
+                | S::E::<χ_1, ..., χ_n>(e_1, ..., e_n)
                 | Λς: κ. e
                 | e [χ]
+
+patterns pat ::= _
+               | S::E(μ_1 x_1, ..., μ_n x_n)
+               | S::E { x_f_1: μ_1 x_1, ..., x_f_n: μ_n: x_n }
 
 type environments Γ ::= • | Γ, x ↦ r
 kind environments Δ ::= • | Δ, ς : κ
@@ -411,6 +416,26 @@ f_1 ≠ 0
 ;; and e_2, but we should be able to join ρ's in each
 -------------------------------------------------------- T-If
 Σ; Δ; Ρ; Γ ⊢ if e_1 { e_2 } else { e_3 } : τ ⇒ Ρ'; Γ_1
+
+Σ; Δ; Ρ; Γ ⊢ e_d : &r_d f_d S ⇒ Ρ_d; Γ_d
+if mut ∈ cod(pat_1) ∪ ... ∪ cod(pat_n) then f_d = 1 else f_d ≠ 0
+Σ(S) = enum S<ς_1 : κ_1, ..., ς_n : κ_n> { ev_1, ..., ev_n }
+Σ ⊢ pat_1 ⇒ x_1_1 ↦ τ_1_1, ..., x_1_n ↦ τ_1_n
+...
+Σ ⊢ pat_n ⇒ x_n_1 ↦ τ_n_1, ..., x_n_n ↦ τ_n_n
+fresh ρ_1 ... ρ_n
+Σ; Δ, ρ_1 : RGN, ..., ρ_n : RGN, ζ_1 : RGN, ..., ζ_n : RGN;
+  Ρ_d, ρ_1 ↦ τ_1_1 ⊗ ζ_1 ⊗ path_set_1, ..., ρ_n ↦ τ_1_n ⊗ ζ_n ⊗ path_set_n;
+  Γ_d, x_1_1 ↦ ρ_1, ..., x_1_n ↦ ρ_n
+⊢ e_1 : τ ⇒ Ρ_1; Γ_d
+...
+Σ; Δ, ρ_1 : RGN, ..., ρ_n : RGN, ζ_1 : RGN, ..., ζ_n : RGN;
+  Ρ_d, ρ_1 ↦ τ_1_1 ⊗ ζ_1 ⊗ path_set_1, ..., ρ_n ↦ τ_1_n ⊗ ζ_n ⊗ path_set_n;
+  Γ_d, x_n_1 ↦ ρ_1, ..., x_n_n ↦ ρ_n
+⊢ e_n : τ ⇒ Ρ_n; Γ_d
+;; FIXME: the same kind of unification of Ρ from `T-If` must happen here
+------------------------------------------------------------------------------- T-Match
+Σ; Δ; Ρ; Γ ⊢ match e_d { pat_1 => e_1, ..., pat_n => e_n } : τ ⇒ Ρ'; Γ_d
 
 Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 τ_1 ⇒ Ρ_1; Γ_1
 τ_1 ~ [τ; n] ∨ τ_1 ~ [τ]
@@ -730,6 +755,7 @@ evaluation contexts E ::= []
                         | v E
                         | E; e
                         | if E { e } else { e }
+                        | match E { pat_1 => e_1, ..., pat_n => e_n }
                         | for μ x in E { e_2 }
                         | (ptr ρ ƒ, ... E, e ...)
                         | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = E; e
@@ -920,6 +946,13 @@ R(ρ) = ƒ ⊗ { ε ↦ true }
 R(ρ) = ƒ ⊗ { ε ↦ false }
 ------------------------------------------------------ E-IfFalse
 (σ, R, if ptr ρ ƒ { e_1 } else { e_2 }) → (σ, R, e_2)
+
+R(ρ) = ƒ ⊗ { <tag> ↦ E, Π_1 ↦ ρ_1, ..., Π_n ↦ ρ_n }
+match E with { pat_1, ..., pat_n } ⇒ n_s; E { x_1_f: x_1 ↦ ρ_1, ..., x_f_n: x_n ↦ ρ_n }; R'
+  ∨ match E with { pat_1, ..., pat_n } ⇒ n_s; E(x_1 ↦ ρ_1, ..., x_n ↦ ρ_n); R'
+-------------------------------------------------------------------------------------------- E-Match
+(σ, R, match ptr ρ ƒ { pat_1 => e_1, ..., pat_n => e_n }) →
+  (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R ∪ R', e_n_s)
 
 R(ρ_1) = ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
 ƒ_1 ≠ 0
