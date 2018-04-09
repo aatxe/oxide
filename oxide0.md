@@ -2235,7 +2235,7 @@ From premise:
 (σ, R, (); e) → (σ, R, e)
 ```
 
-From premise and knowledge that `e` is of the form ``, either:
+From premise and knowledge that `e` is of the form `e_1; e_2`, either:
 ```
 Σ; Δ; Ρ; Γ ⊢ e_1 : unit ⇒ Ρ_1; Γ_1
 Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : τ_2 ⇒ Ρ_2; Γ_2
@@ -2250,6 +2250,68 @@ From premise and knowledge that `e` is of the form ``, either:
 `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 
 `e'` is well-typed: We know from the `T-Seq` that `e_2`, our result, is well-typed.
+
+##### Case `E-IfTrue`:
+
+From premise:
+```
+ƒ ≠ 0
+R(ρ) = ƒ ⊗ { ε ↦ true }
+------------------------------------------------------ E-IfTrue
+(σ, R, if ptr ρ ƒ { e_1 } else { e_2 }) → (σ, R, e_1)
+```
+
+From premise and knowledge that `e` is of the form `if e_1 { e_2 } else { e_3 }`:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 bool ⇒ Ρ_1; Γ_1
+f_1 ≠ 0
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : τ ⇒ Ρ_2; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_3 : τ ⇒ Ρ_3; Γ_1
+;; FIXME: we need to somehow unify Ρ_2 and Ρ_3
+;; in particular, τ is not necessarily identical in e_2
+;; and e_2, but we should be able to join ρ's in each
+-------------------------------------------------------- T-If
+Σ; Δ; Ρ; Γ ⊢ if e_1 { e_2 } else { e_3 } : τ ⇒ Ρ'; Γ_1
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-IfTrue` leaves `σ` unchanged and so we can pick `Γ'` to be `Γ`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-IfTrue` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'`
+and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
+
+`e'` is well-typed: We know from `T-If` that our result from the first branch is well-typed.
+
+##### Case `E-IfFalse`:
+
+From premise:
+```
+ƒ ≠ 0
+R(ρ) = ƒ ⊗ { ε ↦ false }
+------------------------------------------------------ E-IfFalse
+(σ, R, if ptr ρ ƒ { e_1 } else { e_2 }) → (σ, R, e_2)
+```
+
+From premise and knowledge that `e` is of the form `if e_1 { e_2 } else { e_3 }`:
+```
+Σ; Δ; Ρ; Γ ⊢ e_1 : &r_1 f_1 bool ⇒ Ρ_1; Γ_1
+f_1 ≠ 0
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_2 : τ ⇒ Ρ_2; Γ_1
+Σ; Δ; Ρ_1; Γ_1 ⊢ e_3 : τ ⇒ Ρ_3; Γ_1
+;; FIXME: we need to somehow unify Ρ_2 and Ρ_3
+;; in particular, τ is not necessarily identical in e_2
+;; and e_2, but we should be able to join ρ's in each
+-------------------------------------------------------- T-If
+Σ; Δ; Ρ; Γ ⊢ if e_1 { e_2 } else { e_3 } : τ ⇒ Ρ'; Γ_1
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-IfFalse` leaves `σ` unchanged and so we can pick `Γ'` to be `Γ`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-IfFalse` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'`
+and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
+
+`e'` is well-typed: We knoe from `T-If` that our result from the second branch is well-typed.
 
 ##### Case `E-LetTup`:
 
