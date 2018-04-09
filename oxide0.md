@@ -52,12 +52,16 @@ ones that yield a reference at some type `τ`.
 identifiers x, y
 • is a special empty identifier
 struct names S
+enum variants E
 region names ρ
 
 naturals n ∈ ℕ
 concrete fractions ƒ ::= n | ƒ / ƒ | ƒ + ƒ
 immediate path Π ::= x | n | [n]
 paths π ::= ε | Π.π ;; π is (Π.)*ε
+
+enum variants ev ::= E(τ_1, ..., τ_n)
+                   | E { x_1: τ_1, ..., x_n: τ_n }
 
 mutability μ ::= imm | mut
 kinds κ ::= ★ | RGN | FRAC
@@ -112,6 +116,8 @@ expressions e ::= prim
                 | [e_1, ..., e_n]
                 | S::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
                 | S::<χ_1, ..., χ_n>(e_1, ..., e_n)
+                | S::ev::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
+                | S::ev::<χ_1, ..., χ_n>(e_1, ..., e_n)
                 | Λς: κ. e
                 | e [χ]
 
@@ -121,9 +127,11 @@ kind environments Δ ::= • | Δ, ς : κ
 data environments Σ ::= •
                       | Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n> { x_1: τ_1, ..., x_n: τ_n }
                       | Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n>(τ_1, ..., τ_n)
+                      | Σ, enum S<ς_1 : κ_1, ..., ς_n : κ_n> { ev_1, ..., ev_n }
 
 region environments Ρ ::= •
                         | Ρ, r ↦ τ ⊗ f ⊗ { Π ↦ r, ... }
+                        | Ρ, r ↦ τ ⊗ f ⊗ { <tag> ↦ ev, Π ↦ r, ... }
                         | Ρ, r ↦ τ ⊗ f ⊗ { ε ↦ τ }
                         | Ρ, r ↦ τ ⊗ f ⊗ { ε ↦ r }
 ```
@@ -206,6 +214,28 @@ fresh ρ
 Σ; Δ; Ρ; Γ ⊢ alloc S::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
            : &ρ 1 S<χ_1, ..., χ_n>
            ⇒ Ρ_n, ρ ↦ S::<χ_1, ..., χ_n> ⊗ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n };
+             Γ_n
+
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ; Δ; Ρ_n; Γ_n ⊢ S::E::<χ_1, ..., χ_n>(τ_1, ..., τ_n)
+------------------------------------------------------------------------------------- T-AllocEnumTup
+Σ; Δ; Ρ; Γ ⊢ alloc S::E::<χ_1, ..., χ_n>(e_1, ..., e_n)
+           : &ρ 1 S<χ_1, ..., χ_n>
+           ⇒ Ρ_n, ρ ↦ S<χ_1, ..., χ_n> ⊗ 1 ⊗ { <tag> ↦ E, 1 ↦ ρ_1, ..., n ↦ ρ_n };
+             Γ_n
+
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ ⊢ S::E::<χ_1, ..., χ_n> { x_1: τ_1, ..., x_n: τ_n }
+---------------------------------------------------------------------------------- T-AllocEnumRecord
+Σ; Δ; Ρ; Γ ⊢ alloc S::E::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
+           : &ρ 1 S<χ_1, ..., χ_n>
+           ⇒ Ρ_n, ρ ↦ S::<χ_1, ..., χ_n> ⊗ 1 ⊗ { <tag> ↦ E, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n };
              Γ_n
 
 fresh ρ
@@ -648,6 +678,35 @@ all of the component types are well-formed with respect to type variables bound 
 ⊢ τ_n : ★
 ------------------------------------------------------- WF-DefnStructTuple
 ⊢ Σ, struct S<ς_1 : κ_1, ..., ς_n : κ_n>(τ_1, ..., τ_n)
+
+Σ, enum S<ς_1 : κ_1, ..., ς_n : κ_n> { ev_1, ..., ev_n };
+  •, ς_1 : κ_1, ..., ς_n : κ_n
+⊢ ev_1
+...
+Σ, enum S<ς_1 : κ_1, ..., ς_n : κ_n> { ev_1, ..., ev_n };
+  •, ς_1 : κ_1, ..., ς_n : κ_n
+⊢ ev_n
+dom(ev_1) ≠ ... ≠ dom(ev_n) ;; i.e. all variant names are unique
+----------------------------------------------------------------- WP-DefnEnum
+⊢ Σ, enum S<ς_1 : κ_1, ..., ς_n : κ_n> { ev_1, ..., ev_n }
+```
+
+#### `Σ; Δ ⊢ ev`
+Meaning: In the data structure context `Σ` and the kind environment `Δ`, the enum variant `ev` is
+well-formed.
+
+```
+Σ; Δ; •; • ⊢ τ_1 : ★
+...
+Σ; Δ; •; • ⊢ τ_n : ★
+----------------------- WF-TupleVariant
+Σ; Δ ⊢ E(τ_1, ... τ_n)
+
+Σ; Δ; •; • ⊢ τ_1 : ★
+...
+Σ; Δ; •; • ⊢ τ_n : ★
+------------------------------------ WF-RecordVariant
+Σ; Δ ⊢ E { x_1: τ_1, ... x_n: τ_n }
 ```
 
 [˄ Back to top][toc]
@@ -675,6 +734,8 @@ evaluation contexts E ::= []
                         | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = E; e
                         | S::<χ_1, ..., χ_n> { x: ptr ρ ƒ, ... x: E, x: e ... }
                         | S::<χ_1, ..., χ_n>(ptr ρ ƒ, ... E, e ...)
+                        | S::E::<χ_1, ..., χ_n> { x: ptr ρ ƒ, ... x: E, x: e ... }
+                        | S::E::<χ_1, ..., χ_n>(ptr ρ ƒ, ... E, e ...)
                         | E [χ]
 
 simple values sv ::= true | false
@@ -691,9 +752,12 @@ values v ::= sv
            | (sv_1, ..., sv_n)
            | S { x_1: sv_1, ..., x_n: sv_n }
            | S(sv_1, ..., sv_n)
+           | S::E { x_1: sv_1, ..., x_n: sv_n }
+           | S::E(sv_1, ..., sv_n)
 
 region sets R ::= ∅
-                | R ∪ { ρ ↦ ƒ ⊗ { Π ↦ ρ, ... }} 
+                | R ∪ { ρ ↦ ƒ ⊗ { Π ↦ ρ, ... } } 
+                | R ∪ { ρ ↦ ƒ ⊗ { <tag> ↦ E, Π ↦ ρ, ... } }
                 | R ∪ { ρ ↦ ƒ ⊗ { ε ↦ sv } }
                 | R ∪ { ρ ↦ ƒ ⊗ { ε ↦ ρ } }
                 
@@ -733,6 +797,16 @@ fresh ρ
 --------------------------------------------------------------------------- E-AllocStuctRecord
 (σ, R, alloc S::<χ_1, ..., χ_n> { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
   (σ, R ∪ { ρ ↦ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
+
+fresh ρ
+----------------------------------------------------------------------- E-AllocEnumTup
+(σ, R, alloc S::E::<χ_1, ..., χ_n>(ptr ρ_1 1, ..., ptr ρ_n 1)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { <tag> ↦ E, 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
+
+fresh ρ
+------------------------------------------------------------------------------ E-AllocEnumRecord
+(σ, R, alloc S::E::<χ_1, ..., χ_n> { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { <tag> ↦ E, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
 
 fresh ρ
 ------------------------------------------------------------------ E-AllocArray
@@ -902,12 +976,13 @@ R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
    5. if `v` is a value of type `&ρ ƒ [τ]`, then `v` is of the form `fatptr ρ ƒ n_1 n_2`.
    6. if `v` is a value of type `[τ; n]`, then `v` is of the form `[sv_1, ..., sv_n]`.
    7. if `v` is a value of type `(τ_1, ..., τ_n)`, then `v` is of the form `(sv_1, ..., sv_n)`.
-   8. if `v` is a value of type `S`, then `v` is either of the form `S(sv_1, ..., sv_n)` or
-     `S { x_1: sv_1, ..., x_n: sv_n }` depending on its definition in `Σ`.
+   8. if `v` is a value of type `S`, then `v` is either of the form `S(sv_1, ..., sv_n)`,
+      `S { x_1: sv_1, ..., x_n: sv_n }`, `S::E(sv_1, ..., sv_n)`, or
+      `S::E { x_1: sv_1, ..., x_n: sv_n }` depending on its definition in `Σ`.
    9. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n → τ_ret`, then `v` is of
-     the form `|x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
+      the form `|x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
   10. if `v` is a value of type `&r_1 f_1 τ_1 ⊗ ... ⊗ &r_n f_n τ_n ↝ τ_ret`, then `v` is of
-     the form `move |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
+      the form `move |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }`.
   11. if `v` is a value of type `∀ς : κ. e`, then `v` is of the form `Λς: κ. e`.
 
 **Lemma** (Type Substitution):
@@ -1049,6 +1124,62 @@ fresh ρ
 By IH, either `e_1 ∈ 𝕍` through `e_n ∈ 𝕍` or we can take a step for one of them. If they're all
 values, we know from their types (`&ρ_1 1 τ_1` through `&ρ_n 1 τ_n`) and Canonical Forms, that `e_1`
 through `e_n` are `ptr ρ_1 1` through `ptr ρ_n 1`. Thus, we can step with `E-AllocStructRecord`.
+
+##### Case `T-AllocEnumTup`:
+
+From premise:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ; Δ; Ρ_n; Γ_n ⊢ S::E::<χ_1, ..., χ_n>(τ_1, ..., τ_n)
+------------------------------------------------------------------------------------- T-AllocEnumTup
+Σ; Δ; Ρ; Γ ⊢ alloc S::E::<χ_1, ..., χ_n>(e_1, ..., e_n)
+           : &ρ 1 S<χ_1, ..., χ_n>
+           ⇒ Ρ_n, ρ ↦ S<χ_1, ..., χ_n> ⊗ 1 ⊗ { <tag> ↦ E, 1 ↦ ρ_1, ..., n ↦ ρ_n };
+             Γ_n
+```
+
+We want to step with:
+```
+fresh ρ
+----------------------------------------------------------------------- E-AllocEnumTup
+(σ, R, alloc S::E::<χ_1, ..., χ_n>(ptr ρ_1 1, ..., ptr ρ_n 1)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { <tag> ↦ E, 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
+```
+
+By IH, either `e_1 ∈ 𝕍` through `e_n ∈ 𝕍` or we can take a step for one of them. If they're all
+values, we know from their types (`&ρ_1 1 τ_1` through `&ρ_n 1 τ_n`) and Canonical Forms, that `e_1`
+through `e_n` are `ptr ρ_1 1` through `ptr ρ_n 1`. Thus, we can step with `E-AllocEnumTup`.
+
+##### Case `T-AllocEnumRecord`:
+
+From premise:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ ⊢ S::E::<χ_1, ..., χ_n> { x_1: τ_1, ..., x_n: τ_n }
+---------------------------------------------------------------------------------- T-AllocEnumRecord
+Σ; Δ; Ρ; Γ ⊢ alloc S::E::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
+           : &ρ 1 S<χ_1, ..., χ_n>
+           ⇒ Ρ_n, ρ ↦ S::<χ_1, ..., χ_n> ⊗ 1 ⊗ { <tag> ↦ E, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n };
+             Γ_n
+```
+
+We want to step with:
+```
+fresh ρ
+------------------------------------------------------------------------------ E-AllocEnumRecord
+(σ, R, alloc S::E::<χ_1, ..., χ_n> { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { <tag> ↦ E, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
+```
+
+By IH, either `e_1 ∈ 𝕍` through `e_n ∈ 𝕍` or we can take a step for one of them. If they're all
+values, we know from their types (`&ρ_1 1 τ_1` through `&ρ_n 1 τ_n`) and Canonical Forms, that `e_1`
+through `e_n` are `ptr ρ_1 1` through `ptr ρ_n 1`. Thus, we can step with `E-AllocEnumRecord`.
 
 ##### Case `T-AllocArray`:
 
@@ -1803,6 +1934,79 @@ in `T-AllocStructRecord`. Since we picked this change to mirror the one in `R`, 
 holds.
 
 `e'` is well-typed: From `E-AllocStructRecord`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
+`Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
+fraction `ƒ`) to derive `e' : &ρ 1 τ`.
+
+##### Case `E-AllocEnumTup`:
+
+From premise:
+```
+fresh ρ
+----------------------------------------------------------------------- E-AllocEnumTup
+(σ, R, alloc S::E::<χ_1, ..., χ_n>(ptr ρ_1 1, ..., ptr ρ_n 1)) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { <tag> ↦ E, 1 ↦ ρ_1, ..., n ↦ ρ_n } }, ptr ρ 1)
+```
+
+From premise and knowledge that `e` is of the form `alloc S::E(e_1, ..., e_n)`:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ; Δ; Ρ_n; Γ_n ⊢ S::E::<χ_1, ..., χ_n>(τ_1, ..., τ_n)
+------------------------------------------------------------------------------------- T-AllocEnumTup
+Σ; Δ; Ρ; Γ ⊢ alloc S::E::<χ_1, ..., χ_n>(e_1, ..., e_n)
+           : &ρ 1 S<χ_1, ..., χ_n>
+           ⇒ Ρ_n, ρ ↦ S<χ_1, ..., χ_n> ⊗ 1 ⊗ { <tag> ↦ E, 1 ↦ ρ_1, ..., n ↦ ρ_n };
+             Γ_n
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-AllocEnumTup` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-AllocEnumTup` changed `R` by adding a binding for a fresh `ρ`. So, we can
+pick `Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
+`ρ ↦ τ ⊗ 1 ⊗ { 1 ↦ ρ_1, ..., n ↦ ρ_n }`. This corresponds to the same change we see being made in
+`T-AllocEnumTup`. Since we picked this change to mirror the one in `R`, `Ρ' ⊢ R'` still holds.
+
+`e'` is well-typed: From `E-AllocEnumTup`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'`
+that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction
+`ƒ`) to derive `e' : &ρ 1 τ`.
+
+##### Case `E-AllocEnumRecord`:
+
+From premise:
+```
+fresh ρ
+------------------------------------------------------------------------------ E-AllocEnumRecord
+(σ, R, alloc S::E::<χ_1, ..., χ_n> { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { <tag> ↦ E, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
+```
+
+From premise and knowledge that `e` is of the form `alloc S::E { x_1: e_1, ..., x_n: e_n }`:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ_1 ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ_n ⇒ Ρ_n; Γ_n
+Σ ⊢ S::E::<χ_1, ..., χ_n> { x_1: τ_1, ..., x_n: τ_n }
+---------------------------------------------------------------------------------- T-AllocEnumRecord
+Σ; Δ; Ρ; Γ ⊢ alloc S::E::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
+           : &ρ 1 S<χ_1, ..., χ_n>
+           ⇒ Ρ_n, ρ ↦ S::<χ_1, ..., χ_n> ⊗ 1 ⊗ { <tag> ↦ E, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n };
+             Γ_n
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-AllocEnumRecord` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'`
+and `Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-AllocEnumRecord` changed `R` by adding a binding for a fresh `ρ`. So, we
+can pick `Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
+`ρ ↦ τ ⊗ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }`. This corresponds to the same change we see being made
+in `T-AllocEnumRecord`. Since we picked this change to mirror the one in `R`, `Ρ' ⊢ R'` still
+holds.
+
+`e'` is well-typed: From `E-AllocEnumRecord`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
 `Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
 fraction `ƒ`) to derive `e' : &ρ 1 τ`.
 
