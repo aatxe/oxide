@@ -214,8 +214,7 @@ fresh ρ
 Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ ⇒ Ρ_n; Γ_n
 --------------------------------------------------------------------------- T-AllocArray
 Σ; Δ; Ρ; Γ ⊢ alloc [e_1, ..., e_n] : &ρ 1 [τ; n]
-           ⇒ Ρ_n, ρ ↦ [τ; n] ⊗ 1 ⊗ { [0] ↦ ρ_1, ..., [n-1] ↦ ρ_n };
-             Γ_n
+           ⇒ Ρ_n, ρ ↦ [τ; n] ⊗ 1 ⊗ { [0] ↦ ρ_1, ..., [n-1] ↦ ρ_n }; Γ_n
 
 Ρ ⊢ imm π in r_x : τ_π ⇒ r_π
 Ρ(r_π) = τ_π ⊗ f_π ⊗ π_path_set
@@ -735,6 +734,11 @@ fresh ρ
 (σ, R, alloc S::<χ_1, ..., χ_n> { x_1: ptr ρ_1 1, ..., x_n: ptr ρ_n 1 }) →
   (σ, R ∪ { ρ ↦ 1 ⊗ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n } }, ptr ρ 1)
 
+fresh ρ
+------------------------------------------------------------------ E-AllocArray
+(σ, R, alloc [ptr ρ_1 1, ..., ptr ρ_n 1]) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { [0] ↦ ρ_1, ..., [n-1] ↦ ρ_n } }, ptr ρ 1)
+
 σ(x) = ρ_x
 ;; looking up the whole path through regions checks ƒ ≠ 0
 R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ { ε ↦ sv }
@@ -1045,6 +1049,31 @@ fresh ρ
 By IH, either `e_1 ∈ 𝕍` through `e_n ∈ 𝕍` or we can take a step for one of them. If they're all
 values, we know from their types (`&ρ_1 1 τ_1` through `&ρ_n 1 τ_n`) and Canonical Forms, that `e_1`
 through `e_n` are `ptr ρ_1 1` through `ptr ρ_n 1`. Thus, we can step with `E-AllocStructRecord`.
+
+##### Case `T-AllocArray`:
+
+From premise:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ ⇒ Ρ_n; Γ_n
+--------------------------------------------------------------------------- T-AllocArray
+Σ; Δ; Ρ; Γ ⊢ alloc [e_1, ..., e_n] : &ρ 1 [τ; n]
+           ⇒ Ρ_n, ρ ↦ [τ; n] ⊗ 1 ⊗ { [0] ↦ ρ_1, ..., [n-1] ↦ ρ_n }; Γ_n
+```
+
+We want to step with:
+```
+fresh ρ
+------------------------------------------------------------------ E-AllocArray
+(σ, R, alloc [ptr ρ_1 1, ..., ptr ρ_n 1]) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { [0] ↦ ρ_1, ..., [n-1] ↦ ρ_n } }, ptr ρ 1)
+```
+
+By IH, either `e_1 ∈ 𝕍` through `e_n ∈ 𝕍` or we can take a step for one of them. If they're all
+values, weknow from their types (`&ρ_1 1 τ` through `&ρ_n 1 τ`) and Canonical Forms, that `e_1`
+through `e_n` are `ptr ρ_1 1` through `ptr ρ_n 1`. Thus, we can step with `E-AllocArray`.
 
 ##### Case `T-Copy`:
 
@@ -1776,6 +1805,40 @@ holds.
 `e'` is well-typed: From `E-AllocStructRecord`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and
 `Ρ'` that we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some
 fraction `ƒ`) to derive `e' : &ρ 1 τ`.
+
+##### Case `E-AllocArray`:
+
+From premise:
+```
+fresh ρ
+------------------------------------------------------------------ E-AllocArray
+(σ, R, alloc [ptr ρ_1 1, ..., ptr ρ_n 1]) →
+  (σ, R ∪ { ρ ↦ 1 ⊗ { [0] ↦ ρ_1, ..., [n-1] ↦ ρ_n } }, ptr ρ 1)
+```
+
+From premise and knowledge that `e` is of the form `alloc [ptr ρ_1 1, ..., ptr ρ_n 1]`:
+```
+fresh ρ
+Σ; Δ; Ρ; Γ ⊢ e_1 : &ρ_n 1 τ ⇒ Ρ_1; Γ_1
+...
+Σ; Δ; Ρ_n-1; Γ_n-1 ⊢ e_n : &ρ_n 1 τ ⇒ Ρ_n; Γ_n
+--------------------------------------------------------------------------- T-AllocArray
+Σ; Δ; Ρ; Γ ⊢ alloc [e_1, ..., e_n] : &ρ 1 [τ; n]
+           ⇒ Ρ_n, ρ ↦ [τ; n] ⊗ 1 ⊗ { [0] ↦ ρ_1, ..., [n-1] ↦ ρ_n }; Γ_n
+```
+
+`Γ'` and `Γ' ⊢ σ'`: `E-AllocArray` did not change `σ` and so we pick `Γ` as `Γ'`. Since `σ'` and
+`Γ'` are both unchanged, `Γ ⊢ σ` gives us `Γ' ⊢ σ'`.
+
+`Ρ'` and `Ρ' ⊢ R'`: `E-AllocArray` changed `R` by adding a binding for a fresh `ρ`. So, we can pick
+`Ρ'` to be `Ρ` (recall from the premise `Ρ ⊢ R`) with the extra binding
+`ρ ↦ τ ⊗ 1 ⊗ { [0] ↦ ρ_1, ..., [n-1] ↦ ρ_n }`. This corresponds to the same change we see being
+made in `T-AllocArray`. Since we picked this change to mirror the one in `R`, `Ρ' ⊢ R'` still
+holds.
+
+`e'` is well-typed: From `E-AllocArray`, we know `e' = ptr ρ 1`. Then, using the `Γ'` and `Ρ'` that
+we picked, we can apply `T-Ptr` (whose only requirement is that `ρ` is bound to some fraction `ƒ`)
+to derive `e' : &ρ 1 τ`.
 
 ##### Case `E-Copy`:
 
