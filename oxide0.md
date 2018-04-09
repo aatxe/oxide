@@ -101,8 +101,8 @@ expressions e ::= prim
                 | drop x
                 | let μ x: τ = e_1; e_2
                 | x.π := e
-                | |x_1: &r_1 f_1 τ_1, ... x_n: &r_n f_n τ_n| { e }
-                | move |x_1: &r_1 f_1 τ_1, ... x_n: &r_n f_n τ_n| { e }
+                | |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }
+                | move |x_1: &r_1 f_1 τ_1, ..., x_n: &r_n f_n τ_n| { e }
                 | e_1 e_2
                 | e_1; e_2
                 | if e_1 { e_2 } else { e_3 }
@@ -656,14 +656,18 @@ all of the component types are well-formed with respect to type variables bound 
 ```
 expresions e ::= ...
                | ptr ρ ƒ
+               | fatptr ρ ƒ n_1 n_2 -- the value form of a slice, a pointer with a start and end
 
 evaluation contexts E ::= []
                         | alloc E
+                        | slice μ x.π E e
+                        | slice μ x.π v E
                         | let μ x: τ = E; e
                         | E e
                         | v E
                         | E; e
                         | if E { e } else { e }
+                        | for μ x in E { e_2 }
                         | (ptr ρ ƒ, ... E, e ...)
                         | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = E; e
                         | S::<χ_1, ..., χ_n> { x: ptr ρ ƒ, ... x: E, x: e ... }
@@ -674,13 +678,15 @@ simple values sv ::= true | false
                    | n
                    | ()
                    | ptr ρ ƒ
+                   | fatptr ρ ƒ n_1 n_2
                    | |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
                    | move |x_1: &r_1 μ_1 τ_1, ... x_n: &r_n μ_n τ_n| { e }
                    | Λς: κ. e
 
 values v ::= sv
-           | (sv_1, ... sv_n)
-           | S { x_1: sv_1, ... x_n: sv_n }
+           | [sv_1, ..., sv_n]
+           | (sv_1, ..., sv_n)
+           | S { x_1: sv_1, ..., x_n: sv_n }
            | S(sv_1, ..., sv_n)
 
 region sets R ::= ∅
@@ -696,6 +702,9 @@ stores σ ::= • | σ ∪ { x ↦ ρ }
 ```
 ------------------------------------------------------------ T-Ptr
 Σ; Δ; Ρ, ρ ↦ τ ⊗ f ⊗ path_set; Γ ⊢ ptr ρ ƒ : &ρ ƒ τ ⇒ Ρ; Γ
+
+----------------------------------------------------------------------------- T-FatPtr
+Σ; Δ; Ρ, ρ ↦ [τ] ⊗ f ⊗ path_set; Γ ⊢ fatptr ρ ƒ n_1 n_2 : &ρ ƒ [τ] ⇒ Ρ; Γ
 ```
 
 ### Operational Semantics
@@ -746,6 +755,29 @@ fresh ρ
 -------------------------------------------------------------------- E-BorrowMut
 (σ, R, borrow mut x.π) →
   (σ, R ∪ { ρ_π ↦ 0 ⊗ path_set, ρ ↦ 1 ⊗ { ε ↦ ρ_π } }, ptr ρ ƒ_n)
+
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ ≠ 0
+R(ρ_x)(π) = ρ_π ↦ ƒ_π ⊗ ρath_set
+R(ρ_1) = ƒ_1 ⊗ { ε ↦ n_1 }    ƒ_1 ≠ 0
+R(ρ_2) = ƒ_2 ⊗ { ε ↦ n_2 }    ƒ_2 ≠ 0
+[n_1] ∈ dom(path_set) [n_2] ∈ dom(path_set)
+ƒ_π / 2 ↓ ƒ_n
+fresh ρ
+----------------------------------------------------------------------------------- E-SliceImm
+(σ, R, slice imm x.π (ptr ρ_1 ƒ_1) (ptr ρ_2 ƒ_2)) →
+  (σ, R ∪ { ρ_π ↦ ƒ_n ⊗ path_set, ρ ↦ ƒ_n ⊗ { ε ↦ ρ_π } }, fatptr ρ ƒ_n n_1 n_2)
+
+σ(x) = ρ_x
+;; looking up the whole path through regions checks ƒ = 1
+R(ρ_x)(π) = ρ_π ↦  ⊗ ρath_set
+R(ρ_1) = ƒ_1 ⊗ { ε ↦ n_1 }    ƒ_1 ≠ 0
+R(ρ_2) = ƒ_2 ⊗ { ε ↦ n_2 }    ƒ_2 ≠ 0
+[n_1] ∈ dom(path_set) [n_2] ∈ dom(path_set)
+fresh ρ
+------------------------------------------------------------------------------- E-SliceMut
+(σ, R, slice mut x.π (ptr ρ_1 ƒ_1) (ptr ρ_2 ƒ_2)) →
+  (σ, R ∪ { ρ_π ↦ 0 ⊗ path_set, ρ ↦ 1 ⊗ { ε ↦ ρ_π } }, fatptr ρ ƒ_n n_1 n_2)
 
 σ(x) = ρ_x
 R(ρ_x) = ƒ_x ⊗ { ε ↦ ρ_s }
@@ -805,6 +837,26 @@ R(ρ) = ƒ ⊗ { ε ↦ true }
 R(ρ) = ƒ ⊗ { ε ↦ false }
 ------------------------------------------------------ E-IfFalse
 (σ, R, if ptr ρ ƒ { e_1 } else { e_2 }) → (σ, R, e_2)
+
+;; using an ε path means resolving any aliasing, e.g. for references to arrays
+R(ρ_1)(ε) = ρ_ε ↦ ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
+...
+R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
+------------------------------------------------------------------------------- E-ForArray
+(σ, R, for μ x in (ptr ρ_1 ƒ_1) { e_2 }) →
+  (σ, R, (let μ x = ptr ρ_ε_0 ƒ_ε_0; e_2); ...
+         (let μ x = ptr ρ_ε_n-1 ƒ_ε_n-1; e_2))
+
+;; using an ε path means resolving any aliasing 
+R(ρ_1)(ε) = ρ_ε ↦ ƒ_1 ⊗ { [0] ↦ ρ_ε_0, ..., [n-1] ↦ ρ_ε_n-1 }
+R(ρ_ε_0) = ƒ_ε_0 ⊗ path_set_0
+...
+R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
+---------------------------------------------------------------- E-ForSlice
+(σ, R, for μ x in (fatptr ρ_1 ƒ_1 n_1 n_2) { e_2 }) →
+  (σ, R, (let μ x = ptr ρ_ε_n_1 ƒ_ε_n_1; e_2); ...
+         (let μ x = ptr ρ_ε_n_2 ƒ_ε_n_2; e_2))
 
 --------------------------------------------------------------------------------------- E-LetTup
 (σ, R, let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = (ptr ρ_1 1, ..., ptr ρ_n 1); e)
