@@ -113,7 +113,6 @@ expressions e ::= prim
                 | match e_d { pat_1 => e_1, ..., pat_n => e_n }
                 | for μ x in e_1 { e_2 }
                 | (e_1, ..., e_n)
-                | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1; e_2
                 | [e_1, ..., e_n]
                 | S::<χ_1, ..., χ_n> { x_1: e_1, ..., x_n: e_n }
                 | S::<χ_1, ..., χ_n>(e_1, ..., e_n)
@@ -165,6 +164,11 @@ S::E::<> { x_1: e_1, ..., x_n: e_n }     ↔  S::E { x_1: e_1, ..., x_n: e_n }
 S::E::<>(e_1, ..., e_n)                  ↔  S::E(e_1, ..., e_n)
 if e { ... } else { if e' { ... } ... }  ↔  if { ... } else if e' { ... } ...
 if e { ... } else { () }                 ↔  if e { ... }
+
+let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = x(.Π)*; e_2 ↔ let μ_1 x_1 = borrow μ_1 x(.Π)*.1.ε;
+                                                             ...
+                                                             let μ_n x_n = borrow μ_n x(.Π)*.n.ε;
+                                                             e_2
 ```
 
 [˄ Back to top][toc]
@@ -457,13 +461,6 @@ fresh ρ
 Σ; Δ; Ρ'; Γ, x ↦ ρ ⊢ e_2 : unit ⇒ Ρ'; Γ
 ----------------------------------------------------------------- T-ForMut
 Σ; Δ; Ρ; Γ ⊢ for mut x in e_1 { e_2 } : unit ⇒ Ρ'; Γ_1
-
-Σ; Δ; Ρ; Γ ⊢ e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n) ⇒ Ρ_1; Γ_1
-Σ; Δ; Ρ_1; Γ_1, x_1 ↦ r_1, ... x_n ↦ r_n ⊢ e_2 : t_r ⇒ Ρ_2; Γ_2
-r_1 ∉ dom(Ρ_2) ... r_n ∉ dom(Ρ_2)
------------------------------------------------------------------------ T-LetTup
-Σ; Δ; Ρ; Γ ⊢ let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1; e_2
-           : τ_r ⇒ Ρ_2; Γ_2
 
 Σ; Δ, ς : κ; Ρ; Γ ⊢ e : τ ⇒ Ρ'; Γ'
 -------------------------------------------- T-TAbs
@@ -758,7 +755,6 @@ evaluation contexts E ::= []
                         | match E { pat_1 => e_1, ..., pat_n => e_n }
                         | for μ x in E { e_2 }
                         | (ptr ρ ƒ, ... E, e ...)
-                        | let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = E; e
                         | S::<χ_1, ..., χ_n> { x: ptr ρ ƒ, ... x: E, x: e ... }
                         | S::<χ_1, ..., χ_n>(ptr ρ ƒ, ... E, e ...)
                         | S::E::<χ_1, ..., χ_n> { x: ptr ρ ƒ, ... x: E, x: e ... }
@@ -974,10 +970,6 @@ R(ρ_ε_n-1) = ƒ_ε_n-1 ⊗ path_set_n-1
 (σ, R, for μ x in (fatptr ρ_1 ƒ_1 n_1 n_2) { e_2 }) →
   (σ, R, (let μ x = ptr ρ_ε_n_1 ƒ_ε_n_1; e_2); ...
          (let μ x = ptr ρ_ε_n_2 ƒ_ε_n_2; e_2); ())
-
---------------------------------------------------------------------------------------- E-LetTup
-(σ, R, let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = (ptr ρ_1 1, ..., ptr ρ_n 1); e)
-  → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
 
 χ ≠ rgn of x.π ∧ χ ≠ cap of x.π
 ------------------------------------------ E-TApp
@@ -1775,29 +1767,6 @@ where `τ_1` is either of the form `[τ; n]` or `[τ]` (that is, it's either an 
 the typing rule premise `Ρ ⊢ mut r_1`, we know that all of the subregions for arrays have fractions
 of 1 and thus can be immutably bound to `x` in the let results. Thus, we can step with either
 `E-ForArray` or `E-ForSlice`, depending on which of the types we have for `τ_1`.
-
-##### Case `T-LetTup`:
-
-From premise:
-```
-Σ; Δ; Ρ; Γ ⊢ e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n) ⇒ Ρ_1; Γ_1
-Σ; Δ; Ρ_1; Γ_1, x_1 ↦ r_1, ... x_n ↦ r_n ⊢ e_2 : t_r ⇒ Ρ_2; Γ_2
-r_1 ∉ dom(Ρ_2) ... r_n ∉ dom(Ρ_2)
------------------------------------------------------------------------ T-LetTup
-Σ; Δ; Ρ; Γ ⊢ let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1; e_2
-           : τ_r ⇒ Ρ_2; Γ_2
-```
-
-We want to step with:
-```
---------------------------------------------------------------------------------------- E-LetTup
-(σ, R, let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = (ptr ρ_1 1, ..., ptr ρ_n 1); e)
-  → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
-```
-
-By IH, either `e_1 ∈ 𝕍` or we can step. In the former case, we know
-`e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n)` and thus by Canonical Forms, `e_1` is of the form
-`(ptr ρ_1 1, ..., ptr ρ_n 1)`. Thus, we can step using `E-LetTup`.
 
 ##### Case `T-TApp`:
 
@@ -2747,36 +2716,6 @@ and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
 that the parameters to each of the let bindings in `e'` are well typed. Then, we also know that
 `e_2` is well-typed if `x` is bound which is happening in the let binding as well. The same process
 is repeated for `T-ForMut`, but we instead know that all the capabilities are one.
-
-##### Case `E-LetTup`:
-
-From premise:
-```
---------------------------------------------------------------------------------------- E-LetTup
-(σ, R, let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = (ptr ρ_1 1, ..., ptr ρ_n 1); e)
-  → (σ ∪ { x_1 ↦ ρ_1, ..., x_n ↦ ρ_n }, R, e)
-```
-
-From premise and knowledge that `e` is of the form `let (μ x, ..., μ x): τ ⊗ ... ⊗ τ = e_1; e_2`,
-either:
-```
-Σ; Δ; Ρ; Γ ⊢ e_1 : (&r_1 1 τ_1 ⊗ ... ⊗ &r_n 1 τ_n) ⇒ Ρ_1; Γ_1
-Σ; Δ; Ρ_1; Γ_1, x_1 ↦ r_1, ... x_n ↦ r_n ⊢ e_2 : t_r ⇒ Ρ_2; Γ_2
-r ∉ dom(Ρ_2)
------------------------------------------------------------------------ T-LetTup
-Σ; Δ; Ρ; Γ ⊢ let (μ_1 x_1, ..., μ_n x_n): τ_1 ⊗ ... ⊗ τ_n = e_1; e_2
-           : τ_r ⇒ Ρ_2; Γ_2
-```
-
-`Γ'` and `Γ' ⊢ σ'`: `E-LetTup`, like `E-App`, adds bindings for `x_1` through `x_n` to `σ`. We can
-mirror this by picking `Γ'` to be `Γ, x_1 ↦ ρ_1, ..., x_n ↦ ρ_n`. Since we picked this change to
-mirror the one in `σ'`, `Γ' ⊢ σ'` still holds.
-
-`Ρ'` and `Ρ' ⊢ R'`: `E-LetTup` leaves `R` unchanged and so we can pick `Ρ'` to be `Ρ`. Since `R'`
-and `Ρ'` are both unchanged, `Ρ ⊢ R` gives us `Ρ' ⊢ R'`.
-
-`e'` is well-typed: We know from `T-LetTup` that `e_2`, our result, is well-typed with the changes
-we made in `Γ'` (i.e. adding bindings for `x_1` through `x_n`).
 
 ##### Case `E-TApp`:
 
