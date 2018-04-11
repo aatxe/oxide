@@ -427,15 +427,14 @@ if mut ∈ cod(pat_1) ∪ ... ∪ cod(pat_n) then f_d = 1 else f_d ≠ 0
 Σ ⊢ pat_1 ⇒ x_1_1 ↦ τ_1_1, ..., x_1_n ↦ τ_1_n
 ...
 Σ ⊢ pat_n ⇒ x_n_1 ↦ τ_n_1, ..., x_n_n ↦ τ_n_n
-fresh ρ_1 ... ρ_n
-Σ; Δ, ρ_1 : RGN, ..., ρ_n : RGN, ζ_1 : RGN, ..., ζ_n : RGN;
-  Ρ_d, ρ_1 ↦ τ_1_1 ⊗ ζ_1 ⊗ path_set_1, ..., ρ_n ↦ τ_1_n ⊗ ζ_n ⊗ path_set_n;
-  Γ_d, x_1_1 ↦ ρ_1, ..., x_1_n ↦ ρ_n
+Σ; Δ, ϱ_1 : RGN, ..., ϱ_n : RGN, ζ_1 : FRAC, ..., ζ_n : FRAC;
+  Ρ_d, ϱ_1 ↦ τ_1_1 ⊗ ζ_1 ⊗ path_set_1, ..., ϱ_n ↦ τ_1_n ⊗ ζ_n ⊗ path_set_n;
+  Γ_d, x_1_1 ↦ ϱ_1, ..., x_1_n ↦ ϱ_n
 ⊢ e_1 : τ ⇒ Ρ_1; Γ_d
 ...
-Σ; Δ, ρ_1 : RGN, ..., ρ_n : RGN, ζ_1 : RGN, ..., ζ_n : RGN;
-  Ρ_d, ρ_1 ↦ τ_1_1 ⊗ ζ_1 ⊗ path_set_1, ..., ρ_n ↦ τ_1_n ⊗ ζ_n ⊗ path_set_n;
-  Γ_d, x_n_1 ↦ ρ_1, ..., x_n_n ↦ ρ_n
+Σ; Δ, ϱ_1 : RGN, ..., ϱ_n : RGN, ζ_1 : FRAC, ..., ζ_n : FRAC;
+  Ρ_d, ϱ_1 ↦ τ_n_1 ⊗ ζ_1 ⊗ path_set_1, ..., ϱ_n ↦ τ_n_n ⊗ ζ_n ⊗ path_set_n;
+  Γ_d, x_n_1 ↦ ϱ_1, ..., x_n_n ↦ ϱ_n
 ⊢ e_n : τ ⇒ Ρ_n; Γ_d
 ;; FIXME: the same kind of unification of Ρ from `T-If` must happen here
 ------------------------------------------------------------------------------- T-Match
