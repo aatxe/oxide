@@ -121,6 +121,7 @@ Definition eq_rgn (a : rgn) (b : rgn) : bool :=
   match (a, b) with
   | (RConcrete n1, RConcrete n2) => Nat.eqb n1 n2
   end.
+Definition rextend {V : Type} := @extend rgn V eq_rgn.
 
 (* typing derivation *)
 Inductive tydev :
@@ -130,7 +131,13 @@ Inductive tydev :
     mem rho r = false ->
     tydev sigma delta rho gamma (EPrim p) tau rho gamma ->
     tydev sigma delta rho gamma (EAlloc (EPrim p)) (TRef r whole tau)
-          (extend eq_rgn rho r (tau, whole, PSImmediate tau)) gamma
+          (rextend rho r (tau, whole, PSImmediate tau)) gamma
+| T_AllocTup : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                 (r : rgn) (exptys : list (expr * ty)),
+    mem rho r = false ->
+    (* FIXME: each expression must be well-typed and stuff *)
+    tydev sigma delta rho gamma (EProd (List.map fst exptys)) (TProd (List.map snd exptys))
+          (rextend rho r (TProd (List.map snd exptys), whole, PSImmediate (TBase TUnit))) gamma
 | T_True : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
     tydev sigma delta rho gamma (EPrim (EBool true)) (TBase TBool) rho gamma
 | T_False : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
