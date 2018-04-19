@@ -121,6 +121,7 @@ Definition kenv := list (unit * kind).
 Definition renv := map rgn (ty * frac * pathset).
 Definition tenv := map ident rgn.
 
+Definition none := FNat 0.
 Definition whole := FNat 1.
 
 Definition eq_rgn (a : rgn) (b : rgn) : bool :=
@@ -157,19 +158,27 @@ Definition proj_ty (pk : pkg) : ty :=
 Inductive rgnalongpath :
   renv -> muta -> path -> rgn -> ty -> rgn -> Prop :=
 | PEpsilonPath : forall (rho : renv) (mu : muta) (rg : rgn) (tau : ty) (f : frac),
-    (mu = Imm -> f <> FNat 0) -> (mu = Mut -> f = whole) ->
+    (mu = Imm -> f <> none) -> (mu = Mut -> f = whole) ->
     rgnalongpath (rextend rho rg (tau, f, PSImmediate tau)) mu (Path nil) rg tau rg
 | PAliasPath : forall (rho : renv) (mu : muta) (pi : path) (r1 : rgn) (tau : ty) (f : frac)
                  (r2 : rgn) (r3 : rgn),
-    (mu = Imm -> f <> FNat 0) -> (mu = Mut -> f = whole) ->
+    (mu = Imm -> f <> none) -> (mu = Mut -> f = whole) ->
     rgnalongpath (rextend rho r1 (tau, f, PSAlias r2)) mu pi r2 tau r3 ->
     rgnalongpath (rextend rho r1 (tau, f, PSAlias r2)) mu pi r1 tau r3
 | PFieldPath : forall (rho : renv) (mu : muta) (Pi : immpath) (pi : path) (r1 : rgn) (tau : ty) (f : frac)
                  (r2 : rgn) (r3 : rgn) (pathrgns : list (immpath * rgn)),
-    (mu = Imm -> f <> FNat 0) -> (mu = Mut -> f = whole) ->
+    (mu = Imm -> f <> none) -> (mu = Mut -> f = whole) ->
     List.In (Pi, r2) pathrgns -> 
     rgnalongpath (rextend rho r1 (tau, f, PSNested pathrgns)) mu pi r2 tau r3 ->
     rgnalongpath (rextend rho r1 (tau, f, PSNested pathrgns)) mu (path_cons Pi pi) r1 tau r3.
+
+Inductive rgn_wf :
+  renv -> muta -> rgn -> Prop :=
+| WF_ImmEpsilonRegion : forall (rho : renv) (f : frac) (r : rgn) (tau : ty),
+    f <> none -> 
+    rgn_wf (rextend rho r (tau, f, PSImmediate tau)) Imm r
+| WF_MutEpsilonRegion : forall (rho : renv) (r : rgn) (tau : ty),
+    rgn_wf (rextend rho r (tau, whole, PSImmediate tau)) Mut r.
 
 (* typing derivation *)
 Inductive tydev :
@@ -197,11 +206,31 @@ Inductive tydev :
              (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
     rgnalongpath rho Imm pi rx tau r ->
     lookup rho r = Some (tau, f, ps) ->
-    f <> FNat 0 ->
+    f <> none ->
     (exists (bt : basety), tau = TBase bt) ->
     mem rho r = false ->
     tydev sigma delta rho (textend gamma id rx) (ECopy (id, pi)) (TRef r whole tau)
           (rextend rho r (tau, whole, ps)) (textend gamma id rx)
+| T_BorrowImm : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                  (id : ident) (pi : path) (rpi : rgn) (tau : ty) (f : frac) (ps : pathset)
+                  (rx : rgn) (fn : frac) (r : rgn),
+    rgnalongpath rho Imm pi rx tau rpi ->
+    lookup rho rpi = Some (tau, f, ps) ->
+    rgn_wf rho Imm rpi ->
+    FDiv f (FNat 2) = fn -> (* FIXME: actual fraction evaluation? *)
+    mem rho r = false ->
+    tydev sigma delta rho (textend gamma id rx) (EBorrow Imm (id, pi)) (TRef r fn tau)
+          (rextend (rextend rho rpi (tau, fn, ps))
+                            r (tau, fn, PSAlias rpi)) (textend gamma id rx)
+| T_BorrowMut : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                  (id : ident) (pi : path) (rpi : rgn) (tau : ty) (ps : pathset) (rx : rgn) (r : rgn),
+    rgnalongpath rho Mut pi rx tau rpi ->
+    lookup rho rpi = Some (tau, whole, ps) ->
+    rgn_wf rho Mut rpi ->
+    mem rho r = false ->
+    tydev sigma delta rho (textend gamma id rx) (EBorrow Mut (id, pi)) (TRef r whole tau)
+          (rextend (rextend rho rpi (tau, none, ps))
+                            r (tau, whole, PSAlias rpi)) (textend gamma id rx)
 | T_True : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
     tydev sigma delta rho gamma (EPrim (EBool true)) (TBase TBool) rho gamma
 | T_False : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
