@@ -128,6 +128,8 @@ Definition eq_rgn (a : rgn) (b : rgn) : bool :=
   | (RConcrete n1, RConcrete n2) => Nat.eqb n1 n2
   end.
 Definition rextend {V : Type} := @extend rgn V eq_rgn.
+Definition textend {V : Type} := @extend string V (fun s1 s2 =>
+                                                     if string_dec s1 s2 then true else false).
 
 (* List.fold_left (fun (acc : Prop * renv * tenv) (pkg : expr * rgn * ty * renv * tenv) =>
                              match (acc, pkg) with
@@ -193,14 +195,13 @@ Inductive tydev :
 (*     end *)
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
              (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
-    lookup gamma id = Some rx ->
     rgnalongpath rho Imm pi rx tau r ->
     lookup rho r = Some (tau, f, ps) ->
     f <> FNat 0 ->
     (exists (bt : basety), tau = TBase bt) ->
     mem rho r = false ->
-    tydev sigma delta rho gamma (ECopy (id, pi)) (TRef r whole tau)
-          (rextend rho r (tau, whole, ps)) gamma
+    tydev sigma delta rho (textend gamma id rx) (ECopy (id, pi)) (TRef r whole tau)
+          (rextend rho r (tau, whole, ps)) (textend gamma id rx)
 | T_True : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
     tydev sigma delta rho gamma (EPrim (EBool true)) (TBase TBool) rho gamma
 | T_False : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
