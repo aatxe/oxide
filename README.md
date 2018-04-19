@@ -36,6 +36,7 @@ This repository is split into five parts:
       and stopped writing actual prose in the models.
 5. [`redex/`](redex/) — an outdated attempt at mechanizing the semantics in Redex
     - Maybe I'll get back to this? Maybe I'll mechanize it in Coq or F* instead?
+6. [`coq/`](coq/) — an ongoing effort to mechanize the Oxide _metatheory_
 
 ## Related Works
 
