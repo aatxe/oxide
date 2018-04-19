@@ -178,7 +178,24 @@ Inductive rgn_wf :
     f <> none -> 
     rgn_wf (rextend rho r (tau, f, PSImmediate tau)) Imm r
 | WF_MutEpsilonRegion : forall (rho : renv) (r : rgn) (tau : ty),
-    rgn_wf (rextend rho r (tau, whole, PSImmediate tau)) Mut r.
+    rgn_wf (rextend rho r (tau, whole, PSImmediate tau)) Mut r
+| WF_ImmAliasRegion : forall (rho : renv) (r1 : rgn) (r2 : rgn) (tau : ty) (f : frac),
+    f <> none ->
+    rgn_wf (rextend rho r1 (tau, f, PSAlias r2)) Imm r2 ->
+    rgn_wf (rextend rho r1 (tau, f, PSAlias r2)) Imm r1
+| WF_MutAliasRegion : forall (rho : renv) (r1 : rgn) (r2 : rgn) (tau : ty),
+    rgn_wf (rextend rho r1 (tau, whole, PSAlias r2)) Imm r2 ->
+    rgn_wf (rextend rho r1 (tau, whole, PSAlias r2)) Imm r1
+| WF_ImmNestedRegion : forall (rho : renv) (r : rgn) (tau : ty) (f : frac)
+                         (pathrgns : list (immpath * rgn)),
+    f <> none ->
+    (forall (rPrime : rgn),
+        mem rho rPrime = true -> rgn_wf (rextend rho r (tau, f, PSNested pathrgns)) Imm rPrime) ->
+    rgn_wf (rextend rho r (tau, f, PSNested pathrgns)) Imm r
+| WF_MutNestedRegion : forall (rho : renv) (r : rgn) (tau : ty) (pathrgns : list (immpath * rgn)),
+    (forall (rPrime : rgn),
+        mem rho rPrime = true -> rgn_wf (rextend rho r (tau, whole, PSNested pathrgns)) Mut rPrime) ->
+    rgn_wf (rextend rho r (tau, whole, PSNested pathrgns)) Mut r.
 
 (* typing derivation *)
 Inductive tydev :
