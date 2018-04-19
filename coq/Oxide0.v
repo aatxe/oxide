@@ -123,6 +123,30 @@ Definition eq_rgn (a : rgn) (b : rgn) : bool :=
   end.
 Definition rextend {V : Type} := @extend rgn V eq_rgn.
 
+(* List.fold_left (fun (acc : Prop * renv * tenv) (pkg : expr * rgn * ty * renv * tenv) =>
+                             match (acc, pkg) with
+                             | ((prop, rho, gamma), (exp, rgn, tau, rhoPrime, gammaPrime)) =>
+                               (prop -> tydev sigma delta rho gamma exp
+                                             (TRef rgn whole tau) rhoPrime gammaPrime,
+                                rhoPrime, gammaPrime)
+                             end) exps (mem rho r = false, rho, gamma)
+*)
+
+Definition pkg : Type := expr * rgn * ty * renv * tenv.
+Definition proj_exp (pk : pkg) : expr :=
+  match pk with
+  | (exp, _, _, _, _) => exp
+  end.
+Definition proj_rgn (pk : pkg) : rgn :=
+  match pk with
+  | (_, rgn, _, _, _) => rgn
+  end.
+Definition proj_ty (pk : pkg) : ty :=
+  match pk with
+  | (_, _, ty, _, _) => ty
+  end.
+
+
 (* typing derivation *)
 Inductive tydev :
   denv -> kenv -> renv -> tenv -> expr -> ty -> renv -> tenv -> Prop :=
@@ -132,12 +156,19 @@ Inductive tydev :
     tydev sigma delta rho gamma (EPrim p) tau rho gamma ->
     tydev sigma delta rho gamma (EAlloc (EPrim p)) (TRef r whole tau)
           (rextend rho r (tau, whole, PSImmediate tau)) gamma
-| T_AllocTup : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
-                 (r : rgn) (exptys : list (expr * ty)),
-    mem rho r = false ->
-    (* FIXME: each expression must be well-typed and stuff *)
-    tydev sigma delta rho gamma (EProd (List.map fst exptys)) (TProd (List.map snd exptys))
-          (rextend rho r (TProd (List.map snd exptys), whole, PSImmediate (TBase TUnit))) gamma
+(* FIXME: I cannot for the life of me figure out how to do n-ary things *)
+(* | T_AllocTup : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) *)
+(*                  (r : rgn) (pkgs : list pkg), *)
+(*     match (List.fold_left (fun (acc : Prop) (pk : pkg) => *)
+(*                           acc -> tydev sigma delta rho gamma (proj_exp pk) (proj_ty pk) rho gamma) *)
+(*                           pkgs (mem rho r = false)) with *)
+(*     | (prop) => *)
+(*       prop -> tydev sigma delta rho gamma *)
+(*                    (EProd (List.map proj_exp pkgs)) *)
+(*                    (TProd (List.map proj_ty pkgs)) *)
+(*                    (rextend rho r (TBase TUnit, whole, PSImmediate (TBase TUnit))) *)
+(*                    gamma *)
+(*     end *)
 | T_True : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
     tydev sigma delta rho gamma (EPrim (EBool true)) (TBase TBool) rho gamma
 | T_False : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
