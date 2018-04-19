@@ -112,6 +112,8 @@ Definition map (K : Type) (V : Type) := K -> option V.
 Definition empty {K : Type} {V : Type} : map K V := fun _ => None.
 Definition extend {K : Type} {V : Type} (eq : K -> K -> bool) (m : map K V) (x : K) (v : V) :=
   fun x' => if eq x x' then Some v else m x'.
+Definition remove {K : Type} {V : Type} (eq : K -> K -> bool) (m : map K V) (x : K) :=
+  fun x' => if eq x x' then None else m x'.
 Definition lookup {K : Type} {V : Type} (m : map K V) (x : K) := m x.
 Definition mem {K : Type} {V : Type} (m : map K V) (x : K) :=
   if m x then true else false.
@@ -129,7 +131,10 @@ Definition eq_rgn (a : rgn) (b : rgn) : bool :=
   | (RConcrete n1, RConcrete n2) => Nat.eqb n1 n2
   end.
 Definition rextend {V : Type} := @extend rgn V eq_rgn.
+Definition rremove {V : Type} := @remove rgn V eq_rgn.
 Definition textend {V : Type} := @extend string V (fun s1 s2 =>
+                                                     if string_dec s1 s2 then true else false).
+Definition tremove {V : Type} := @remove string V (fun s1 s2 =>
                                                      if string_dec s1 s2 then true else false).
 
 (* List.fold_left (fun (acc : Prop * renv * tenv) (pkg : expr * rgn * ty * renv * tenv) =>
@@ -276,6 +281,27 @@ Inductive tydev :
           (TRef r whole (TSlice tau))
           (rextend (rextend rho2 rpi (TSlice tau, none, ps))
                    r (TSlice tau, whole, PSAlias rpi)) (textend gamma2 id rx)
+| T_Drop : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident) (pi : path)
+             (rx : rgn) (r : rgn) (fx : frac) (fr : frac) (fn : frac) (tx : ty) (tr : ty)
+             (ps : pathset),
+    pi = Path nil -> (* TODO: fix drop rules for paths, this is also a problem in LaTeX *)
+    lookup rho rx = Some (tx, fx, PSAlias r) ->
+    lookup rho r = Some (tr, fr, ps) ->
+    FAdd fx fr = fn -> (* FIXME: actual fraction evaluation? *)
+    tydev sigma delta rho gamma (EDrop (id, pi)) (TBase TUnit)
+          (rextend rho r (tr, fn, ps)) gamma
+| T_FreeImmediate : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident)
+                      (pi : path) (rx : rgn) (tau : ty),
+    pi = Path nil -> (* TODO: fix drop rules for paths, this is also a problem in LaTeX *)
+    lookup rho rx = Some (tau, whole, PSImmediate tau) ->
+    tydev sigma delta rho gamma (EDrop (id, pi)) (TBase TUnit) (rremove rho rx) gamma
+| T_Free : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident)
+                      (pi : path) (rx : rgn) (tau : ty) (pathrgns : list (immpath * rgn)),
+    pi = Path nil -> (* TODO: fix drop rules for paths, this is also a problem in LaTeX *)
+    lookup rho rx = Some (tau, whole, PSNested pathrgns) ->
+    (forall (rPrime : rgn),
+        List.In rPrime (List.map snd pathrgns) -> mem rho rPrime = false) ->
+    tydev sigma delta rho gamma (EDrop (id, pi)) (TBase TUnit) (rremove rho rx) gamma
 | T_True : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
     tydev sigma delta rho gamma (EPrim (EBool true)) (TBase TBool) rho gamma
 | T_False : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
