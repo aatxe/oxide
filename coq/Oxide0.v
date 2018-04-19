@@ -10,6 +10,11 @@ Inductive immpath : Set :=
 Inductive path : Set :=
 | Path : list immpath -> path.
 
+Definition path_cons (Pi : immpath) (pi : path) : path :=
+  match pi with
+  | Path Pis => Path (Pi :: Pis)
+  end.
+
 (* an identifier qualified with a path *)
 Definition qual_ident : Set := ident * path.
 
@@ -107,6 +112,7 @@ Definition map (K : Type) (V : Type) := K -> option V.
 Definition empty {K : Type} {V : Type} : map K V := fun _ => None.
 Definition extend {K : Type} {V : Type} (eq : K -> K -> bool) (m : map K V) (x : K) (v : V) :=
   fun x' => if eq x x' then Some v else m x'.
+Definition lookup {K : Type} {V : Type} (m : map K V) (x : K) := m x.
 Definition mem {K : Type} {V : Type} (m : map K V) (x : K) :=
   if m x then true else false.
 
@@ -146,6 +152,22 @@ Definition proj_ty (pk : pkg) : ty :=
   | (_, _, ty, _, _) => ty
   end.
 
+Inductive rgnalongpath :
+  renv -> muta -> path -> rgn -> ty -> rgn -> Prop :=
+| PEpsilonPath : forall (rho : renv) (mu : muta) (rg : rgn) (tau : ty) (f : frac),
+    (mu = Imm -> f <> FNat 0) -> (mu = Mut -> f = whole) ->
+    rgnalongpath (rextend rho rg (tau, f, PSImmediate tau)) mu (Path nil) rg tau rg
+| PAliasPath : forall (rho : renv) (mu : muta) (pi : path) (r1 : rgn) (tau : ty) (f : frac)
+                 (r2 : rgn) (r3 : rgn),
+    (mu = Imm -> f <> FNat 0) -> (mu = Mut -> f = whole) ->
+    rgnalongpath (rextend rho r1 (tau, f, PSAlias r2)) mu pi r2 tau r3 ->
+    rgnalongpath (rextend rho r1 (tau, f, PSAlias r2)) mu pi r1 tau r3
+| PFieldPath : forall (rho : renv) (mu : muta) (Pi : immpath) (pi : path) (r1 : rgn) (tau : ty) (f : frac)
+                 (r2 : rgn) (r3 : rgn) (pathrgns : list (immpath * rgn)),
+    (mu = Imm -> f <> FNat 0) -> (mu = Mut -> f = whole) ->
+    List.In (Pi, r2) pathrgns -> 
+    rgnalongpath (rextend rho r1 (tau, f, PSNested pathrgns)) mu pi r2 tau r3 ->
+    rgnalongpath (rextend rho r1 (tau, f, PSNested pathrgns)) mu (path_cons Pi pi) r1 tau r3.
 
 (* typing derivation *)
 Inductive tydev :
@@ -169,6 +191,16 @@ Inductive tydev :
 (*                    (rextend rho r (TBase TUnit, whole, PSImmediate (TBase TUnit))) *)
 (*                    gamma *)
 (*     end *)
+| T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+             (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
+    lookup gamma id = Some rx ->
+    rgnalongpath rho Imm pi rx tau r ->
+    lookup rho r = Some (tau, f, ps) ->
+    f <> FNat 0 ->
+    (exists (bt : basety), tau = TBase bt) ->
+    mem rho r = false ->
+    tydev sigma delta rho gamma (ECopy (id, pi)) (TRef r whole tau)
+          (rextend rho r (tau, whole, ps)) gamma
 | T_True : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
     tydev sigma delta rho gamma (EPrim (EBool true)) (TBase TBool) rho gamma
 | T_False : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
