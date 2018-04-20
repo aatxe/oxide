@@ -217,6 +217,33 @@ Inductive rgn_wf :
         mem rho rPrime = true -> rgn_wf (rextend rho r (tau, whole, PSNested pathrgns)) Mut rPrime) ->
     rgn_wf (rextend rho r (tau, whole, PSNested pathrgns)) Mut r.
 
+(* kind derivation *)
+Inductive kindev :
+  denv -> kenv -> renv -> tenv -> gty -> kind -> Prop :=
+(* TODO: K-TyVar *)
+| K_ConcreteRegion : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (n : nat),
+    mem rho (RConcrete n) = true ->
+    kindev sigma delta rho gamma (GRgn (RConcrete n)) KRgn
+| K_ConcreteFrac : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (f : frac),
+    kindev sigma delta rho gamma (GFrac f) KFrac
+| K_RgnOf : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident) (rx : rgn)
+              (pi : path) (tau : ty) (r : rgn),
+    rgnalongpath rho Imm pi rx tau r ->
+    kindev sigma delta rho (textend gamma id rx) (GRgnOf (id, pi)) KRgn
+| K_CapOf : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident) (rx : rgn)
+              (pi : path) (tau : ty) (r : rgn),
+    rgnalongpath rho Imm pi rx tau r ->
+    kindev sigma delta rho (textend gamma id rx) (GCapOf (id, pi)) KFrac
+| K_BaseType : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (bt : basety),
+    kindev sigma delta rho gamma (GType (TBase bt)) KStar
+| K_Ref : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+            (r : rgn) (f : frac) (tau : ty),
+    kindev sigma delta rho gamma (GRgn r) KRgn ->
+    kindev sigma delta rho gamma (GFrac f) KFrac ->
+    kindev sigma delta rho gamma (GType tau) KStar ->
+    kindev sigma delta rho gamma (GType (TRef r f tau)) KStar
+(* TODO: K-Closure, K-MoveClosure, K-Universal, K-Tuple, K-Struct *).
+
 (* typing derivation *)
 Inductive tydev :
   denv -> kenv -> renv -> tenv -> expr -> ty -> renv -> tenv -> Prop :=
