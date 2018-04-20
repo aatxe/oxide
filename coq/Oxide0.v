@@ -313,4 +313,21 @@ Inductive tydev :
     tydev sigma delta rho gamma (EPrim (EUnit)) (TBase TUnit) rho gamma
 | T_abort : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
               (msg : string) (tau : ty),
-    tydev sigma delta rho gamma (EAbort msg) tau rho gamma.
+    tydev sigma delta rho gamma (EAbort msg) tau rho gamma
+| T_LetImm : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+               (e1 : expr) (e2 : expr) (rho1 : renv) (rho2 : renv) (id : ident)
+               (gamma1 : tenv) (gamma2 : tenv) (r1 : rgn) (f1 : frac)
+               (tau1 : ty) (tau2 : ty),
+    tydev sigma delta rho gamma e1 (TRef r1 f1 tau1) rho1 gamma1 ->
+    f1 <> none ->
+    tydev sigma delta rho1 gamma1 e2 tau2 rho2 gamma2 ->
+    mem rho2 r1 = false ->
+    tydev sigma delta rho gamma (ELet Imm id e1 e2) tau2 rho2 gamma2
+| T_LetMut : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+               (e1 : expr) (e2 : expr) (rho1 : renv) (rho2 : renv) (id : ident)
+               (gamma1 : tenv) (gamma2 : tenv) (r1 : rgn) (tau1 : ty) (tau2 : ty),
+    tydev sigma delta rho gamma e1 (TRef r1 whole tau1) rho1 gamma1 ->
+    tydev sigma delta rho1 gamma1 e2 tau2 rho2 gamma2 ->
+    mem rho2 r1 = false ->
+    tydev sigma delta rho gamma (ELet Mut id e1 e2) tau2 rho2 gamma2
+.
