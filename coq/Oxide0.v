@@ -86,7 +86,7 @@ Inductive expr : Set :=
 | ESlice : muta -> qual_ident -> expr -> expr -> expr
 | EDrop : qual_ident -> expr
 | ELet : muta -> ident -> expr -> expr -> expr
-| EAssign : qual_ident -> expr
+| EAssign : qual_ident -> expr -> expr
 (* FIXME: type abstraction *)
 | ETApp : expr -> gty -> expr
 | EFn : list (ident * rgn * frac * ty) -> expr -> expr
@@ -136,6 +136,16 @@ Definition textend {V : Type} := @extend string V (fun s1 s2 =>
                                                      if string_dec s1 s2 then true else false).
 Definition tremove {V : Type} := @remove string V (fun s1 s2 =>
                                                      if string_dec s1 s2 then true else false).
+
+Definition eq_immpath (p1 : immpath) (p2 : immpath) : bool :=
+  match (p1, p2) with
+  | (Field x, Field y) => if string_dec x y then true else false
+  | (Proj n1, Proj n2) => Nat.eqb n1 n2
+  | (Index n1, Index n2) => Nat.eqb n1 n2
+  | (_, _) => false
+  end.
+Definition ps_extend (ps : list (immpath * rgn)) (Pi : immpath) (rn : rgn) :=
+  cons (Pi, rn) (List.filter (fun pair => eq_immpath (fst pair) Pi) ps).
 
 (* List.fold_left (fun (acc : Prop * renv * tenv) (pkg : expr * rgn * ty * renv * tenv) =>
                              match (acc, pkg) with
@@ -330,4 +340,21 @@ Inductive tydev :
     tydev sigma delta rho1 gamma1 e2 tau2 rho2 gamma2 ->
     mem rho2 r1 = false ->
     tydev sigma delta rho gamma (ELet Mut id e1 e2) tau2 rho2 gamma2
-.
+| T_Assign : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+               (id : ident) (Pis : list immpath) (e : expr) (rhoPrime : renv) (gammaPrime : tenv)
+               (rx : rgn) (tau : ty) (r : rgn) (ps : list (immpath * rgn)) (rn : rgn) (Pi : immpath),
+    rgnalongpath rho Mut (Path Pis) rx tau r ->
+    lookup rho r = Some (tau, whole, PSNested ps) ->
+    rgn_wf rho Mut r ->
+    tydev sigma delta rho (textend gamma id rx) e (TRef rn whole tau) rhoPrime gammaPrime ->
+    tydev sigma delta rho (textend gamma id rx)
+          (EAssign (id, Path (Pis ++ (cons Pi nil))) e) (TBase TUnit)
+          (rextend rhoPrime r (tau, whole, PSNested (ps_extend ps Pi rn))) gammaPrime
+| T_AssignEpsilon : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                      (id : ident) (e : expr) (rhoPrime : renv) (gammaPrime : tenv)
+                      (rx : rgn) (rn : rgn) (tau : ty) (ps : pathset),
+    rgn_wf rho Mut rx ->
+    lookup rho rx = Some (tau, whole, ps) ->
+    tydev sigma delta rho (textend gamma id rx) e (TRef rn whole tau) rhoPrime gammaPrime ->
+    tydev sigma delta rho (textend gamma id rx) (EAssign (id, Path nil) e) (TBase TUnit)
+          rhoPrime (textend gamma id rn).
