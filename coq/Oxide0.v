@@ -67,6 +67,11 @@ with gty : Set :=
 | GRgnOf : qual_ident -> gty
 | GCapOf : qual_ident -> gty.
 
+Definition ref (prod : rgn * frac * ty) :=
+match prod with
+| (r, f, t) => TRef r f t
+end.
+
 Inductive pat : Set :=
 | PWild : pat
 | PEnumTup : enum -> list (muta * ident) -> pat
@@ -357,4 +362,17 @@ Inductive tydev :
     lookup rho rx = Some (tau, whole, ps) ->
     tydev sigma delta rho (textend gamma id rx) e (TRef rn whole tau) rhoPrime gammaPrime ->
     tydev sigma delta rho (textend gamma id rx) (EAssign (id, Path nil) e) (TBase TUnit)
-          rhoPrime (textend gamma id rn).
+          rhoPrime (textend gamma id rn)
+(* TODO: T-Closure, T-MoveClosure *)
+| T_App : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (e2 : expr)
+            (fnargs : list (rgn * frac * ty)) (tr : ty) (rho1 : renv) (gamma1 : tenv) (rho2 : renv)
+            (gamma2 : tenv),
+    tydev sigma delta rho gamma e1 (TFn fnargs tr) rho1 gamma1 ->
+    tydev sigma delta rho gamma e2 (TProd (List.map ref fnargs)) rho2 gamma2 ->
+    tydev sigma delta rho gamma (EApp e1 e2) tr rho2 gamma2
+| T_MvApp : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (e2 : expr)
+            (fnargs : list (rgn * frac * ty)) (tr : ty) (rho1 : renv) (gamma1 : tenv) (rho2 : renv)
+            (gamma2 : tenv),
+    tydev sigma delta rho gamma e1 (TMvFn fnargs tr) rho1 gamma1 ->
+    tydev sigma delta rho gamma e2 (TProd (List.map ref fnargs)) rho2 gamma2 ->
+    tydev sigma delta rho gamma (EApp e1 e2) tr rho2 gamma2.
