@@ -375,4 +375,53 @@ Inductive tydev :
             (gamma2 : tenv),
     tydev sigma delta rho gamma e1 (TMvFn fnargs tr) rho1 gamma1 ->
     tydev sigma delta rho gamma e2 (TProd (List.map ref fnargs)) rho2 gamma2 ->
-    tydev sigma delta rho gamma (EApp e1 e2) tr rho2 gamma2.
+    tydev sigma delta rho gamma (EApp e1 e2) tr rho2 gamma2
+| T_Seq : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (e2 : expr)
+            (t2 : ty) (rho1 : renv) (gamma1 : tenv) (rho2 : renv) (gamma2 : tenv),
+    tydev sigma delta rho gamma e1 (TBase TUnit) rho1 gamma1 ->
+    tydev sigma delta rho1 gamma1 e2 t2 rho2 gamma2 ->
+    tydev sigma delta rho gamma (ESeq e1 e2) t2 rho2 gamma2
+| T_If : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (e2 : expr)
+           (e3 : expr) (r1 : rgn) (f1 : frac) (t : ty) (rho1 : renv) (gamma1 : tenv) (rho2 : renv)
+           (rho3 : renv) (rhoPrime : renv),
+    tydev sigma delta rho gamma e1 (TRef r1 f1 (TBase TBool)) rho1 gamma1 ->
+    f1 <> none ->
+    tydev sigma delta rho1 gamma1 e2 t rho2 gamma1 ->
+    tydev sigma delta rho1 gamma1 e3 t rho3 gamma1 ->
+    (* FIXME: rho2 and rho3 should be unified into rhoPrime, but I still dunno how yet. *)
+    tydev sigma delta rho gamma (EIf e1 e2 e3) t rhoPrime gamma1
+(* TODO: T-Match *)
+| T_ForImm : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (r1 : rgn)
+               (f1 : frac) (t1 : ty) (rho1 : renv) (gamma1 : tenv) (tau : ty) (ps1 : pathset)
+               (r : rgn) (fn : frac) (e2 : expr) (id : ident) (rhoPrime : renv),
+    tydev sigma delta rho gamma e1 (TRef r1 f1 t1) rho1 gamma1 ->
+    (match t1 with TArray te _ | TSlice te => te = tau | _ => False end) ->
+    rgn_wf rho1 Imm r1 ->
+    f1 <> none ->
+    lookup rho1 r1 = Some (t1, f1, ps1) ->
+    mem rho1 r = false ->
+    FDiv f1 (FNat 2) = fn -> (* FIXME: actual fraction evaluation? *)
+    rhoPrime = (rextend
+                  (rextend rho1 r1 (t1, fn, ps1)) 
+                  (* FIXME: I'm not certain this is actually correct since really, x should bind to
+                     sub-regions of r1, but this is what matches the current (20-04-18) LaTeX *)
+                  r (tau, fn, PSAlias r1)) -> 
+    tydev sigma delta rhoPrime (textend gamma1 id r) e2 (TBase TUnit) rhoPrime gamma1 ->
+    tydev sigma delta rho gamma (EFor Imm id e1 e2) (TBase TUnit)
+          rhoPrime gamma1
+| T_ForMut : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (r1 : rgn)
+               (t1 : ty) (rho1 : renv) (gamma1 : tenv) (tau : ty) (ps1 : pathset) (r : rgn)
+               (fn : frac) (e2 : expr) (id : ident) (rhoPrime : renv),
+    tydev sigma delta rho gamma e1 (TRef r1 whole t1) rho1 gamma1 ->
+    (match t1 with TArray te _ | TSlice te => te = tau | _ => False end) ->
+    rgn_wf rho1 Mut r1 ->
+    lookup rho1 r1 = Some (t1, whole, ps1) ->
+    mem rho1 r = false ->
+    rhoPrime = (rextend
+                  (rextend rho1 r1 (t1, none, ps1)) 
+                  (* FIXME: I'm not certain this is actually correct since really, x should bind to
+                     sub-regions of r1, but this is what matches the current (20-04-18) LaTeX *)
+                  r (tau, whole, PSAlias r1)) -> 
+    tydev sigma delta rhoPrime (textend gamma1 id r) e2 (TBase TUnit) rhoPrime gamma1 ->
+    tydev sigma delta rho gamma (EFor Mut id e1 e2) (TBase TUnit)
+          rhoPrime gamma1.
