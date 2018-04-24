@@ -244,6 +244,11 @@ Inductive kindev :
     kindev sigma delta rho gamma (GType (TRef r f tau)) KStar
 (* TODO: K-Closure, K-MoveClosure, K-Universal, K-Tuple, K-Struct *).
 
+Inductive ZipWith {A : Type} {B : Type} (f : A -> B -> Prop) : list A -> list B -> Prop :=
+| Zip_Nil : ZipWith f nil nil
+| Zip_Cons : forall (x : A) (y : B) (xs : list A) (ys : list B),
+    f x y -> ZipWith f xs ys -> ZipWith f (x :: xs) (y :: ys).
+
 (* typing derivation *)
 Inductive tydev :
   denv -> kenv -> renv -> tenv -> expr -> ty -> renv -> tenv -> Prop :=
@@ -254,18 +259,19 @@ Inductive tydev :
     tydev sigma delta rho gamma (EAlloc (EPrim p)) (TRef r whole tau)
           (rextend rho r (tau, whole, PSImmediate tau)) gamma
 (* FIXME: I cannot for the life of me figure out how to do n-ary things *)
-(* | T_AllocTup : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) *)
-(*                  (r : rgn) (pkgs : list pkg), *)
-(*     match (List.fold_left (fun (acc : Prop) (pk : pkg) => *)
-(*                           acc -> tydev sigma delta rho gamma (proj_exp pk) (proj_ty pk) rho gamma) *)
-(*                           pkgs (mem rho r = false)) with *)
-(*     | (prop) => *)
-(*       prop -> tydev sigma delta rho gamma *)
-(*                    (EProd (List.map proj_exp pkgs)) *)
-(*                    (TProd (List.map proj_ty pkgs)) *)
-(*                    (rextend rho r (TBase TUnit, whole, PSImmediate (TBase TUnit))) *)
-(*                    gamma *)
-(*     end *)
+| T_AllocTup : forall (sigma : denv) ( delta : kenv) (rho : renv) (gamma : tenv) (rhon : renv) (gamman : tenv)
+                 (r : rgn) (exps : list expr) (e : expr) (typs : list ty) (typ : ty) (envs : list (renv * tenv)),
+    mem rho r = false ->
+    ZipWith (fun (inputs : renv * tenv) (outputs : renv * tenv) =>
+               (* let (envs, e) := inputs *)
+               let (rhoIn, gammaIn) := inputs
+               in let (rhoOut, gammaOut) := outputs
+                (* there's some hacks here with e and typ because the standard library doesn't have a zip, but
+                   this is enough to understand that this breaks too *)
+               in tydev sigma delta rhoIn gammaIn e typ rhoOut gammaOut
+            ) ((rho, gamma) :: envs) (envs ++ ((rhon, gamman) :: nil)) ->
+    tydev sigma delta rho gamma (EProd exps) (TProd typs)
+          (rextend rhon r (TBase TUnit, whole, PSImmediate (TBase TUnit))) gamman
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
              (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
     rgnalongpath rho Imm pi rx tau r ->
