@@ -244,13 +244,23 @@ Inductive kindev :
     kindev sigma delta rho gamma (GType (TRef r f tau)) KStar
 (* TODO: K-Closure, K-MoveClosure, K-Universal, K-Tuple, K-Struct *).
 
-Inductive ZipWith {A : Type} {B : Type} (f : A -> B -> Prop) : list A -> list B -> Prop :=
-| Zip_Nil : ZipWith f nil nil
-| Zip_Cons : forall (x : A) (y : B) (xs : list A) (ys : list B),
-    f x y -> ZipWith f xs ys -> ZipWith f (x :: xs) (y :: ys).
-
+(* NOTE(dbp 2018-04-24): We keep the initial and final rho/gamma -- the list of
+exprs transforms the former _into_ the latter as it typechecks.  *)
+Inductive WTList : denv -> kenv -> renv -> tenv -> list expr -> list ty -> renv -> tenv -> Prop :=
+| WTEmpty : forall (sigma : denv) (delt : kenv) (rho : renv) (gamma : tenv),
+    WTList sigma delt rho gamma nil nil rho gamma
+| WTCons : forall (sigma : denv) (delt : kenv)
+             (es : list expr) (ts : list ty)
+             (initrho : renv) (initgam : tenv)
+             (oldrho : renv) (oldgam : tenv)
+             (rho : renv) (gamma : tenv)
+             (e : expr) (t : ty)
+             (wt : WTList sigma delt initrho initgam es ts oldrho oldgam),
+    tydev sigma delt oldrho oldgam e t rho gamma ->
+    WTList sigma delt initrho initgam (e::es) (t::ts) rho gamma
+              
 (* typing derivation *)
-Inductive tydev :
+with tydev :
   denv -> kenv -> renv -> tenv -> expr -> ty -> renv -> tenv -> Prop :=
 | T_AllocPrim : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
                   (tau : ty) (r : rgn) (p : prim),
@@ -260,17 +270,10 @@ Inductive tydev :
           (rextend rho r (tau, whole, PSImmediate tau)) gamma
 (* FIXME: I cannot for the life of me figure out how to do n-ary things *)
 | T_AllocTup : forall (sigma : denv) ( delta : kenv) (rho : renv) (gamma : tenv) (rhon : renv) (gamman : tenv)
-                 (r : rgn) (exps : list expr) (e : expr) (typs : list ty) (typ : ty) (envs : list (renv * tenv)),
+                 (r : rgn) (exps : list expr) (tys : list ty),
     mem rho r = false ->
-    ZipWith (fun (inputs : renv * tenv) (outputs : renv * tenv) =>
-               (* let (envs, e) := inputs *)
-               let (rhoIn, gammaIn) := inputs
-               in let (rhoOut, gammaOut) := outputs
-                (* there's some hacks here with e and typ because the standard library doesn't have a zip, but
-                   this is enough to understand that this breaks too *)
-               in tydev sigma delta rhoIn gammaIn e typ rhoOut gammaOut
-            ) ((rho, gamma) :: envs) (envs ++ ((rhon, gamman) :: nil)) ->
-    tydev sigma delta rho gamma (EProd exps) (TProd typs)
+    WTList sigma delta rho gamma exps tys rhon gamman ->
+    tydev sigma delta rho gamma (EProd exps) (TProd tys)
           (rextend rhon r (TBase TUnit, whole, PSImmediate (TBase TUnit))) gamman
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
              (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
