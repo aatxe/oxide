@@ -531,4 +531,5 @@ with tydev :
     (* FIXME(awe 2018-04-25): we need to add rv to delta here with kind RGN *)
     tydev sigma delta rhoPrime (textend gamma1 id r) e2 (TBase TUnit) rhoPrime gamma1 ->
     tydev sigma delta rho gamma (EFor Mut id e1 e2) (TBase TUnit)
-          rhoPrime gamma1.
+          rhoPrime gamma1
+(* TODO: T-TAbs, T-TApp *).
