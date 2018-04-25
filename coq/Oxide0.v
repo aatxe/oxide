@@ -488,7 +488,14 @@ with tydev :
     tydev sigma delta rho (textend_lst gamma (zip args rgns)) body tau rhoPrime gammaPrime ->
     tydev sigma delta rho gamma (EFn (zip4 args rgns fracs tys) body)
           (TFn (zip3 rgns fracs tys) tau) rhoPrime gammaPrime
-(* TODO: T-MoveClosure *)
+| T_MoveClosure : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                (rhoPrime : renv) (gamma1 : tenv) (gamma2 : tenv) (gamma_ignored : tenv)
+                (args : list ident) (rgns : list rgn) (fracs : list frac) (tys : list ty)
+                (body : expr) (tau : ty),
+    (* TODO: split the gammas *)
+    tydev sigma delta rho (textend_lst gamma1 (zip args rgns)) body tau rhoPrime gamma_ignored ->
+    tydev sigma delta rho gamma (EMvFn (zip4 args rgns fracs tys) body)
+          (TMvFn (zip3 rgns fracs tys) tau) rhoPrime gamma2
 | T_App : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (e2 : expr)
             (fnargs : list (rgn * frac * ty)) (tr : ty) (rho1 : renv) (gamma1 : tenv) (rho2 : renv)
             (gamma2 : tenv),
