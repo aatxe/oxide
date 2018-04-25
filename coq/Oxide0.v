@@ -152,29 +152,6 @@ Definition eq_immpath (p1 : immpath) (p2 : immpath) : bool :=
 Definition ps_extend (ps : list (immpath * rgn)) (Pi : immpath) (rn : rgn) :=
   cons (Pi, rn) (List.filter (fun pair => eq_immpath (fst pair) Pi) ps).
 
-(* List.fold_left (fun (acc : Prop * renv * tenv) (pkg : expr * rgn * ty * renv * tenv) =>
-                             match (acc, pkg) with
-                             | ((prop, rho, gamma), (exp, rgn, tau, rhoPrime, gammaPrime)) =>
-                               (prop -> tydev sigma delta rho gamma exp
-                                             (TRef rgn whole tau) rhoPrime gammaPrime,
-                                rhoPrime, gammaPrime)
-                             end) exps (mem rho r = false, rho, gamma)
-*)
-
-Definition pkg : Type := expr * rgn * ty * renv * tenv.
-Definition proj_exp (pk : pkg) : expr :=
-  match pk with
-  | (exp, _, _, _, _) => exp
-  end.
-Definition proj_rgn (pk : pkg) : rgn :=
-  match pk with
-  | (_, rgn, _, _, _) => rgn
-  end.
-Definition proj_ty (pk : pkg) : ty :=
-  match pk with
-  | (_, _, ty, _, _) => ty
-  end.
-
 Inductive rgnalongpath :
   renv -> muta -> path -> rgn -> ty -> rgn -> Prop :=
 | PEpsilonPath : forall (rho : renv) (mu : muta) (rg : rgn) (tau : ty) (f : frac),
@@ -268,7 +245,6 @@ with tydev :
     tydev sigma delta rho gamma (EPrim p) tau rho gamma ->
     tydev sigma delta rho gamma (EAlloc (EPrim p)) (TRef r whole tau)
           (rextend rho r (tau, whole, PSImmediate tau)) gamma
-(* FIXME: I cannot for the life of me figure out how to do n-ary things *)
 | T_AllocTup : forall (sigma : denv) ( delta : kenv) (rho : renv) (gamma : tenv) (rhoN : renv) (gammaN : tenv)
                  (r : rgn) (exps : list expr) (tys : list ty),
     mem rho r = false ->
@@ -290,7 +266,7 @@ with tydev :
     rgnalongpath rho Imm pi rx tau rpi ->
     lookup rho rpi = Some (tau, f, ps) ->
     rgn_wf rho Imm rpi ->
-    FDiv f (FNat 2) = fn -> (* FIXME: actual fraction evaluation? *)
+    FDiv f (FNat 2) = fn -> (* FIXME(awe 2018-04-19): actual fraction evaluation? *)
     mem rho r = false ->
     tydev sigma delta rho (textend gamma id rx) (EBorrow Imm (id, pi)) (TRef r fn tau)
           (rextend (rextend rho rpi (tau, fn, ps))
@@ -310,7 +286,7 @@ with tydev :
                  (gamma2 : tenv) (r1 : rgn) (r2 : rgn) (f1 : frac) (f2 : frac),
     rgnalongpath rho Imm pi rx (TArray tau n) rpi ->
     lookup rho rpi = Some (TArray tau n, f, ps) ->
-    FDiv f (FNat 2) = fn -> (* FIXME: actual fraction evaluation? *)
+    FDiv f (FNat 2) = fn -> (* FIXME(awe 2018-04-19): actual fraction evaluation? *)
     rgn_wf rho Imm rpi ->
     mem rho r = false ->
     tydev sigma delta rho (textend gamma id rx) e1 (TRef r1 f1 (TBase Tu32)) rho1 gamma1 ->
@@ -335,20 +311,23 @@ with tydev :
 | T_Drop : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident) (pi : path)
              (rx : rgn) (r : rgn) (fx : frac) (fr : frac) (fn : frac) (tx : ty) (tr : ty)
              (ps : pathset),
-    pi = Path nil -> (* TODO: fix drop rules for paths, this is also a problem in LaTeX *)
+    pi = Path nil -> (* TODO(awe 2018-04-19): fix drop rules for paths, this is also a problem in
+                       LaTeX *)
     lookup rho rx = Some (tx, fx, PSAlias r) ->
     lookup rho r = Some (tr, fr, ps) ->
-    FAdd fx fr = fn -> (* FIXME: actual fraction evaluation? *)
+    FAdd fx fr = fn -> (* FIXME(awe 2018-04-19): actual fraction evaluation? *)
     tydev sigma delta rho gamma (EDrop (id, pi)) (TBase TUnit)
           (rextend rho r (tr, fn, ps)) gamma
 | T_FreeImmediate : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident)
                       (pi : path) (rx : rgn) (tau : ty),
-    pi = Path nil -> (* TODO: fix drop rules for paths, this is also a problem in LaTeX *)
+    pi = Path nil -> (* TODO(awe 2018-04-19): fix drop rules for paths, this is also a problem in
+                       LaTeX *)
     lookup rho rx = Some (tau, whole, PSImmediate tau) ->
     tydev sigma delta rho gamma (EDrop (id, pi)) (TBase TUnit) (rremove rho rx) gamma
 | T_Free : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident)
                       (pi : path) (rx : rgn) (tau : ty) (pathrgns : list (immpath * rgn)),
-    pi = Path nil -> (* TODO: fix drop rules for paths, this is also a problem in LaTeX *)
+    pi = Path nil -> (* TODO(awe 2018-04-19): fix drop rules for paths, this is also a problem in
+                       LaTeX *)
     lookup rho rx = Some (tau, whole, PSNested pathrgns) ->
     (forall (rPrime : rgn),
         List.In rPrime (List.map snd pathrgns) -> mem rho rPrime = false) ->
@@ -358,7 +337,7 @@ with tydev :
 | T_False : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
     tydev sigma delta rho gamma (EPrim (EBool false)) (TBase TBool) rho gamma
 | T_u32 : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (n : nat),
-    (n < 256) -> (* FIXME: lol, we should use bit vectors or something *)
+    (n < 256) -> (* FIXME(awe 2018-04-18): lol, we should use bit vectors or something *)
     tydev sigma delta rho gamma (EPrim (ENum n)) (TBase TBool) rho gamma
 | T_unit : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
     tydev sigma delta rho gamma (EPrim (EUnit)) (TBase TUnit) rho gamma
@@ -424,7 +403,8 @@ with tydev :
     f1 <> none ->
     tydev sigma delta rho1 gamma1 e2 t rho2 gamma1 ->
     tydev sigma delta rho1 gamma1 e3 t rho3 gamma1 ->
-    (* FIXME: rho2 and rho3 should be unified into rhoPrime, but I still dunno how yet. *)
+    (* FIXME(awe 2018-04-20): rho2 and rho3 should be unified into rhoPrime, but I still dunno how
+       yet. *)
     tydev sigma delta rho gamma (EIf e1 e2 e3) t rhoPrime gamma1
 (* TODO: T-Match *)
 | T_ForImm : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (r1 : rgn)
@@ -436,11 +416,11 @@ with tydev :
     f1 <> none ->
     lookup rho1 r1 = Some (t1, f1, ps1) ->
     mem rho1 r = false ->
-    FDiv f1 (FNat 2) = fn -> (* FIXME: actual fraction evaluation? *)
+    FDiv f1 (FNat 2) = fn -> (* FIXME(awe 2018-04-20): actual fraction evaluation? *)
     rhoPrime = (rextend
                   (rextend rho1 r1 (t1, fn, ps1)) 
-                  (* FIXME: I'm not certain this is actually correct since really, x should bind to
-                     sub-regions of r1, but this is what matches the current (20-04-18) LaTeX *)
+                  (* FIXME(awe 2018-04-20): I'm not certain this is actually correct since really, x
+                     should bind to sub-regions of r1, but this is what matches the current LaTeX *)
                   r (tau, fn, PSAlias r1)) -> 
     tydev sigma delta rhoPrime (textend gamma1 id r) e2 (TBase TUnit) rhoPrime gamma1 ->
     tydev sigma delta rho gamma (EFor Imm id e1 e2) (TBase TUnit)
@@ -455,8 +435,8 @@ with tydev :
     mem rho1 r = false ->
     rhoPrime = (rextend
                   (rextend rho1 r1 (t1, none, ps1)) 
-                  (* FIXME: I'm not certain this is actually correct since really, x should bind to
-                     sub-regions of r1, but this is what matches the current (20-04-18) LaTeX *)
+                  (* FIXME(awe 2018-04-20): I'm not certain this is actually correct since really, x
+                     should bind to sub-regions of r1, but this is what matches the current LaTeX *)
                   r (tau, whole, PSAlias r1)) -> 
     tydev sigma delta rhoPrime (textend gamma1 id r) e2 (TBase TUnit) rhoPrime gamma1 ->
     tydev sigma delta rho gamma (EFor Mut id e1 e2) (TBase TUnit)
