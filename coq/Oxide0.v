@@ -141,7 +141,7 @@ Definition mem {K : Type} {V : Type} (m : map K V) (x : K) :=
   if m x then true else false.
 
 Definition denv := unit.
-Definition kenv := list (unit * kind).
+Definition kenv := map unit kind.
 Definition renv := map rgn (ty * frac * pathset).
 Definition tenv := map ident rgn.
 
@@ -502,35 +502,33 @@ with tydev :
 (* TODO: T-Match *)
 | T_ForImm : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (r1 : rgn)
                (f1 : frac) (t1 : ty) (rho1 : renv) (gamma1 : tenv) (tau : ty) (ps1 : pathset)
-               (r : rgn) (fn : frac) (e2 : expr) (id : ident) (rhoPrime : renv),
+               (r : rgn) (fn : frac) (e2 : expr) (id : ident) (rhoPrime : renv) (rv : rgn),
     tydev sigma delta rho gamma e1 (TRef r1 f1 t1) rho1 gamma1 ->
     (match t1 with TArray te _ | TSlice te => te = tau | _ => False end) ->
     rgn_wf rho1 Imm r1 ->
     f1 <> none ->
     lookup rho1 r1 = Some (t1, f1, ps1) ->
     mem rho1 r = false ->
+    (* FIXME(awe 2018-04-25): rv has to be fresh in delta, but we haven't got a def of kenv yet *)
+    (* mem delta rv = false -> *)
     FDiv f1 (FNat 2) = fn -> (* FIXME(awe 2018-04-20): actual fraction evaluation? *)
-    rhoPrime = (rextend
-                  (rextend rho1 r1 (t1, fn, ps1)) 
-                  (* FIXME(awe 2018-04-20): I'm not certain this is actually correct since really, x
-                     should bind to sub-regions of r1, but this is what matches the current LaTeX *)
-                  r (tau, fn, PSAlias r1)) -> 
+    rhoPrime = (rextend (rextend rho1 r1 (t1, fn, ps1)) r (tau, fn, PSAlias rv)) -> 
+    (* FIXME(awe 2018-04-25): we need to add rv to delta here with kind RGN *)
     tydev sigma delta rhoPrime (textend gamma1 id r) e2 (TBase TUnit) rhoPrime gamma1 ->
     tydev sigma delta rho gamma (EFor Imm id e1 e2) (TBase TUnit)
           rhoPrime gamma1
 | T_ForMut : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (r1 : rgn)
                (t1 : ty) (rho1 : renv) (gamma1 : tenv) (tau : ty) (ps1 : pathset) (r : rgn)
-               (fn : frac) (e2 : expr) (id : ident) (rhoPrime : renv),
+               (fn : frac) (e2 : expr) (id : ident) (rhoPrime : renv) (rv : rgn),
     tydev sigma delta rho gamma e1 (TRef r1 whole t1) rho1 gamma1 ->
     (match t1 with TArray te _ | TSlice te => te = tau | _ => False end) ->
     rgn_wf rho1 Mut r1 ->
     lookup rho1 r1 = Some (t1, whole, ps1) ->
     mem rho1 r = false ->
-    rhoPrime = (rextend
-                  (rextend rho1 r1 (t1, none, ps1)) 
-                  (* FIXME(awe 2018-04-20): I'm not certain this is actually correct since really, x
-                     should bind to sub-regions of r1, but this is what matches the current LaTeX *)
-                  r (tau, whole, PSAlias r1)) -> 
+    (* FIXME(awe 2018-04-25): rv has to be fresh in delta, but we haven't got a def of kenv yet *)
+    (* mem delta rv = false -> *)
+    rhoPrime = (rextend (rextend rho1 r1 (t1, none, ps1)) r (tau, whole, PSAlias rv)) -> 
+    (* FIXME(awe 2018-04-25): we need to add rv to delta here with kind RGN *)
     tydev sigma delta rhoPrime (textend gamma1 id r) e2 (TBase TUnit) rhoPrime gamma1 ->
     tydev sigma delta rho gamma (EFor Mut id e1 e2) (TBase TUnit)
           rhoPrime gamma1.
