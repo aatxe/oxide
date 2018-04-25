@@ -270,11 +270,10 @@ with tydev :
            (List.map ref (zip3 rgns (List.repeat whole (List.length tys)) tys))
            rhoN gammaN ->
     tydev sigma delta rho gamma (EProd exps) (TProd tys)
-          (rextend rhoN r (TBase TUnit, whole,
+          (rextend rhoN r (TProd tys, whole,
                            PSNested (zip (List.map Proj (List.seq 0 (List.length rgns)))
-                                         rgns)
-                          )
-          ) gammaN
+                                         rgns)))
+          gammaN
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
              (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
     rgnalongpath rho Imm pi rx tau r ->
