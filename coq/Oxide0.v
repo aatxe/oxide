@@ -249,15 +249,15 @@ exprs transforms the former _into_ the latter as it typechecks.  *)
 Inductive WTList : denv -> kenv -> renv -> tenv -> list expr -> list ty -> renv -> tenv -> Prop :=
 | WTEmpty : forall (sigma : denv) (delt : kenv) (rho : renv) (gamma : tenv),
     WTList sigma delt rho gamma nil nil rho gamma
-| WTCons : forall (sigma : denv) (delt : kenv)
+| WTCons : forall (sigma : denv) (delta : kenv)
              (es : list expr) (ts : list ty)
-             (initrho : renv) (initgam : tenv)
-             (oldrho : renv) (oldgam : tenv)
-             (rho : renv) (gamma : tenv)
+             (rho1 : renv) (gamma1 : tenv)
+             (rho2 : renv) (gamma2 : tenv)
+             (rho3 : renv) (gamma3 : tenv)
              (e : expr) (t : ty)
-             (wt : WTList sigma delt initrho initgam es ts oldrho oldgam),
-    tydev sigma delt oldrho oldgam e t rho gamma ->
-    WTList sigma delt initrho initgam (e::es) (t::ts) rho gamma
+             (wt : WTList sigma delta rho2 gamma2 es ts rho3 gamma3),
+    tydev sigma delta rho1 gamma1 e t rho2 gamma2 ->
+    WTList sigma delta rho1 gamma1 (e::es) (t::ts) rho3 gamma3
               
 (* typing derivation *)
 with tydev :
@@ -269,12 +269,12 @@ with tydev :
     tydev sigma delta rho gamma (EAlloc (EPrim p)) (TRef r whole tau)
           (rextend rho r (tau, whole, PSImmediate tau)) gamma
 (* FIXME: I cannot for the life of me figure out how to do n-ary things *)
-| T_AllocTup : forall (sigma : denv) ( delta : kenv) (rho : renv) (gamma : tenv) (rhon : renv) (gamman : tenv)
+| T_AllocTup : forall (sigma : denv) ( delta : kenv) (rho : renv) (gamma : tenv) (rhoN : renv) (gammaN : tenv)
                  (r : rgn) (exps : list expr) (tys : list ty),
     mem rho r = false ->
-    WTList sigma delta rho gamma exps tys rhon gamman ->
+    WTList sigma delta rho gamma exps tys rhoN gammaN ->
     tydev sigma delta rho gamma (EProd exps) (TProd tys)
-          (rextend rhon r (TBase TUnit, whole, PSImmediate (TBase TUnit))) gamman
+          (rextend rhoN r (TBase TUnit, whole, PSImmediate (TBase TUnit))) gammaN
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
              (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
     rgnalongpath rho Imm pi rx tau r ->
