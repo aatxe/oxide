@@ -4,9 +4,15 @@ Require Import String.
 
 Fixpoint zip {A : Type} {B : Type} (xs : list A) (ys : list B) :=
   match (xs, ys) with
-  | (nil, ys) => @nil (A * B)
+  | (nil, ys) => nil
   | (xs, nil) => nil
   | (cons x xs, cons y ys) => cons (x, y) (zip xs ys)
+  end.
+
+Fixpoint zip3 {A : Type} {B : Type} {C : Type} (xs : list A) (ys : list B) (zs : list C) :=
+  match (xs, ys, zs) with
+  | (cons x xs, cons y ys, cons z zs) => cons (x, y, z) (zip3 xs ys zs)
+  | (_, _, _) => nil
   end.
 
 (* actual mechanization *)
@@ -260,7 +266,9 @@ with tydev :
                  (rhoN : renv) (gammaN : tenv)
                  (r : rgn) (exps : list expr) (rgns : list rgn) (tys : list ty),
     mem rho r = false ->
-    WTList sigma delta rho gamma exps tys rhoN gammaN ->
+    WTList sigma delta rho gamma exps
+           (List.map ref (zip3 rgns (List.repeat whole (List.length tys)) tys))
+           rhoN gammaN ->
     tydev sigma delta rho gamma (EProd exps) (TProd tys)
           (rextend rhoN r (TBase TUnit, whole,
                            PSNested (zip (List.map Proj (List.seq 0 (List.length rgns)))
