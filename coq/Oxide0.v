@@ -15,6 +15,13 @@ Fixpoint zip3 {A : Type} {B : Type} {C : Type} (xs : list A) (ys : list B) (zs :
   | (_, _, _) => nil
   end.
 
+Fixpoint zip4 {A : Type} {B : Type} {C : Type} {D : Type}
+         (xs : list A) (ys : list B) (zs : list C) (ws : list D) :=
+  match (xs, ys, zs, ws) with
+  | (cons x xs, cons y ys, cons z zs, cons w ws) => cons (x, y, z, w) (zip4 xs ys zs ws)
+  | (_, _, _, _) => nil
+  end.
+
 (* actual mechanization *)
 
 Definition ident := string.
@@ -158,6 +165,9 @@ Definition textend {V : Type} := @extend string V (fun s1 s2 =>
                                                      if string_dec s1 s2 then true else false).
 Definition tremove {V : Type} := @remove string V (fun s1 s2 =>
                                                      if string_dec s1 s2 then true else false).
+
+Definition textend_lst {V : Type} (m : map string V) (kvs : list (string * V)) :=
+  List.fold_left (fun acc pair => @textend V acc (fst pair) (snd pair)) kvs m.
 
 Definition eq_immpath (p1 : immpath) (p2 : immpath) : bool :=
   match (p1, p2) with
@@ -471,7 +481,14 @@ with tydev :
     tydev sigma delta rho (textend gamma id rx) e (TRef rn whole tau) rhoPrime gammaPrime ->
     tydev sigma delta rho (textend gamma id rx) (EAssign (id, Path nil) e) (TBase TUnit)
           rhoPrime (textend gamma id rn)
-(* TODO: T-Closure, T-MoveClosure *)
+| T_Closure : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                (rhoPrime : renv) (gammaPrime : tenv)
+                (args : list ident) (rgns : list rgn) (fracs : list frac) (tys : list ty)
+                (body : expr) (tau : ty),
+    tydev sigma delta rho (textend_lst gamma (zip args rgns)) body tau rhoPrime gammaPrime ->
+    tydev sigma delta rho gamma (EFn (zip4 args rgns fracs tys) body)
+          (TFn (zip3 rgns fracs tys) tau) rhoPrime gammaPrime
+(* TODO: T-MoveClosure *)
 | T_App : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (e2 : expr)
             (fnargs : list (rgn * frac * ty)) (tr : ty) (rho1 : renv) (gamma1 : tenv) (rho2 : renv)
             (gamma2 : tenv),
