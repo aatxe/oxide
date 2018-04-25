@@ -1,5 +1,16 @@
 Require Import String.
 
+(* things that I literally cannot believe are not in the standard library *)
+
+Fixpoint zip {A : Type} {B : Type} (xs : list A) (ys : list B) :=
+  match (xs, ys) with
+  | (nil, ys) => @nil (A * B)
+  | (xs, nil) => nil
+  | (cons x xs, cons y ys) => cons (x, y) (zip xs ys)
+  end.
+
+(* actual mechanization *)
+
 Definition ident := string.
 
 Inductive immpath : Set :=
@@ -245,12 +256,17 @@ with tydev :
     tydev sigma delta rho gamma (EPrim p) tau rho gamma ->
     tydev sigma delta rho gamma (EAlloc (EPrim p)) (TRef r whole tau)
           (rextend rho r (tau, whole, PSImmediate tau)) gamma
-| T_AllocTup : forall (sigma : denv) ( delta : kenv) (rho : renv) (gamma : tenv) (rhoN : renv) (gammaN : tenv)
-                 (r : rgn) (exps : list expr) (tys : list ty),
+| T_AllocTup : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                 (rhoN : renv) (gammaN : tenv)
+                 (r : rgn) (exps : list expr) (rgns : list rgn) (tys : list ty),
     mem rho r = false ->
     WTList sigma delta rho gamma exps tys rhoN gammaN ->
     tydev sigma delta rho gamma (EProd exps) (TProd tys)
-          (rextend rhoN r (TBase TUnit, whole, PSImmediate (TBase TUnit))) gammaN
+          (rextend rhoN r (TBase TUnit, whole,
+                           PSNested (zip (List.map Proj (List.seq 0 (List.length rgns)))
+                                         rgns)
+                          )
+          ) gammaN
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
              (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
     rgnalongpath rho Imm pi rx tau r ->
