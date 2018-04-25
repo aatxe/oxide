@@ -274,6 +274,20 @@ with tydev :
                            PSNested (zip (List.map Proj (List.seq 0 (List.length rgns)))
                                          rgns)))
           gammaN
+| T_AllocArray : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                   (rhoN : renv) (gammaN : tenv)
+                   (r : rgn) (exps : list expr) (rgns : list rgn) (tau : ty),
+    mem rho r = false ->
+    WTList sigma delta rho gamma exps
+           (List.map ref (zip3 rgns
+                               (List.repeat whole (List.length rgns))
+                               (List.repeat tau (List.length rgns))))
+           rhoN gammaN ->
+    tydev sigma delta rho gamma (EArray exps) (TArray tau (List.length exps))
+          (rextend rhoN r (TArray tau (List.length exps), whole,
+                           PSNested (zip (List.map Index (List.seq 0 (List.length rgns)))
+                                         rgns)))
+          gammaN
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
              (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
     rgnalongpath rho Imm pi rx tau r ->
