@@ -302,6 +302,20 @@ with tydev :
                            PSNested (zip (List.map Proj (List.seq 0 (List.length rgns)))
                                          rgns)))
           gammaN
+| T_AllocStructRec : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                       (rhoN : renv) (gammaN : tenv)
+                       (r : rgn) (exps : list expr) (rgns : list rgn) (tys : list ty)
+                       (s : struct) (gtys : list gty) (fields : list ident),
+    mem rho r = false ->
+    WTList sigma delta rho gamma exps
+           (List.map ref (zip3 rgns (List.repeat whole (List.length tys)) tys))
+           rhoN gammaN ->
+    (* TODO: check struct type validity *)
+    tydev sigma delta rho gamma (EStructRec s gtys (zip fields exps)) (TStruct s gtys)
+          (rextend rhoN r (TStruct s gtys, whole,
+                           PSNested (zip (List.map Field fields)
+                                         rgns)))
+          gammaN
 | T_AllocEnumTup : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
                        (rhoN : renv) (gammaN : tenv)
                        (r : rgn) (exps : list expr) (rgns : list rgn) (tys : list ty)
@@ -314,6 +328,20 @@ with tydev :
     tydev sigma delta rho gamma (EEnumTup (EVar s variant) gtys exps) (TStruct s gtys)
           (rextend rhoN r (TStruct s gtys, whole,
                            PSNested (zip (List.map Proj (List.seq 0 (List.length rgns)))
+                                         rgns)))
+          gammaN
+| T_AllocEnumRec : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                       (rhoN : renv) (gammaN : tenv)
+                       (r : rgn) (exps : list expr) (rgns : list rgn) (tys : list ty)
+                       (s : struct) (variant : ident) (gtys : list gty) (fields : list ident),
+    mem rho r = false ->
+    WTList sigma delta rho gamma exps
+           (List.map ref (zip3 rgns (List.repeat whole (List.length tys)) tys))
+           rhoN gammaN ->
+    (* TODO: check struct type validity *)
+    tydev sigma delta rho gamma (EEnumRec (EVar s variant) gtys (zip fields exps)) (TStruct s gtys)
+          (rextend rhoN r (TStruct s gtys, whole,
+                           PSNested (zip (List.map Field fields)
                                          rgns)))
           gammaN
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
