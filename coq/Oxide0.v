@@ -288,6 +288,34 @@ with tydev :
                            PSNested (zip (List.map Index (List.seq 0 (List.length rgns)))
                                          rgns)))
           gammaN
+| T_AllocStructTup : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                       (rhoN : renv) (gammaN : tenv)
+                       (r : rgn) (exps : list expr) (rgns : list rgn) (tys : list ty)
+                       (s : struct) (gtys : list gty),
+    mem rho r = false ->
+    WTList sigma delta rho gamma exps
+           (List.map ref (zip3 rgns (List.repeat whole (List.length tys)) tys))
+           rhoN gammaN ->
+    (* TODO: check struct type validity *)
+    tydev sigma delta rho gamma (EStructTup s gtys exps) (TStruct s gtys)
+          (rextend rhoN r (TStruct s gtys, whole,
+                           PSNested (zip (List.map Proj (List.seq 0 (List.length rgns)))
+                                         rgns)))
+          gammaN
+| T_AllocEnumTup : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                       (rhoN : renv) (gammaN : tenv)
+                       (r : rgn) (exps : list expr) (rgns : list rgn) (tys : list ty)
+                       (s : struct) (variant : ident) (gtys : list gty),
+    mem rho r = false ->
+    WTList sigma delta rho gamma exps
+           (List.map ref (zip3 rgns (List.repeat whole (List.length tys)) tys))
+           rhoN gammaN ->
+    (* TODO: check struct type validity *)
+    tydev sigma delta rho gamma (EEnumTup (EVar s variant) gtys exps) (TStruct s gtys)
+          (rextend rhoN r (TStruct s gtys, whole,
+                           PSNested (zip (List.map Proj (List.seq 0 (List.length rgns)))
+                                         rgns)))
+          gammaN
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
              (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
     rgnalongpath rho Imm pi rx tau r ->
