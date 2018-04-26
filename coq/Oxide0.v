@@ -158,7 +158,7 @@ Definition lookup {K : Type} {V : Type} (m : map K V) (x : K) := m x.
 Definition mem {K : Type} {V : Type} (m : map K V) (x : K) :=
   if m x then true else false.
 
-Definition denv := unit.
+Definition denv := list definition.
 Definition kenv := map unit kind.
 Definition renv := map rgn (ty * frac * pathset).
 Definition tenv := map ident rgn.
