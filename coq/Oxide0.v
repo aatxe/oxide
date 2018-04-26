@@ -232,8 +232,19 @@ Inductive rgn_wf :
         mem rho rPrime = true -> rgn_wf (rextend rho r (tau, whole, PSNested pathrgns)) Mut rPrime) ->
     rgn_wf (rextend rho r (tau, whole, PSNested pathrgns)) Mut r.
 
+Inductive WKList :
+  denv -> kenv -> renv -> tenv -> list gty -> list kind -> Prop :=
+| WKEmpty : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv),
+    WKList sigma delta rho gamma nil nil
+| WKCons : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+             (chi : gty) (kappa : kind)
+             (chis : list gty) (kappas : list kind)
+             (wk : WKList sigma delta rho gamma chis kappas),
+    kindev sigma delta rho gamma chi kappa ->
+    WKList sigma delta rho gamma (chi :: chis) (kappa :: kappas)
+
 (* kind derivation *)
-Inductive kindev :
+with kindev :
   denv -> kenv -> renv -> tenv -> gty -> kind -> Prop :=
 (* TODO: K-TyVar *)
 | K_ConcreteRegion : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (n : nat),
@@ -257,7 +268,21 @@ Inductive kindev :
     kindev sigma delta rho gamma (GFrac f) KFrac ->
     kindev sigma delta rho gamma (GType tau) KStar ->
     kindev sigma delta rho gamma (GType (TRef r f tau)) KStar
-(* TODO: K-Closure, K-MoveClosure, K-Universal, K-Tuple, K-Struct *).
+| K_Closure : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                (rgns : list rgn) (fracs : list frac) (tys : list ty)
+                (tau : ty),
+    WKList sigma delta rho gamma
+           (List.map (fun x => GType (ref x)) (zip3 rgns fracs tys))
+           (List.repeat KStar (List.length rgns)) ->
+    kindev sigma delta rho gamma (GType (TFn (zip3 rgns fracs tys) tau)) KStar
+| K_MoveClosure : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                (rgns : list rgn) (fracs : list frac) (tys : list ty)
+                (tau : ty),
+    WKList sigma delta rho gamma
+           (List.map (fun x => GType (ref x)) (zip3 rgns fracs tys))
+           (List.repeat KStar (List.length rgns)) ->
+    kindev sigma delta rho gamma (GType (TMvFn (zip3 rgns fracs tys) tau)) KStar
+(* TODO: K-Universal, K-Tuple, K-Struct *).
 
 (* NOTE(dbp 2018-04-24): We keep the initial and final rho/gamma -- the list of
 exprs transforms the former _into_ the latter as it typechecks.  *)
