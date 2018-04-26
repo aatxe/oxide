@@ -137,6 +137,17 @@ Inductive pathset : Set :=
 | PSAlias : rgn -> pathset
 | PSImmediate : ty -> pathset.
 
+(* enum variants *)
+Inductive enumv : Set :=
+| EVTup : ident -> list ty -> enumv
+| EVRec : ident -> list (ident * ty) -> enumv.
+
+(* list unit in definitions is a placeholder for the type variable binders *)
+Inductive definition : Set :=
+| DStructTup : struct -> list unit -> list ty -> definition
+| DStructRec : struct -> list unit -> list (ident * ty) -> definition
+| DEnum : struct -> list unit -> list enumv -> definition.
+
 Definition map (K : Type) (V : Type) := K -> option V.
 Definition empty {K : Type} {V : Type} : map K V := fun _ => None.
 Definition extend {K : Type} {V : Type} (eq : K -> K -> bool) (m : map K V) (x : K) (v : V) :=
