@@ -282,7 +282,12 @@ with kindev :
            (List.map (fun x => GType (ref x)) (zip3 rgns fracs tys))
            (List.repeat KStar (List.length rgns)) ->
     kindev sigma delta rho gamma (GType (TMvFn (zip3 rgns fracs tys) tau)) KStar
-(* TODO: K-Universal, K-Tuple, K-Struct *).
+(* TODO: K-Universal *)
+| K_Tuple : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+              (tys : list ty),
+    WKList sigma delta rho gamma (List.map GType tys) (List.repeat KStar (List.length tys)) ->
+    kindev sigma delta rho gamma (GType (TProd tys)) KStar
+(* TODO: K-Struct *).
 
 (* NOTE(dbp 2018-04-24): We keep the initial and final rho/gamma -- the list of
 exprs transforms the former _into_ the latter as it typechecks.  *)
