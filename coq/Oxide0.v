@@ -78,7 +78,6 @@ Inductive ty : Set :=
 | TRef : rgn -> frac -> ty -> ty
 (* FIXME: univerals *)
 | TFn : list (rgn * frac * ty) -> ty -> ty
-| TMvFn : list (rgn * frac * ty) -> ty -> ty
 | TArray : ty -> nat -> ty
 | TSlice : ty -> ty
 | TProd : list ty -> ty
@@ -281,7 +280,7 @@ with kindev :
     WKList sigma delta rho gamma
            (List.map (fun x => GType (ref x)) (zip3 rgns fracs tys))
            (List.repeat KStar (List.length rgns)) ->
-    kindev sigma delta rho gamma (GType (TMvFn (zip3 rgns fracs tys) tau)) KStar
+    kindev sigma delta rho gamma (GType (TFn (zip3 rgns fracs tys) tau)) KStar
 (* TODO: K-Universal *)
 | K_Tuple : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
               (tys : list ty),
@@ -536,17 +535,11 @@ with tydev :
     (* TODO: split the gammas *)
     tydev sigma delta rho (textend_lst gamma1 (zip args rgns)) body tau rhoPrime gamma_ignored ->
     tydev sigma delta rho gamma (EMvFn (zip4 args rgns fracs tys) body)
-          (TMvFn (zip3 rgns fracs tys) tau) rhoPrime gamma2
+          (TFn (zip3 rgns fracs tys) tau) rhoPrime gamma2
 | T_App : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (e2 : expr)
             (fnargs : list (rgn * frac * ty)) (tr : ty) (rho1 : renv) (gamma1 : tenv) (rho2 : renv)
             (gamma2 : tenv),
     tydev sigma delta rho gamma e1 (TFn fnargs tr) rho1 gamma1 ->
-    tydev sigma delta rho gamma e2 (TProd (List.map ref fnargs)) rho2 gamma2 ->
-    tydev sigma delta rho gamma (EApp e1 e2) tr rho2 gamma2
-| T_MvApp : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (e2 : expr)
-            (fnargs : list (rgn * frac * ty)) (tr : ty) (rho1 : renv) (gamma1 : tenv) (rho2 : renv)
-            (gamma2 : tenv),
-    tydev sigma delta rho gamma e1 (TMvFn fnargs tr) rho1 gamma1 ->
     tydev sigma delta rho gamma e2 (TProd (List.map ref fnargs)) rho2 gamma2 ->
     tydev sigma delta rho gamma (EApp e1 e2) tr rho2 gamma2
 | T_Seq : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (e1 : expr) (e2 : expr)
