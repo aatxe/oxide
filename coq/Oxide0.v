@@ -109,7 +109,7 @@ Inductive expr : Set :=
 | EPrim : prim -> expr
 | EAbort : string -> expr
 | EAlloc : expr -> expr
-| ECopy : qual_ident -> expr
+| ECopy : expr -> expr
 | EBorrow : muta -> qual_ident -> expr
 | ESlice : muta -> qual_ident -> expr -> expr -> expr
 | EDrop : qual_ident -> expr
@@ -395,14 +395,14 @@ with tydev :
                                          rgns)))
           gammaN
 | T_Copy : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
-             (id : ident) (pi : path) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (rx : rgn),
-    rgnalongpath rho Imm pi rx tau r ->
-    lookup rho r = Some (tau, f, ps) ->
-    f <> none ->
+             (e : expr) (r : rgn) (tau : ty) (f : frac) (ps : pathset) (r_e : rgn)
+             (rhoPrime : renv) (gammaPrime : tenv),
+    (tydev sigma delta rho gamma e (TRef r_e f tau) rhoPrime gammaPrime) ->
+    lookup rhoPrime r_e = Some (tau, f, ps) ->
     (exists (bt : basety), tau = TBase bt) ->
     mem rho r = false ->
-    tydev sigma delta rho (textend gamma id rx) (ECopy (id, pi)) (TRef r whole tau)
-          (rextend rho r (tau, whole, ps)) (textend gamma id rx)
+    tydev sigma delta rho gamma (ECopy e) (TRef r whole tau)
+          (rextend rhoPrime r (tau, whole, PSImmediate tau)) gammaPrime
 | T_BorrowImm : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
                   (id : ident) (pi : path) (rpi : rgn) (tau : ty) (f : frac) (ps : pathset)
                   (rx : rgn) (fn : frac) (r : rgn),
