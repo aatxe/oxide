@@ -111,7 +111,7 @@ Inductive expr : Set :=
 | EAlloc : expr -> expr
 | ECopy : expr -> expr
 | EBorrow : muta -> qual_ident -> expr
-| ESlice : muta -> qual_ident -> expr -> expr -> expr
+| ESlice : muta -> expr -> expr -> expr -> expr
 | EDrop : qual_ident -> expr
 | ELet : muta -> ident -> expr -> expr -> expr
 | EAssign : qual_ident -> expr -> expr
@@ -423,34 +423,41 @@ with tydev :
     tydev sigma delta rho (textend gamma id rx) (EBorrow Mut (id, pi)) (TRef r whole tau)
           (rextend (rextend rho rpi (tau, none, ps))
                    r (tau, whole, PSAlias rpi)) (textend gamma id rx)
-| T_SliceImm : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident) (rx : rgn)
-                 (pi : path) (e1 : expr) (e2 : expr) (r : rgn) (fn : frac) (tau : ty) (rpi : rgn)
-                 (f : frac) (ps : pathset) (n : nat) (rho1 : renv) (rho2 : renv) (gamma1 : tenv)
-                 (gamma2 : tenv) (r1 : rgn) (r2 : rgn) (f1 : frac) (f2 : frac),
-    rgnalongpath rho Imm pi rx (TArray tau n) rpi ->
-    lookup rho rpi = Some (TArray tau n, f, ps) ->
-    FDiv f (FNat 2) = fn -> (* FIXME(awe 2018-04-19): actual fraction evaluation? *)
-    rgn_wf rho Imm rpi ->
-    mem rho r = false ->
-    tydev sigma delta rho (textend gamma id rx) e1 (TRef r1 f1 (TBase Tu32)) rho1 gamma1 ->
+| T_SliceArrayImm : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                      (e1 : expr) (r1 : rgn) (f1 : frac) (rho1 : renv) (gamma1 : tenv)
+                      (tau : ty) (n : nat) (ps : pathset)
+                      (e2 : expr) (r2 : rgn) (f2 : frac) (rho2 : renv) (gamma2 : tenv)
+                      (e3 : expr) (r3 : rgn) (f3 : frac) (rho3 : renv) (gamma3 : tenv)
+                      (r : rgn) (fn : frac),
+    tydev sigma delta rho gamma e1 (TRef r1 f1 (TArray tau n)) rho1 gamma1 ->
+    rgn_wf rho1 Imm r1 ->
+    lookup rho1 r1 = Some (TArray tau n, f1, ps) ->
     tydev sigma delta rho1 gamma1 e2 (TRef r2 f2 (TBase Tu32)) rho2 gamma2 ->
-    tydev sigma delta rho (textend gamma id rx) (ESlice Imm (id, pi) e1 e2) (TRef r fn (TSlice tau))
-          (rextend (rextend rho2 rpi (TSlice tau, fn, ps))
-                   r (TSlice tau, fn, PSAlias rpi)) (textend gamma2 id rx)
-| T_SliceMut : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident) (rx : rgn)
-                 (pi : path) (e1 : expr) (e2 : expr) (r : rgn) (tau : ty) (rpi : rgn) (ps : pathset)
-                 (n : nat) (rho1 : renv) (rho2 : renv) (gamma1 : tenv) (gamma2 : tenv) (r1 : rgn)
-                 (r2 : rgn) (f1 : frac) (f2 : frac),
-    rgnalongpath rho Mut pi rx (TArray tau n) rpi ->
-    lookup rho rpi = Some (TArray tau n, whole, ps) ->
-    rgn_wf rho Mut rpi ->
-    mem rho r = false ->
-    tydev sigma delta rho (textend gamma id rx) e1 (TRef r1 f1 (TBase Tu32)) rho1 gamma1 ->
+    tydev sigma delta rho2 gamma2 e3 (TRef r3 f3 (TBase Tu32)) rho3 gamma3 ->
+    mem rho3 r = false ->
+    FDiv f1 (FNat 2) = fn -> (* FIXME(awe 2018-05-03): actual fraction evaluation? *)
+    tydev sigma delta rho gamma (ESlice Imm e1 e2 e3) (TRef r fn (TSlice tau))
+          (rextend (rextend rho3
+                            r1 (TArray tau n, fn, ps))
+                   r (TSlice tau, fn, PSAlias r1))
+          gamma3
+| T_SliceArrayMut : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv)
+                      (e1 : expr) (r1 : rgn) (rho1 : renv) (gamma1 : tenv)
+                      (tau : ty) (n : nat) (ps : pathset)
+                      (e2 : expr) (r2 : rgn) (f2 : frac) (rho2 : renv) (gamma2 : tenv)
+                      (e3 : expr) (r3 : rgn) (f3 : frac) (rho3 : renv) (gamma3 : tenv)
+                      (r : rgn) (fn : frac),
+    tydev sigma delta rho gamma e1 (TRef r1 whole (TArray tau n)) rho1 gamma1 ->
+    rgn_wf rho1 Mut r1 ->
+    lookup rho1 r1 = Some (TArray tau n, whole, ps) ->
     tydev sigma delta rho1 gamma1 e2 (TRef r2 f2 (TBase Tu32)) rho2 gamma2 ->
-    tydev sigma delta rho (textend gamma id rx) (ESlice Mut (id, pi) e1 e2)
-          (TRef r whole (TSlice tau))
-          (rextend (rextend rho2 rpi (TSlice tau, none, ps))
-                   r (TSlice tau, whole, PSAlias rpi)) (textend gamma2 id rx)
+    tydev sigma delta rho2 gamma2 e3 (TRef r3 f3 (TBase Tu32)) rho3 gamma3 ->
+    mem rho3 r = false ->
+    tydev sigma delta rho gamma (ESlice Imm e1 e2 e3) (TRef r fn (TSlice tau))
+          (rextend (rextend rho3
+                            r1 (TArray tau n, none, ps))
+                   r (TSlice tau, whole, PSAlias r1))
+          gamma3
 | T_Drop : forall (sigma : denv) (delta : kenv) (rho : renv) (gamma : tenv) (id : ident) (pi : path)
              (rx : rgn) (r : rgn) (fx : frac) (fr : frac) (fn : frac) (tx : ty) (tr : ty)
              (ps : pathset),
