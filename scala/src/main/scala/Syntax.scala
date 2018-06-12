@@ -21,6 +21,8 @@ object Syntax {
   case class FDiv(numerator: Fraction, denominator: Fraction) extends Fraction
   case class FAdd(lhs: Fraction, rhs: Fraction) extends Fraction
 
+  val F1 = FNum(1)
+
   sealed trait Region
   case class RVar(n: Int) extends Region
   case class RConcrete(n: Int) extends Region
@@ -38,8 +40,9 @@ object Syntax {
   type Quantifier = (TVar, Kind)
   type Quantifiers = Seq[Quantifier]
 
-  sealed trait Type extends BaseType
+  sealed trait Type
   case class TVar(id: Identifier) extends Type
+  case class TBase(bt: BaseType) extends Type
   case class TRef(rgn: Region, mu: MutabilityQuantifier, typ: Type) extends Type
   case class TFun(quantifiers: Quantifiers, typparams: Seq[TRef], ret: Type) extends Type
   case class TArray(typ: Type, len: Int) extends Type
@@ -48,7 +51,8 @@ object Syntax {
   case class TStruct(name: Identifier, typargs: GenTypes) extends Type
   type Types = Seq[Type]
 
-  sealed trait GenType extends Type
+  sealed trait GenType
+  case class TTyp(typ: Type) extends GenType
   case class TRgn(rgn: Region) extends GenType
   type GenTypes = Seq[GenType]
 
@@ -58,7 +62,8 @@ object Syntax {
   case class ENum(n: Int) extends Primitive
   case object EUnit extends Primitive
 
-  sealed trait Expression extends Primitive
+  sealed trait Expression
+  case class EPrim(prim: Primitive) extends Expression
   case class EAlloc(rgn: RConcrete, expr: Expression) extends Expression
   case class ECopy(rgn: RConcrete, expr: Expression) extends Expression
   case class EDrop(rgn: RConcrete) extends Expression
@@ -120,6 +125,7 @@ object Syntax {
   type GlobalContext = Unit // FIXME(awe)
 
   sealed trait Metadata
+  case object MNone extends Metadata
   case class MAlias(from: Region) extends Metadata
   case class MAggregate(map: Map[ImmediatePath, Region]) extends Metadata
 }
