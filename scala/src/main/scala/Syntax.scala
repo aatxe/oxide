@@ -21,6 +21,7 @@ object Syntax {
   case class FDiv(numerator: Fraction, denominator: Fraction) extends Fraction
   case class FAdd(lhs: Fraction, rhs: Fraction) extends Fraction
 
+  val F0 = FNum(0)
   val F1 = FNum(1)
 
   sealed trait Region
@@ -40,6 +41,10 @@ object Syntax {
   type Quantifier = (TVar, Kind)
   type Quantifiers = Seq[Quantifier]
 
+  /*=========*\
+  ||  Types  ||
+  \*=========*/
+
   sealed trait Type
   case class TVar(id: Identifier) extends Type
   case class TBase(bt: BaseType) extends Type
@@ -55,6 +60,10 @@ object Syntax {
   case class TTyp(typ: Type) extends GenType
   case class TRgn(rgn: Region) extends GenType
   type GenTypes = Seq[GenType]
+
+  /*===============*\
+  ||  Expressions  ||
+  \*===============*/
 
   sealed trait Primitive
   case object ETrue extends Primitive
@@ -104,6 +113,10 @@ object Syntax {
   ) extends Expression
   type Expressions = Seq[Expression]
 
+  /*============*\
+  ||  Patterns  ||
+  \*============*/
+
   sealed trait Pattern
   case object PWildcard extends Pattern
   case class PProd(
@@ -113,7 +126,6 @@ object Syntax {
     variant: Identifier, args: Seq[(Identifier, MutabilityQuantifier, Identifier)]
   ) extends Pattern
   type MatchArm = (Pattern, Expression)
-
 
   /*============*\
   ||  Contexts  ||
@@ -128,4 +140,12 @@ object Syntax {
   case object MNone extends Metadata
   case class MAlias(from: Region) extends Metadata
   case class MAggregate(map: Map[ImmediatePath, Region]) extends Metadata
+
+  /*=====================*\
+  ||  Abstract Versions  ||
+  \*=====================*/
+
+  case object AbsMuta extends MutabilityQuantifier
+  case object AbsRegion extends Region
+  case object AbsType extends Type
 }

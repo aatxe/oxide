@@ -29,7 +29,10 @@ case class TypeChecker(
       val (typs, TypeChecker(_, _, rhoPrime, gammaPrime)) = this.checkThread(exprs)
       val meta = MAggregate(typs.zipWithIndex.map {
         case (TRef(rgn, _, _), idx) => PProj(idx) -> rgn
-        case _ => ??? // TODO(awe): type error
+        case (typ, _) => throw Errors.TypeError(
+          expected = TRef(AbsRegion, AbsMuta, AbsType),
+          found = typ
+        )
       }.toMap)
       (TRef(rgn, QMut, TProd(typs)), rhoPrime + (rgn -> (TProd(typs), F1, meta)), gammaPrime)
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
@@ -47,7 +50,10 @@ case class TypeChecker(
         assert(rho2.contains(r1) == false)
         (ty2, rho2, gamma2)
       }
-      case _=> ???
+      case (typ, _, _) => throw Errors.TypeError(
+        expected = TRef(AbsRegion, AbsMuta, AbsType),
+        found = typ
+      )
     }
 
     case ELet(QMut, id, e1, e2) => this.check(e1) match {
@@ -58,7 +64,10 @@ case class TypeChecker(
         // assert(rho2.contains(r1) == false)
         (ty2, rho2, gamma2)
       }
-      case _=> ???
+      case (typ, _, _) => throw Errors.TypeError(
+        expected = TRef(AbsRegion, AbsMuta, AbsType),
+        found = typ
+      )
     }
 
     case _ => ???
