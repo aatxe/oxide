@@ -5,9 +5,7 @@ import oxide.Syntax._
 import oxide.TypeChecker
 
 class TypeCheckerTests extends FlatSpec with Matchers {
-  val Oxide = "The Oxide type checker"
-
-  Oxide should "type check binding a variable to an allocated primitive" in {
+  "The Oxide type checker" should "type check binding a variable to an allocated primitive" in {
     TypeChecker((), Map(), Map(), Map()).check(
       ELet(QMut, "x", EAlloc(RConcrete(0), EPrim(ENum(5))),
            EPrim(EUnit))
@@ -16,7 +14,7 @@ class TypeCheckerTests extends FlatSpec with Matchers {
     )
   }
 
-  Oxide should "type check a single mutable borrow from a region" in {
+  it should "type check a single mutable borrow from a region" in {
     TypeChecker((), Map(), Map(), Map()).check(
       ELet(QMut, "x", EAlloc(RConcrete(0), EPrim(ENum(5))),
            ELet(QMut, "y", EBorrow(RConcrete(1), QMut, "x", Seq()),
@@ -28,7 +26,7 @@ class TypeCheckerTests extends FlatSpec with Matchers {
     )
   }
 
-  Oxide should "not type check borrowing mutably twice from the same region" in {
+  it should "not type check borrowing mutably twice from the same region" in {
     a [BorrowIllegal] should be thrownBy {
       TypeChecker((), Map(), Map(), Map()).check(
         ELet(QMut, "x", EAlloc(RConcrete(0), EPrim(ENum(5))),
