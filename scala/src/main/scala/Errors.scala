@@ -14,4 +14,10 @@ object Errors {
 
         Found: $found"""
   )
+
+  case class BorrowIllegal(
+    needed: Fraction, had: Fraction, rgn: Region
+  ) extends RuntimeException(
+    s"Region $rgn could not be borrowed. A $needed capability was needed, but we only had $had."
+  )
 }

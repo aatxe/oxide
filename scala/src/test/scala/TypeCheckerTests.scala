@@ -29,11 +29,11 @@ class TypeCheckerTests extends FlatSpec with Matchers {
   }
 
   Oxide should "not type check borrowing mutably twice from the same region" in {
-    a [TypeError] should be thrownBy {
+    a [BorrowIllegal] should be thrownBy {
       TypeChecker((), Map(), Map(), Map()).check(
         ELet(QMut, "x", EAlloc(RConcrete(0), EPrim(ENum(5))),
              ELet(QMut, "y", EBorrow(RConcrete(1), QMut, "x", Seq()),
-                  ELet(QMut, "z", EBorrow(RConcrete(2), QMut, "y", Seq()),
+                  ELet(QMut, "z", EBorrow(RConcrete(2), QMut, "x", Seq()),
                        EPrim(EUnit))))
       )
     }

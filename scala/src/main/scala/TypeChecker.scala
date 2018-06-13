@@ -37,6 +37,18 @@ case class TypeChecker(
       (TRef(rgn, QMut, TProd(typs)), rhoPrime + (rgn -> (TProd(typs), F1, meta)), gammaPrime)
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
+    // TODO: path lookup
+    case EBorrow(rgn, QMut, id, pi) => gamma.get(id).flatMap(rho.get) match {
+      case Some((typ, FNum(1), meta)) => if (rho.contains(rgn) == false) {
+        // TODO: check valid borrow
+        (TRef(rgn, QMut, typ),
+         rho ++ Seq(gamma(id) -> (typ, F0, MNone), rgn -> ((typ, F1, MAlias(gamma(id))))),
+         gamma)
+      } else throw Errors.RegionAlreadyInUse(rgn, rho)
+      case Some((_, frac, _)) => throw Errors.BorrowIllegal(F1, frac, rgn)
+      case None => ???
+    }
+
     case EPrim(ETrue)
        | EPrim(EFalse) => (TBase(TBool), rho, gamma)
     case EPrim(ENum(n)) => (TBase(Tu32), rho, gamma) // FIXME(awe): fix bounds on n
