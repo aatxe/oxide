@@ -36,4 +36,19 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       )
     }
   }
+
+  it should "type check a mutable borrow from within an aggregate region" in {
+    TypeChecker((), Map(), Map(), Map()).check(
+      ELet(QMut, "x", EAlloc(RConcrete(0),
+                             EProd(Seq(EAlloc(RConcrete(1), EPrim(ENum(5)))))),
+           ELet(QMut, "y", EBorrow(RConcrete(2), QMut, "x", Seq(PProj(0))),
+                EPrim(EUnit)))
+    ) should be (
+      TBase(TUnit), Map(RConcrete(0) -> (TProd(Seq(TBase(Tu32))), F1,
+                                         MAggregate(Map(PProj(0) -> RConcrete(1)))),
+                        RConcrete(1) -> (TBase(Tu32), F0, MNone),
+                        RConcrete(2) -> (TBase(Tu32), F1, MAlias(RConcrete(1)))),
+      Map("x" -> RConcrete(0), "y" -> RConcrete(2))
+    )
+  }
 }

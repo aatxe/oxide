@@ -36,19 +36,25 @@ case class TypeChecker(
           found = typ
         )
       }.toMap)
-      (TRef(rgn, QMut, TProd(typs)), rhoPrime + (rgn -> (TProd(typs), F1, meta)), gammaPrime)
+      val innerTyps = typs.map {
+        case TRef(_, _, typ) => typ
+        case _ => throw Errors.Unreachable
+      }
+      (TRef(rgn, QMut, TProd(typs)), rhoPrime + (rgn -> (TProd(innerTyps), F1, meta)), gammaPrime)
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
     // T-BorrowMut
-    // TODO: path lookup
-    case EBorrow(rgn, QMut, id, pi) => gamma.get(id).flatMap(rho.get) match {
-      case Some((typ, FNum(1), meta)) => if (rho.contains(rgn) == false) {
+    case EBorrow(rgn, QMut, id, pi) => gamma.get(id).flatMap(rgnId => {
+      val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(QMut, pi, rgnId)
+      rhoPrime.get(rgnPi).map(prod => (rgnPi, prod, rhoPrime))
+    }) match {
+      case Some((rgnPi, (typ, FNum(1), meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
         // TODO: check valid borrow
         (TRef(rgn, QMut, typ),
-         rho ++ Seq(gamma(id) -> (typ, F0, MNone), rgn -> ((typ, F1, MAlias(gamma(id))))),
+         rhoPrime ++ Seq(rgnPi -> (typ, F0, MNone), rgn -> ((typ, F1, MAlias(rgnPi)))),
          gamma)
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
-      case Some((_, frac, _)) => throw Errors.IllegalBorrow(F1, frac, rgn)
+      case Some((rgnPi, (_, frac, _), _)) => throw Errors.IllegalBorrow(F1, frac, rgnPi)
       case None => ???
     }
 
