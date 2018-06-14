@@ -147,5 +147,6 @@ object Syntax {
 
   case object AbsMuta extends MutabilityQuantifier
   case object AbsRegion extends Region
+  case object AbsBaseType extends BaseType
   case object AbsType extends Type
 }

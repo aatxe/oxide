@@ -43,6 +43,22 @@ case class TypeChecker(
       (TRef(rgn, QMut, TProd(typs)), rhoPrime + (rgn -> (TProd(innerTyps), F1, meta)), gammaPrime)
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
+    // T-Copy
+    case ECopy(rgn, expr) => this.check(expr) match {
+      case (TRef(src, mu, typ@TBase(_)), rhoPrime, gammaPrime) =>
+        if (rhoPrime.contains(rgn) == false) {
+          (TRef(rgn, QMut, typ), rhoPrime + (rgn -> (typ, F1, MNone)), gammaPrime)
+        } else throw Errors.RegionAlreadyInUse(rgn, rhoPrime)
+      case (TRef(_, _, typ), _, _) => throw Errors.TypeError(
+        expected = TBase(AbsBaseType),
+        found = typ
+      )
+      case (typ, _, _) => throw Errors.TypeError(
+        expected = TRef(AbsRegion, AbsMuta, AbsType),
+        found = typ
+      )
+    }
+
     // T-BorrowImm
     case EBorrow(rgn, QImm, id, pi) => gamma.get(id).flatMap(rgnId => {
       val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(QImm, pi, rgnId)
