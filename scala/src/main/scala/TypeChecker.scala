@@ -45,7 +45,7 @@ case class TypeChecker(
          rho ++ Seq(gamma(id) -> (typ, F0, MNone), rgn -> ((typ, F1, MAlias(gamma(id))))),
          gamma)
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
-      case Some((_, frac, _)) => throw Errors.BorrowIllegal(F1, frac, rgn)
+      case Some((_, frac, _)) => throw Errors.IllegalBorrow(F1, frac, rgn)
       case None => ???
     }
 

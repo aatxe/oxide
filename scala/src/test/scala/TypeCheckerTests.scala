@@ -27,7 +27,7 @@ class TypeCheckerTests extends FlatSpec with Matchers {
   }
 
   it should "not type check borrowing mutably twice from the same region" in {
-    a [BorrowIllegal] should be thrownBy {
+    a [IllegalBorrow] should be thrownBy {
       TypeChecker((), Map(), Map(), Map()).check(
         ELet(QMut, "x", EAlloc(RConcrete(0), EPrim(ENum(5))),
              ELet(QMut, "y", EBorrow(RConcrete(1), QMut, "x", Seq()),
