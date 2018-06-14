@@ -43,6 +43,22 @@ case class TypeChecker(
       (TRef(rgn, QMut, TProd(typs)), rhoPrime + (rgn -> (TProd(innerTyps), F1, meta)), gammaPrime)
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
+    // T-BorrowImm
+    case EBorrow(rgn, QImm, id, pi) => gamma.get(id).flatMap(rgnId => {
+      val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(QImm, pi, rgnId)
+      rhoPrime.get(rgnPi).map(prod => (rgnPi, prod, rhoPrime))
+    }) match { // FIXME: normalize fractions?
+      case Some((rgnPi, (_, FNum(0), _), _)) => throw Errors.IllegalBorrow(F1, FNum(0), rgnPi)
+      case Some((rgnPi, (typ, frac, meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
+        // TODO: check valid borrow
+        (TRef(rgn, QMut, typ),
+         rhoPrime ++ Seq(rgnPi -> (typ, FDiv(frac, FNum(2)), MNone),
+                         rgn -> ((typ, FDiv(frac, FNum(2)), MAlias(rgnPi)))),
+         gamma)
+      } else throw Errors.RegionAlreadyInUse(rgn, rho)
+      case None => ???
+    }
+
     // T-BorrowMut
     case EBorrow(rgn, QMut, id, pi) => gamma.get(id).flatMap(rgnId => {
       val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(QMut, pi, rgnId)
@@ -70,7 +86,7 @@ case class TypeChecker(
         val (ty2, rho2, gamma2) = TypeChecker(
           sigma, delta, rho1, gamma1 + (id -> r1)
         ).check(e2)
-        assert(rho2.contains(r1) == false)
+        // assert(rho2.contains(r1) == false)
         (ty2, rho2, gamma2)
       }
       case (typ, _, _) => throw Errors.TypeError(
