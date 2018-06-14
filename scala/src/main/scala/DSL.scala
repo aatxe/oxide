@@ -1,0 +1,124 @@
+package oxide
+
+import scala.language.implicitConversions
+
+import Syntax._
+
+object DSL {
+  def imm = QImm
+  def mut = QMut
+
+  def proj(id: Identifier) = PField(id)
+  def proj(idx: Int) = PProj(idx)
+  def idx(idx: Int) = PIndex(idx)
+  def deref = PDeref
+
+  def none = F0
+  def whole = F1
+  def zeta = FZeta
+
+  implicit def numToFraction(n: Int): Fraction = FNum(n)
+  implicit class RichFraction(frac: Fraction) {
+    def /(other: Fraction) = FDiv(frac, other)
+    def +(other: Fraction) = FAdd(frac, other)
+  }
+
+  def tick(n: Int) = RConcrete(n)
+  def vari(n: Int) = RVar(n)
+
+  def bool = TBase(TBool)
+  def u32 = TBase(Tu32)
+  def unitT = TBase(TUnit)
+
+  def star = KType
+  def RGN = KRegion
+
+  implicit class RichTVar(tvar: TVar) {
+    def ::(kind: Kind): Quantifier = (tvar, kind)
+  }
+  def forall(quantifiers: Quantifier*): Quantifiers = quantifiers.toSeq
+
+  implicit class RichQuantifiers(quantifiers: Quantifiers) {
+    def apply(arrow: (Seq[TRef], Type)) = TFun(quantifiers, arrow._1, arrow._2)
+  }
+
+  def vari(id: Identifier) = TVar(id)
+  implicit def baseTypeToType(bt: BaseType): Type = TBase(bt)
+  def ref(rgn: Region)(mu: MutabilityQuantifier)(typ: Type) = TRef(rgn, mu, typ)
+
+  def fn(tys: TRef*): Seq[TRef] = tys.toSeq
+  implicit class RichTRefs(trefs: Seq[TRef]) {
+    def ->(ret: Type): (Seq[TRef], Type) = (trefs, ret)
+  }
+  implicit def quantifierlessFunctions(p: (Seq[TRef], Type)): Type = TFun(Seq(), p._1, p._2)
+
+  def array(typ: Type, len: Int) = TArray(typ, len)
+  def slice(typ: Type) = TSlice(typ)
+
+  def tup(typs: Type*) = TProd(typs.toSeq)
+  implicit def tupToProd2(a: (Type, Type)): TProd = TProd(Seq(a._1, a._2))
+  implicit def tupToProd3(a: (Type, Type, Type)): TProd = TProd(Seq(a._1, a._2, a._3))
+  implicit def tupToProd4(a: (Type, Type, Type, Type)): TProd = TProd(Seq(a._1, a._2, a._3, a._4))
+
+  implicit def idToIdPath(id: Identifier): (Identifier, Path) = (id, Seq())
+  implicit class RichIdentifier(id: Identifier) {
+    def apply(typargs: GenType*) = TStruct(id, typargs.toSeq)
+
+    def dot(path: ImmediatePath): (Identifier, Path) = (id, Seq(path))
+    def dot(path: Path): (Identifier, Path) = (id, path)
+
+    def be(expr: Expression): (Identifier, Expression) = (id, expr)
+  }
+
+  implicit def typeToGenType(typ: Type): GenType = TTyp(typ)
+  implicit def rgnToGenType(rgn: Region): GenType = TRgn(rgn)
+
+  def tru = ETrue
+  def fls = EFalse
+  implicit def intToPrim(n: Int): Primitive = ENum(n)
+  implicit def intToExpr(n: Int): Expression = EPrim(ENum(n))
+  def unit = EUnit
+
+  implicit def primToExpr(prim: Primitive): Expression = EPrim(prim)
+  def alloc(rgn: RConcrete)(expr: Expression) = EAlloc(rgn, expr)
+  def copy(rgn: RConcrete)(expr: Expression) = ECopy(rgn, expr)
+  def drop(rgn: RConcrete) = EDrop(rgn)
+  def borrow(rgn: RConcrete)(mu: MutabilityQuantifier)(idPath: (Identifier, Path)) =
+    EBorrow(rgn, mu, idPath._1, idPath._2)
+
+  implicit class RichExpression(expr: Expression) {
+    def apply(exprs: (Expression, Expression)) = (expr, exprs._1, exprs._2)
+
+    def to(other: Expression) = (expr, other)
+
+    // sequence
+    def |>(other: Expression) = ESeq(expr, other)
+  }
+  def slice(rgn: RConcrete)(mu: MutabilityQuantifier)(exprs: (Expression, Expression, Expression)) =
+    ESlice(rgn, mu, exprs._1, exprs._2, exprs._3)
+
+  def let(mu: MutabilityQuantifier)(idExpr: (Identifier, Expression))(body: Expression) =
+    ELet(mu, idExpr._1, idExpr._2, body)
+
+  implicit class RichIdPath(idPath: (Identifier, Path)) {
+    def :=(expr: Expression) = EAssign(idPath._1, idPath._2, expr)
+
+    def dot(path: ImmediatePath): (Identifier, Path) = (idPath._1, idPath._2 :+ path)
+    def dot(path: Path): (Identifier, Path) = (idPath._1, idPath._2 ++ path)
+  }
+
+  // TODO: EClosure, EMoveClosure, EApp
+
+  def ite(pred: Expression)(cons: Expression)(alt: Expression) = EIf(pred, cons, alt)
+
+  // TODO: EMatch, EFor
+
+  def tup(exprs: Expression*) = EProd(exprs.toSeq)
+  implicit def tupToProd2(a: (Expression, Expression)): EProd = EProd(Seq(a._1, a._2))
+  implicit def tupToProd3(a: (Expression, Expression, Expression)): EProd =
+    EProd(Seq(a._1, a._2, a._3))
+  implicit def tupToProd4(a: (Expression, Expression, Expression, Expression)): EProd =
+    EProd(Seq(a._1, a._2, a._3, a._4))
+
+  // TODO: EArray, EStructRecord, EStructTuple, EEnumRecord, EEnumTuple
+}
