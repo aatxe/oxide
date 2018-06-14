@@ -20,4 +20,18 @@ object Errors {
   ) extends RuntimeException(
     s"Region $rgn could not be borrowed. A $needed capability was needed, but we only had $had."
   )
+
+  case class UnexpectedMetadata(
+    found: Metadata, expected: Metadata, rgn: Region
+  ) extends RuntimeException(
+    s"""Region $rgn had unexpected metadata.
+
+        Expected: $expected
+
+        Found: $found"""
+  )
+
+  case object Unreachable extends RuntimeException(
+    "This point in the program should've been unreachable."
+  )
 }
