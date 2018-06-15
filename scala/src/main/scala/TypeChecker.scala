@@ -103,8 +103,29 @@ case class TypeChecker(
         )
         case None => ???
       }
-      // T-FreeImmediate, T-Free
-      case Some(_) => ???
+
+      // T-FreeImmediate
+      case Some((typ, FNum(1), MNone)) => (
+        TBase(TUnit), rho - rgn,
+        gamma.filter {
+          case (_, vRgn) => vRgn != rgn
+        }
+      )
+
+      // T-Free
+      case Some((typ, FNum(1), MAggregate(paths))) => paths.find {
+        case (_, vRgn) => rho.contains(vRgn)
+      } match {
+        case Some((path, unfreedRgn)) => throw Errors.BadAggregateFree(rgn, path, unfreedRgn)
+        case None => (
+          TBase(TUnit), rho - rgn,
+          gamma.filter {
+            case (_, vRgn) => vRgn != rgn
+          }
+        )
+      }
+
+      case Some((typ, frac, _)) => throw Errors.IllegalBorrow(F1, frac, rgn)
 
       case None => ???
     }

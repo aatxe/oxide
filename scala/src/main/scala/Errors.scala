@@ -35,6 +35,12 @@ object Errors {
     s"Attempted to use unbound identifier: $id"
   )
 
+  case class BadAggregateFree(
+    aggregate: Region, path: ImmediatePath, unfreedRegion: Region
+  ) extends RuntimeException(
+    s"Cannot free aggregate region $aggregate, region $unfreedRegion was left unfreed at $path."
+  )
+
   case object Unreachable extends RuntimeException(
     "This point in the program should've been unreachable."
   )
