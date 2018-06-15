@@ -139,4 +139,18 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       )
     }
   }
+
+  it should "type check a an assignment within an aggregate region" in {
+    TypeChecker((), Map(), Map(), Map()).check(
+      let (mut) ("x" be alloc (tick(0)) (tup(alloc (tick(1)) (5)))) {
+        ("x" dot proj(0)) := (alloc (tick(2)) (4))
+      }
+    ) should be (
+      unitT,
+      Map(tick(0) -> (tup(u32), whole, MAggregate(Map(proj(0) -> tick(2)))),
+          tick(1) -> (u32, whole, MNone),
+          tick(2) -> (u32, whole, MNone)),
+      Map("x" -> tick(0))
+    )
+  }
 }

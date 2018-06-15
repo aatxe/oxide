@@ -31,6 +31,10 @@ object Errors {
         Found: $found"""
   )
 
+  case class UnboundIdentifier(id: Identifier) extends RuntimeException(
+    s"Attempted to use unbound identifier: $id"
+  )
+
   case object Unreachable extends RuntimeException(
     "This point in the program should've been unreachable."
   )

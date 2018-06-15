@@ -145,6 +145,39 @@ case class TypeChecker(
       )
     }
 
+    case EAssign(id, path :+ lastPath, expr) => gamma.get(id) match {
+      case Some(rgn) => AdditionalJudgments.RegionValidAlongPath(rho)(QMut, path, rgn) match {
+        case (typPi, rgnPi, rhoPi) => {
+          /// TODO: check valid region
+          TypeChecker(sigma, delta, rhoPi, gamma).check(expr) match {
+            case (TRef(rgn, QMut, typ), rhoPrime, gammaPrime) => {
+              val (typPi, FNum(1), MAggregate(map)) = rhoPrime(rgnPi)
+              (TBase(TUnit),
+               rhoPrime + (rgnPi -> (typPi, FNum(1), MAggregate(map + (lastPath -> rgn)))),
+               gammaPrime)
+            }
+            case (typ, _, _) => throw Errors.TypeError(
+              expected = TRef(AbsRegion, QMut, AbsType),
+              found = typ
+            )
+          }
+        }
+      }
+      case None => throw Errors.UnboundIdentifier(id)
+    }
+
+    // T-AssignEpsilon
+    case EAssign(id, Seq(), expr) => this.check(expr) match {
+      case (TRef(rgn, QMut, typ), rhoPrime, gammaPrime) => {
+        // TODO: check valid region
+        (TBase(TUnit), rhoPrime, gammaPrime + (id -> rgn))
+      }
+      case (typ, _, _) => throw Errors.TypeError(
+        expected = TRef(AbsRegion, QMut, AbsType),
+        found = typ
+      )
+    }
+
     // T-Seq
     case ESeq(e1, e2) => this.check(e1) match {
       case (TBase(TUnit), rho1, gamma1) => TypeChecker(sigma, delta, rho1, gamma1).check(e2)
@@ -182,15 +215,13 @@ object AdditionalJudgments {
       mu: MutabilityQuantifier, pi: Path, rgn: Region
     ): (Type, Region, RegionContext) = (rho.get(rgn), pi) match {
       // P-EpsilonPath
-      case (Some((typ, frac, MNone)), Seq()) => (mu, frac) match { // FIXME: normalize fractions?
+      case (Some((typ, frac, meta)), Seq()) => (mu, frac) match { // FIXME: normalize fractions?
         case (QMut, FNum(1)) => (typ, rgn, rho)
         case (QMut, frac) => throw Errors.IllegalBorrow(F1, frac, rgn)
         case (QImm, FNum(0)) => throw Errors.IllegalBorrow(FZeta, F0, rgn)
         case (QImm, _) => (typ, rgn, rho)
         case (AbsMuta, _) => throw Errors.Unreachable
       }
-      // P-EpsilonPath: implied error condition
-      case (Some((_, _, meta)), Seq()) => throw Errors.UnexpectedMetadata(meta, MNone, rgn)
 
       // implied error condition
       case (Some((_, _, MNone)), immPath :: _) =>
