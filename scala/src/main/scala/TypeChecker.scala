@@ -154,6 +154,24 @@ case class TypeChecker(
       )
     }
 
+    // T-If
+    case EIf(pred, cons, alt) => this.check(pred) match {
+      case (TRef(_, _, TBase(TBool)), rho1, gamma1) =>
+        TypeChecker(sigma, delta, rho1, gamma1).check(cons) match {
+          case (typ2, rho2, gamma2) => TypeChecker(sigma, delta, rho1, gamma1).check(alt) match {
+            case (typ3, rho3, gamma3) => {
+              assert(typ2 == typ3)
+              // FIXME: join the two environments somehow? or maybe that's not necessary anymore?
+              (typ3, rho3, gamma3)
+            }
+          }
+        }
+      case (typ, _, _) => throw Errors.TypeError(
+        expected = TBase(TBool),
+        found = typ
+      )
+    }
+
     case _ => ???
   }
 }

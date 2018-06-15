@@ -96,4 +96,47 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       Map("x" -> tick(0), "y" -> tick(1), "z" -> tick(2))
     )
   }
+
+  it should "type check simple if expressions" in {
+    TypeChecker((), Map(), Map(), Map()).check(
+      let (imm) ("pred" be alloc (tick(0)) (tru)) {
+        let (imm) (
+          "x" be (
+            ite (borrow (tick(1)) (imm) ("pred")) {
+              alloc (tick(2)) (5)
+            } {
+              alloc (tick(2)) (8)
+            }
+          )
+        ) {
+          drop (tick(1))
+        }
+      }
+    ) should be (
+      unitT,
+      Map(tick(0) -> (bool, (whole / 2) + (whole / 2), MNone),
+          tick(2) -> (u32, whole, MNone)),
+      Map("pred" -> tick(0), "x" -> tick(2))
+    )
+  }
+
+  it should "not type check allocating a region at different types with branching" in {
+    a [AssertionError] should be thrownBy {
+      TypeChecker((), Map(), Map(), Map()).check(
+        let (imm) ("pred" be alloc (tick(0)) (tru)) {
+          let (imm) (
+            "x" be (
+              ite (borrow (tick(1)) (imm) ("pred")) {
+                alloc (tick(2)) (5)
+              } {
+                alloc (tick(2)) (fls)
+              }
+            )
+          ) {
+            drop (tick(1))
+          }
+        }
+      )
+    }
+  }
 }
