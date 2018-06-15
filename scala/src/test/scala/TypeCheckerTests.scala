@@ -17,16 +17,16 @@ class TypeCheckerTests extends FlatSpec with Matchers {
   }
 
   it should "type check copying a primitive" in {
-    // NOTE(awe 2018-06-14): this fails because the borrow doesn't get dropped.
     TypeChecker((), Map(), Map(), Map()).check(
       let (mut) ("x" be alloc (tick(0)) (5)) {
         let (mut) ("y" be copy (tick(1)) (borrow (tick(2)) (imm) ("x"))) {
+          drop (tick(2)) |>
           unit
         }
       }
     ) should be (
       unitT,
-      Map(tick(0) -> (u32, whole, MNone),
+      Map(tick(0) -> (u32, (whole / 2) + (whole / 2), MNone),
           tick(1) -> (u32, whole, MNone)),
       Map("x" -> tick(0), "y" -> tick(1))
     )

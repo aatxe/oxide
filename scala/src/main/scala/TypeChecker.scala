@@ -90,6 +90,25 @@ case class TypeChecker(
       case None => ???
     }
 
+    // T-Drop, T-FreeImmediate, T-Free
+    case EDrop(rgn) => rho.get(rgn) match {
+      // T-Drop
+      case Some((typ, frac, MAlias(src))) => rho.get(src) match {
+        case Some((srcTyp, srcFrac, srcMeta)) => (
+          TBase(TUnit),
+          rho - rgn + (src -> (srcTyp, FAdd(frac, srcFrac), srcMeta)),
+          gamma.filter {
+            case (_, vRgn) => vRgn != rgn
+          }
+        )
+        case None => ???
+      }
+      // T-FreeImmediate, T-Free
+      case Some(_) => ???
+
+      case None => ???
+    }
+
     // T-True, T-False, T-u32, T-Unit
     case EPrim(ETrue)
        | EPrim(EFalse) => (TBase(TBool), rho, gamma)
@@ -122,6 +141,15 @@ case class TypeChecker(
       }
       case (typ, _, _) => throw Errors.TypeError(
         expected = TRef(AbsRegion, AbsMuta, AbsType),
+        found = typ
+      )
+    }
+
+    // T-Seq
+    case ESeq(e1, e2) => this.check(e1) match {
+      case (TBase(TUnit), rho1, gamma1) => TypeChecker(sigma, delta, rho1, gamma1).check(e2)
+      case (typ, _, _) => throw Errors.TypeError(
+        expected = TBase(TUnit),
         found = typ
       )
     }
