@@ -15,10 +15,10 @@ object Errors {
         Found: $found"""
   )
 
-  case class IllegalBorrow(
+  case class InsufficientCapability(
     needed: Fraction, had: Fraction, rgn: Region
   ) extends RuntimeException(
-    s"Region $rgn could not be borrowed. A $needed capability was needed, but we only had $had."
+    s"Using $rgn: needed $needed capability, but only had $had."
   )
 
   case class UnexpectedMetadata(
@@ -33,6 +33,10 @@ object Errors {
 
   case class UnboundIdentifier(id: Identifier) extends RuntimeException(
     s"Attempted to use unbound identifier: $id"
+  )
+
+  case class UnboundRegion(rgn: Region) extends RuntimeException(
+    s"Attempted to use unbound region: $rgn"
   )
 
   case class BadAggregateFree(

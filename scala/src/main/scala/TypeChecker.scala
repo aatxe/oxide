@@ -64,9 +64,9 @@ case class TypeChecker(
       val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(QImm, pi, rgnId)
       rhoPrime.get(rgnPi).map(prod => (rgnPi, prod, rhoPrime))
     }) match { // FIXME: normalize fractions?
-      case Some((rgnPi, (_, FNum(0), _), _)) => throw Errors.IllegalBorrow(F1, FNum(0), rgnPi)
+      case Some((rgnPi, (_, FNum(0), _), _)) => throw Errors.InsufficientCapability(F1, FNum(0), rgnPi)
       case Some((rgnPi, (typ, frac, meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
-        // TODO: check valid borrow
+        AdditionalJudgments.RegionWellFormed(rhoPrime)(QImm, rgnPi)
         (TRef(rgn, QMut, typ),
          rhoPrime ++ Seq(rgnPi -> (typ, FDiv(frac, FNum(2)), MNone),
                          rgn -> ((typ, FDiv(frac, FNum(2)), MAlias(rgnPi)))),
@@ -81,12 +81,12 @@ case class TypeChecker(
       rhoPrime.get(rgnPi).map(prod => (rgnPi, prod, rhoPrime))
     }) match {
       case Some((rgnPi, (typ, FNum(1), meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
-        // TODO: check valid borrow
+        AdditionalJudgments.RegionWellFormed(rhoPrime)(QMut, rgnPi)
         (TRef(rgn, QMut, typ),
          rhoPrime ++ Seq(rgnPi -> (typ, F0, MNone), rgn -> ((typ, F1, MAlias(rgnPi)))),
          gamma)
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
-      case Some((rgnPi, (_, frac, _), _)) => throw Errors.IllegalBorrow(F1, frac, rgnPi)
+      case Some((rgnPi, (_, frac, _), _)) => throw Errors.InsufficientCapability(F1, frac, rgnPi)
       case None => ???
     }
 
@@ -125,7 +125,7 @@ case class TypeChecker(
         )
       }
 
-      case Some((typ, frac, _)) => throw Errors.IllegalBorrow(F1, frac, rgn)
+      case Some((typ, frac, _)) => throw Errors.InsufficientCapability(F1, frac, rgn)
 
       case None => ???
     }
@@ -169,7 +169,7 @@ case class TypeChecker(
     case EAssign(id, path :+ lastPath, expr) => gamma.get(id) match {
       case Some(rgn) => AdditionalJudgments.RegionValidAlongPath(rho)(QMut, path, rgn) match {
         case (typPi, rgnPi, rhoPi) => {
-          /// TODO: check valid region
+          AdditionalJudgments.RegionWellFormed(rhoPi)(QMut, rgnPi)
           TypeChecker(sigma, delta, rhoPi, gamma).check(expr) match {
             case (TRef(rgn, QMut, typ), rhoPrime, gammaPrime) => {
               val (typPi, FNum(1), MAggregate(map)) = rhoPrime(rgnPi)
@@ -190,7 +190,10 @@ case class TypeChecker(
     // T-AssignEpsilon
     case EAssign(id, Seq(), expr) => this.check(expr) match {
       case (TRef(rgn, QMut, typ), rhoPrime, gammaPrime) => {
-        // TODO: check valid region
+        gamma.get(id) match {
+          case Some(idRgn) => AdditionalJudgments.RegionWellFormed(rhoPrime)(QMut, idRgn)
+          case None => throw Errors.UnboundIdentifier(id)
+        }
         (TBase(TUnit), rhoPrime, gammaPrime + (id -> rgn))
       }
       case (typ, _, _) => throw Errors.TypeError(
@@ -238,8 +241,8 @@ object AdditionalJudgments {
       // P-EpsilonPath
       case (Some((typ, frac, meta)), Seq()) => (mu, frac) match { // FIXME: normalize fractions?
         case (QMut, FNum(1)) => (typ, rgn, rho)
-        case (QMut, frac) => throw Errors.IllegalBorrow(F1, frac, rgn)
-        case (QImm, FNum(0)) => throw Errors.IllegalBorrow(FZeta, F0, rgn)
+        case (QMut, frac) => throw Errors.InsufficientCapability(F1, frac, rgn)
+        case (QImm, FNum(0)) => throw Errors.InsufficientCapability(FZeta, F0, rgn)
         case (QImm, _) => (typ, rgn, rho)
         case (AbsMuta, _) => throw Errors.Unreachable
       }
@@ -252,8 +255,8 @@ object AdditionalJudgments {
       case (Some((_, frac, MAlias(src))), immPath :: _) => (mu, frac) match {
         // FIXME: the alias rule is problematic because we know the recursive call will always fail
         case (QMut, FNum(1)) => this(mu, pi, src)
-        case (QMut, frac) => throw Errors.IllegalBorrow(F1, frac, rgn)
-        case (QImm, FNum(0)) => throw Errors.IllegalBorrow(FZeta, F0, rgn)
+        case (QMut, frac) => throw Errors.InsufficientCapability(F1, frac, rgn)
+        case (QImm, FNum(0)) => throw Errors.InsufficientCapability(FZeta, F0, rgn)
         case (QImm, _) => this(mu, pi, src)
         case (AbsMuta, _) => throw Errors.Unreachable
       }
@@ -267,8 +270,8 @@ object AdditionalJudgments {
           // P-FieldPath
           case _ => this(mu, path, piMap(immPath))
         }
-        case (QMut, frac) => throw Errors.IllegalBorrow(F1, frac, rgn)
-        case (QImm, FNum(0)) => throw Errors.IllegalBorrow(FZeta, F0, rgn)
+        case (QMut, frac) => throw Errors.InsufficientCapability(F1, frac, rgn)
+        case (QImm, FNum(0)) => throw Errors.InsufficientCapability(FZeta, F0, rgn)
         case (QImm, _) => rgn match {
           // P-FieldPathAbs
           case RAbstract => ???
@@ -278,6 +281,45 @@ object AdditionalJudgments {
         }
         case (AbsMuta, _) => throw Errors.Unreachable
       }
+    }
+  }
+
+  case class RegionWellFormed(rho: RegionContext) {
+    def apply(mu: MutabilityQuantifier, rgn: Region): Unit = (mu, rho.get(rgn)) match {
+      // WF-ImmEpsilonRegion
+      case (QImm, Some((typ, frac, MNone))) =>
+        if (frac == F0) throw Errors.InsufficientCapability(FZeta, frac, rgn)
+
+      // WF-MutEpsilonRegion
+      case (QMut, Some((typ, frac, MNone))) =>
+        if (frac != F1) throw Errors.InsufficientCapability(F1, frac, rgn)
+
+      // WF-ImmAliasRegion
+      case (QImm, Some((typ, frac, MAlias(_)))) =>
+        if (frac == F0) throw Errors.InsufficientCapability(FZeta, frac, rgn)
+
+      // WF-MutAliasRegion
+      case (QMut, Some((typ, frac, MAlias(_)))) =>
+        if (frac != F1) throw Errors.InsufficientCapability(F1, frac, rgn)
+
+      // WF-ImmAggregateRegion
+      case (QImm, Some((typ, frac, MAggregate(paths)))) => {
+        if (frac == F0) throw Errors.InsufficientCapability(FZeta, frac, rgn)
+        for ((_, innerRgn) <- paths) {
+          this(mu, innerRgn)
+        }
+      }
+
+      // WF-MutAggregateRegion
+      case (QMut, Some((typ, frac, MAggregate(paths)))) => {
+        if (frac != F1) throw Errors.InsufficientCapability(F1, frac, rgn)
+        for ((_, innerRgn) <- paths) {
+          this(mu, innerRgn)
+        }
+      }
+
+      case (AbsMuta, _) => throw Errors.Unreachable
+      case (_, None) => throw Errors.UnboundRegion(rgn)
     }
   }
 }
