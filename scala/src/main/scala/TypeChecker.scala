@@ -62,14 +62,15 @@ case class TypeChecker(
     // T-BorrowImm
     case EBorrow(rgn, QImm, id, pi) => gamma.get(id).flatMap(rgnId => {
       val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(QImm, pi, rgnId)
-      rhoPrime.get(rgnPi).map(prod => (rgnPi, prod, rhoPrime))
-    }) match { // FIXME: normalize fractions?
-      case Some((rgnPi, (_, FNum(0), _), _)) => throw Errors.InsufficientCapability(F1, FNum(0), rgnPi)
+      rhoPrime.get(rgnPi).map { case (typ, frac, mt) => (rgnPi, (typ, frac.norm, mt), rhoPrime) }
+    }) match {
+      case Some((rgnPi, (_, FNum(0), _), _)) =>
+        throw Errors.InsufficientCapability(F1, FNum(0), rgnPi)
       case Some((rgnPi, (typ, frac, meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
         AdditionalJudgments.RegionWellFormed(rhoPrime)(QImm, rgnPi)
         (TRef(rgn, QMut, typ),
-         rhoPrime ++ Seq(rgnPi -> (typ, FDiv(frac, FNum(2)), MNone),
-                         rgn -> ((typ, FDiv(frac, FNum(2)), MAlias(rgnPi)))),
+         rhoPrime ++ Seq(rgnPi -> (typ, FDiv(frac, FNum(2)).norm, MNone),
+                         rgn -> ((typ, FDiv(frac, FNum(2)).norm, MAlias(rgnPi)))),
          gamma)
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
       case None => ???
@@ -78,7 +79,7 @@ case class TypeChecker(
     // T-BorrowMut
     case EBorrow(rgn, QMut, id, pi) => gamma.get(id).flatMap(rgnId => {
       val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(QMut, pi, rgnId)
-      rhoPrime.get(rgnPi).map(prod => (rgnPi, prod, rhoPrime))
+      rhoPrime.get(rgnPi).map { case (typ, frac, mt) => (rgnPi, (typ, frac.norm, mt), rhoPrime) }
     }) match {
       case Some((rgnPi, (typ, FNum(1), meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
         AdditionalJudgments.RegionWellFormed(rhoPrime)(QMut, rgnPi)
@@ -96,7 +97,7 @@ case class TypeChecker(
       case Some((typ, frac, MAlias(src))) => rho.get(src) match {
         case Some((srcTyp, srcFrac, srcMeta)) => (
           TBase(TUnit),
-          rho - rgn + (src -> (srcTyp, FAdd(frac, srcFrac), srcMeta)),
+          rho - rgn + (src -> (srcTyp, FAdd(frac, srcFrac).norm, srcMeta)),
           gamma.filter {
             case (_, vRgn) => vRgn != rgn
           }
@@ -125,7 +126,7 @@ case class TypeChecker(
         )
       }
 
-      case Some((typ, frac, _)) => throw Errors.InsufficientCapability(F1, frac, rgn)
+      case Some((typ, frac, _)) => throw Errors.InsufficientCapability(F1, frac.norm, rgn)
 
       case None => ???
     }
@@ -174,7 +175,7 @@ case class TypeChecker(
             case (TRef(rgn, QMut, typ), rhoPrime, gammaPrime) => {
               val (typPi, FNum(1), MAggregate(map)) = rhoPrime(rgnPi)
               (TBase(TUnit),
-               rhoPrime + (rgnPi -> (typPi, FNum(1), MAggregate(map + (lastPath -> rgn)))),
+               rhoPrime + (rgnPi -> (typPi, F1, MAggregate(map + (lastPath -> rgn)))),
                gammaPrime)
             }
             case (typ, _, _) => throw Errors.TypeError(
@@ -239,7 +240,7 @@ object AdditionalJudgments {
       mu: MutabilityQuantifier, pi: Path, rgn: Region
     ): (Type, Region, RegionContext) = (rho.get(rgn), pi) match {
       // P-EpsilonPath
-      case (Some((typ, frac, meta)), Seq()) => (mu, frac) match { // FIXME: normalize fractions?
+      case (Some((typ, frac, meta)), Seq()) => (mu, frac.norm) match {
         case (QMut, FNum(1)) => (typ, rgn, rho)
         case (QMut, frac) => throw Errors.InsufficientCapability(F1, frac, rgn)
         case (QImm, FNum(0)) => throw Errors.InsufficientCapability(FZeta, F0, rgn)
@@ -252,7 +253,7 @@ object AdditionalJudgments {
         throw Errors.UnexpectedMetadata(MNone, MAggregate(Map(immPath -> AbsRegion)), rgn)
 
       // P-AliasPath
-      case (Some((_, frac, MAlias(src))), immPath :: _) => (mu, frac) match {
+      case (Some((_, frac, MAlias(src))), immPath :: _) => (mu, frac.norm) match {
         // FIXME: the alias rule is problematic because we know the recursive call will always fail
         case (QMut, FNum(1)) => this(mu, pi, src)
         case (QMut, frac) => throw Errors.InsufficientCapability(F1, frac, rgn)
@@ -262,7 +263,7 @@ object AdditionalJudgments {
       }
 
       // P-FieldPath and P-FieldPathAbs
-      case (Some((typ, frac, MAggregate(piMap))), immPath :: path) => (mu, frac) match {
+      case (Some((typ, frac, MAggregate(piMap))), immPath :: path) => (mu, frac.norm) match {
         case (QMut, FNum(1)) => rgn match {
           // P-FieldPathAbs
           case RAbstract => ???
@@ -288,23 +289,23 @@ object AdditionalJudgments {
     def apply(mu: MutabilityQuantifier, rgn: Region): Unit = (mu, rho.get(rgn)) match {
       // WF-ImmEpsilonRegion
       case (QImm, Some((typ, frac, MNone))) =>
-        if (frac == F0) throw Errors.InsufficientCapability(FZeta, frac, rgn)
+        if (frac.norm == F0) throw Errors.InsufficientCapability(FZeta, frac.norm, rgn)
 
       // WF-MutEpsilonRegion
       case (QMut, Some((typ, frac, MNone))) =>
-        if (frac != F1) throw Errors.InsufficientCapability(F1, frac, rgn)
+        if (frac.norm != F1) throw Errors.InsufficientCapability(F1, frac.norm, rgn)
 
       // WF-ImmAliasRegion
       case (QImm, Some((typ, frac, MAlias(_)))) =>
-        if (frac == F0) throw Errors.InsufficientCapability(FZeta, frac, rgn)
+        if (frac.norm == F0) throw Errors.InsufficientCapability(FZeta, frac.norm, rgn)
 
       // WF-MutAliasRegion
       case (QMut, Some((typ, frac, MAlias(_)))) =>
-        if (frac != F1) throw Errors.InsufficientCapability(F1, frac, rgn)
+        if (frac.norm != F1) throw Errors.InsufficientCapability(F1, frac.norm, rgn)
 
       // WF-ImmAggregateRegion
       case (QImm, Some((typ, frac, MAggregate(paths)))) => {
-        if (frac == F0) throw Errors.InsufficientCapability(FZeta, frac, rgn)
+        if (frac.norm == F0) throw Errors.InsufficientCapability(FZeta, frac.norm, rgn)
         for ((_, innerRgn) <- paths) {
           this(mu, innerRgn)
         }
@@ -312,7 +313,7 @@ object AdditionalJudgments {
 
       // WF-MutAggregateRegion
       case (QMut, Some((typ, frac, MAggregate(paths)))) => {
-        if (frac != F1) throw Errors.InsufficientCapability(F1, frac, rgn)
+        if (frac.norm != F1) throw Errors.InsufficientCapability(F1, frac.norm, rgn)
         for ((_, innerRgn) <- paths) {
           this(mu, innerRgn)
         }

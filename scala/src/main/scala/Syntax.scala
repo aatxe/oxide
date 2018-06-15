@@ -15,7 +15,9 @@ object Syntax {
 
   type Path = Seq[ImmediatePath]
 
-  sealed trait Fraction
+  sealed trait Fraction {
+    lazy val norm = FractionNormalizer.normalize(this)
+  }
   case object FZeta extends Fraction
   case class FNum(n: Int) extends Fraction
   case class FDiv(numerator: Fraction, denominator: Fraction) extends Fraction

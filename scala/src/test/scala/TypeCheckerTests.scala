@@ -26,7 +26,7 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       }
     ) should be (
       unitT,
-      Map(tick(0) -> (u32, (whole / 2) + (whole / 2), MNone),
+      Map(tick(0) -> (u32, whole, MNone),
           tick(1) -> (u32, whole, MNone)),
       Map("x" -> tick(0), "y" -> tick(1))
     )
@@ -90,9 +90,9 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       }
     ) should be (
       unitT,
-      Map(tick(0) -> ((u32, whole / 2 / 2, MNone)),
+      Map(tick(0) -> ((u32, whole / 4, MNone)),
           tick(1) -> ((u32, whole / 2, MAlias(tick(0)))),
-          tick(2) -> ((u32, whole / 2 / 2, MAlias(tick(0))))),
+          tick(2) -> ((u32, whole / 4, MAlias(tick(0))))),
       Map("x" -> tick(0), "y" -> tick(1), "z" -> tick(2))
     )
   }
@@ -114,7 +114,7 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       }
     ) should be (
       unitT,
-      Map(tick(0) -> (bool, (whole / 2) + (whole / 2), MNone),
+      Map(tick(0) -> (bool, whole, MNone),
           tick(2) -> (u32, whole, MNone)),
       Map("pred" -> tick(0), "x" -> tick(2))
     )
