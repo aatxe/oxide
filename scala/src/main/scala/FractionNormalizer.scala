@@ -17,7 +17,6 @@ object FractionNormalizer {
   private def normalizeImpl(fraction: Fraction): Fraction = fraction match {
     case FZeta | FNum(_) => fraction
     case FAdd(f1, f2) => (normalize(f1), normalize(f2)) match {
-      // FIXME: this match is non-exhaustive
       case (FNum(n1), FNum(n2)) => FNum(n1 + n2)
       case (FDiv(n1, FNum(d1)), FDiv(n2, FNum(d2))) if d1 == d2 =>
         normalize(FDiv(FAdd(n1, n2), FNum(d1)))
@@ -28,6 +27,7 @@ object FractionNormalizer {
         )
       case (FZeta, f2) => FAdd(FZeta, normalize(f2))
       case (f1, FZeta) => FAdd(FZeta, normalize(f1))
+      case _ => ??? // FIXME: this match is non-exhaustive
     }
     case FDiv(FNum(0), _) => FNum(0)
     case FDiv(FNum(n), FNum(1)) => FNum(n)
@@ -37,6 +37,8 @@ object FractionNormalizer {
       proc(FDiv(FNum(n / gcd), FNum(d / gcd)))
     }
     case FDiv(FDiv(num, FNum(d1)), FNum(d2)) => normalize(FDiv(num, FNum(d1 * d2)))
+    case FDiv(FDiv(FNum(n1), FNum(d1)), FDiv(FNum(n2), FNum(d2))) =>
+      normalize(FDiv(FNum(n1 * d2), FNum(n2 * d1)))
     case FDiv(num, denom) => normalize(FDiv(normalize(num), normalize(denom)))
   }
 }
