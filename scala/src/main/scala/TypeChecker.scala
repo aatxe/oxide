@@ -1,5 +1,6 @@
 package oxide
 
+import Substitution._
 import Syntax._
 
 case class TypeChecker(
@@ -73,8 +74,6 @@ case class TypeChecker(
 
       // seq[x -> r]
       val argumentBindings = params.map { case (id, TRef(rgn, _, _)) => id -> rgn }
-
-      println(s"$newlyQuantifiedRegions \r\n $quantifiedRegionBindings \r\n \r\n $argumentBindings")
 
       val (retTyp, rhoPrime, gammaPrime) = TypeChecker(
         sigma, delta ++ quantifiers, rho ++ quantifiedRegionBindings, gamma ++ argumentBindings
@@ -247,10 +246,13 @@ case class TypeChecker(
     // T-App
     case EApp(fun, tyargs, args) => this.check(fun) match {
       case (TRef(_, _, TFun(typarams, params, retTyp)), rhoF, gammaF) => {
-        val (typs, TypeChecker(_, _, rhoPrime, gammaPrime)) = this.checkThread(args)
-        // FIXME: substitution of tyargs for typarams
+        val (typs, TypeChecker(_, _, rhoPrime, gammaPrime)) =
+          TypeChecker(sigma, delta, rhoF, gammaF).checkThread(args)
+
+        val subst = TypeSubstitution(typarams.map(_._1).zip(tyargs).toMap)
+
         for (typ <- typs; param <- params)
-          if (typ != param) throw Errors.TypeError(expected = param, found = typ)
+          if (typ != subst(param)) throw Errors.TypeError(expected = subst(param), found = typ)
         (retTyp, rhoPrime, gammaPrime)
       }
       case (typ, _, _) => throw Errors.TypeError(

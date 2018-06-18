@@ -15,6 +15,14 @@ object Errors {
         Found: $found"""
   )
 
+  case class KindError(expected: Kind, found: Kind) extends RuntimeException(
+    s"""A kind error occurred.
+
+        Expected: $expected
+
+        Found: $found"""
+  )
+
   case class InsufficientCapability(
     needed: Fraction, had: Fraction, rgn: Region
   ) extends RuntimeException(

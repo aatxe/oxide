@@ -177,7 +177,11 @@ class TypeCheckerTests extends FlatSpec with Matchers {
   }
 
   it should "type check the identity function and its application" in {
-    // FIXME: fails because of substitution
+    val funTyp =
+      forall(vari(0) <| RGN) {
+        Fn(ref (vari(0)) (mut) (u32)) -> ref (tick(1)) (mut) (u32)
+      }
+
     TypeChecker((), Map(), Map(), Map()).check(
       let (imm) ("f" be alloc (tick(0)) {
         forall(vari(0) <| RGN) {
@@ -188,6 +192,14 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       }) {
         (borrow (tick(2)) (imm) ("f"))(tick(3))(alloc (tick(3)) (5))
       }
+    ) should be (
+      ref (tick(1)) (mut) (u32),
+      Map(tick(0) -> (funTyp, whole / 2, MNone),
+          tick(1) -> (u32, whole, MAlias(vari(0))),
+          tick(2) -> (funTyp, whole / 2, MAlias(tick(0))),
+          tick(3) -> (u32, none, MNone), // FIXME: tick(3) has whole permissions currently
+          vari(0) -> (u32, none, MNone)),
+      Map("f" -> tick(0), "x" -> vari(0))
     )
   }
 }
