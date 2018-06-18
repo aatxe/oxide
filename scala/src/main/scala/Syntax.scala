@@ -27,7 +27,7 @@ object Syntax {
   val F1 = FNum(1)
 
   sealed trait Region
-  case class RVar(n: Int) extends Region
+  case class RVar(n: Int) extends Region with Var
   case class RConcrete(n: Int) extends Region
   case object RAbstract extends Region
 
@@ -40,7 +40,8 @@ object Syntax {
   case object KType extends Kind
   case object KRegion extends Kind
 
-  type Quantifier = (TVar, Kind)
+  sealed trait Var
+  type Quantifier = (Var, Kind)
   type Quantifiers = Seq[Quantifier]
 
   /*=========*\
@@ -48,7 +49,7 @@ object Syntax {
   \*=========*/
 
   sealed trait Type
-  case class TVar(id: Identifier) extends Type
+  case class TVar(id: Identifier) extends Type with Var
   case class TBase(bt: BaseType) extends Type
   case class TRef(rgn: Region, mu: MutabilityQuantifier, typ: Type) extends Type
   case class TFun(quantifiers: Quantifiers, typparams: Seq[TRef], ret: Type) extends Type
@@ -134,7 +135,7 @@ object Syntax {
   \*============*/
 
   type VarContext = Map[Identifier, Region]
-  type TyVarContext = Map[TVar, Kind]
+  type TyVarContext = Map[Var, Kind]
   type RegionContext = Map[Region, (Type, Fraction, Metadata)]
   type GlobalContext = Unit // FIXME(awe)
 

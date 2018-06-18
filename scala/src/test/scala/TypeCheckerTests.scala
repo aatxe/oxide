@@ -175,4 +175,19 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       )
     }
   }
+
+  it should "type check the identity function and its application" in {
+    // FIXME: fails because of substitution
+    TypeChecker((), Map(), Map(), Map()).check(
+      let (imm) ("f" be alloc (tick(0)) {
+        forall(vari(0) <| RGN) {
+          fn("x" <| ref (vari(0)) (mut) (u32)) {
+            borrow (tick(1)) (mut) ("x")
+          }
+        }
+      }) {
+        (borrow (tick(2)) (imm) ("f"))(tick(3))(alloc (tick(3)) (5))
+      }
+    )
+  }
 }

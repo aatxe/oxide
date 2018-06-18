@@ -33,20 +33,28 @@ object DSL {
   def star = KType
   def RGN = KRegion
 
-  implicit class RichTVar(tvar: TVar) {
-    def ::(kind: Kind): Quantifier = (tvar, kind)
+  implicit class RichVar(vari: Var) {
+    def <|(kind: Kind): Quantifier = (vari, kind)
   }
   def forall(quantifiers: Quantifier*): Quantifiers = quantifiers.toSeq
 
   implicit class RichQuantifiers(quantifiers: Quantifiers) {
     def apply(arrow: (Seq[TRef], Type)) = TFun(quantifiers, arrow._1, arrow._2)
+
+    // EClosure
+    def apply(arrow: (Seq[(Identifier, TRef)], Expression)) =
+      EClosure(quantifiers, arrow._1, arrow._2)
+
+    // EMoveClosure
+    def move(arrow: (Seq[(Identifier, TRef)], Expression)) =
+      EMoveClosure(quantifiers, arrow._1, arrow._2)
   }
 
   def vari(id: Identifier) = TVar(id)
   implicit def baseTypeToType(bt: BaseType): Type = TBase(bt)
   def ref(rgn: Region)(mu: MutabilityQuantifier)(typ: Type) = TRef(rgn, mu, typ)
 
-  def fn(tys: TRef*): Seq[TRef] = tys.toSeq
+  def Fn(tys: TRef*): Seq[TRef] = tys.toSeq
   implicit class RichTRefs(trefs: Seq[TRef]) {
     def ->(ret: Type): (Seq[TRef], Type) = (trefs, ret)
   }
@@ -68,6 +76,8 @@ object DSL {
     def dot(path: Path): (Identifier, Path) = (id, path)
 
     def be(expr: Expression): (Identifier, Expression) = (id, expr)
+
+    def <|(typ: TRef): (Identifier, TRef) = (id, typ)
   }
 
   implicit def typeToGenType(typ: Type): GenType = TTyp(typ)
@@ -89,6 +99,10 @@ object DSL {
   implicit class RichExpression(expr: Expression) {
     def apply(exprs: (Expression, Expression)) = (expr, exprs._1, exprs._2)
 
+    // EApp
+    def apply(tyargs: GenType*)(args: Expression*) = EApp(expr, tyargs, args)
+    def apply(args: Expression*) = EApp(expr, Seq(), args)
+
     def to(other: Expression) = (expr, other)
 
     // sequence
@@ -107,7 +121,13 @@ object DSL {
     def dot(path: Path): (Identifier, Path) = (idPath._1, idPath._2 ++ path)
   }
 
-  // TODO: EClosure, EMoveClosure, EApp
+  def fn(pairs: (Identifier, TRef)*): Seq[(Identifier, TRef)] = pairs.toSeq
+  implicit class RichIdRefSeq(seq: Seq[(Identifier, TRef)]) {
+    def apply(body: Expression) = (seq, body)
+  }
+  implicit def quantifierlessClosure(p: (Seq[(Identifier, TRef)], Expression)): Expression =
+    EClosure(Seq(), p._1, p._2)
+  def move(arrow: (Seq[(Identifier, TRef)], Expression)) = EMoveClosure(Seq(), arrow._1, arrow._2)
 
   def ite(pred: Expression)(cons: Expression)(alt: Expression) = EIf(pred, cons, alt)
 

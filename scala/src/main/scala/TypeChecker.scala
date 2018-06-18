@@ -17,6 +17,18 @@ case class TypeChecker(
       }
     }
 
+  private def mutaToFrac(mu: MutabilityQuantifier): Fraction = mu match {
+    case QImm => FZeta
+    case QMut => F1
+    case AbsMuta => throw Errors.Unreachable
+  }
+
+  // TODO: implement more metadata computations
+  private def makeMeta(typ: Type): Metadata = typ match {
+    case TBase(_) => MNone
+    case _ => ???
+  }
+
   def check(expr: Expression): (Type, RegionContext, VarContext) = expr match {
     // T-AllocPrim
     case EAlloc(rgn, inner@EPrim(_)) => if (rho.contains(rgn) == false) {
@@ -41,6 +53,35 @@ case class TypeChecker(
         case _ => throw Errors.Unreachable
       }
       (TRef(rgn, QMut, TProd(typs)), rhoPrime + (rgn -> (TProd(innerTyps), F1, meta)), gammaPrime)
+    } else throw Errors.RegionAlreadyInUse(rgn, rho)
+
+    // T-AllocClosure
+    case EAlloc(rgn, EClosure(quantifiers, params, body)) => if (rho.contains(rgn) == false) {
+      // seq[r] ∩ seq[ς]
+      val newlyQuantifiedRegions = params.map {
+        case (_, TRef(rgn, _, _)) => rgn
+      } intersect {
+        quantifiers.filter(q => q._2 == KRegion).map(_._1)
+      }
+
+      // seq[r -> (t, muta-to-frac(mu), mk-meta(t))]
+      val quantifiedRegionBindings = params.filter {
+        case (_, TRef(rgn, _, _)) => newlyQuantifiedRegions.contains(rgn)
+      } map {
+        case (_, TRef(rgn, muta, typ)) => rgn -> (typ, mutaToFrac(muta), makeMeta(typ))
+      }
+
+      // seq[x -> r]
+      val argumentBindings = params.map { case (id, TRef(rgn, _, _)) => id -> rgn }
+
+      println(s"$newlyQuantifiedRegions \r\n $quantifiedRegionBindings \r\n \r\n $argumentBindings")
+
+      val (retTyp, rhoPrime, gammaPrime) = TypeChecker(
+        sigma, delta ++ quantifiers, rho ++ quantifiedRegionBindings, gamma ++ argumentBindings
+      ).check(body)
+
+      val funTyp = TFun(quantifiers, params.map(_._2), retTyp)
+      (TRef(rgn, QMut, funTyp), rhoPrime + (rgn -> (funTyp, F1, MNone)), gammaPrime)
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
     // T-Copy
@@ -203,6 +244,21 @@ case class TypeChecker(
       )
     }
 
+    // T-App
+    case EApp(fun, tyargs, args) => this.check(fun) match {
+      case (TRef(_, _, TFun(typarams, params, retTyp)), rhoF, gammaF) => {
+        val (typs, TypeChecker(_, _, rhoPrime, gammaPrime)) = this.checkThread(args)
+        // FIXME: substitution of tyargs for typarams
+        for (typ <- typs; param <- params)
+          if (typ != param) throw Errors.TypeError(expected = param, found = typ)
+        (retTyp, rhoPrime, gammaPrime)
+      }
+      case (typ, _, _) => throw Errors.TypeError(
+        expected = TRef(AbsRegion, AbsMuta, TFun(Seq(), Seq(), AbsType)),
+        found = typ
+      )
+    }
+
     // T-Seq
     case ESeq(e1, e2) => this.check(e1) match {
       case (TBase(TUnit), rho1, gamma1) => TypeChecker(sigma, delta, rho1, gamma1).check(e2)
@@ -282,6 +338,8 @@ object AdditionalJudgments {
         }
         case (AbsMuta, _) => throw Errors.Unreachable
       }
+
+      case (None, _) => throw Errors.UnboundRegion(rgn)
     }
   }
 
