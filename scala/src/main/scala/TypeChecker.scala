@@ -109,7 +109,7 @@ case class TypeChecker(
       case Some((rgnPi, (typ, frac, meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
         AdditionalJudgments.RegionWellFormed(rhoPrime)(QImm, rgnPi)
         (TRef(rgn, QMut, typ),
-         rhoPrime ++ Seq(rgnPi -> (typ, FDiv(frac, FNum(2)).norm, MNone),
+         rhoPrime ++ Seq(rgnPi -> (typ, FDiv(frac, FNum(2)).norm, meta),
                          rgn -> ((typ, FDiv(frac, FNum(2)).norm, MAlias(rgnPi)))),
          gamma)
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
@@ -124,11 +124,19 @@ case class TypeChecker(
       case Some((rgnPi, (typ, FNum(1), meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
         AdditionalJudgments.RegionWellFormed(rhoPrime)(QMut, rgnPi)
         (TRef(rgn, QMut, typ),
-         rhoPrime ++ Seq(rgnPi -> (typ, F0, MNone), rgn -> ((typ, F1, MAlias(rgnPi)))),
+         rhoPrime ++ Seq(rgnPi -> (typ, F0, meta), rgn -> ((typ, F1, MAlias(rgnPi)))),
          gamma)
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
       case Some((rgnPi, (_, frac, _), _)) => throw Errors.InsufficientCapability(F1, frac, rgnPi)
       case None => ???
+    }
+
+    case EDeref(expr) => this.check(expr) match {
+      case (TRef(rgn, mu, typ), rhoPrime, gammaPrime) => (typ, rhoPrime, gammaPrime)
+      case (typ, _, _) => throw Errors.TypeError(
+        expected = TRef(AbsRegion, AbsMuta, AbsType),
+        found = typ
+      )
     }
 
     // T-Drop, T-FreeImmediate, T-Free

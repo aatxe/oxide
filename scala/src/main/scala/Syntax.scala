@@ -82,6 +82,7 @@ object Syntax {
   case class EBorrow(
     rgn: RConcrete, mu: MutabilityQuantifier, id: Identifier, pi: Path
   ) extends Expression
+  case class EDeref(expr: Expression) extends Expression
   case class ESlice(
     rgn: RConcrete, mu: MutabilityQuantifier, e1: Expression, e2: Expression, e3: Expression
   ) extends Expression

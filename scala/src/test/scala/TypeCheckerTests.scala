@@ -202,4 +202,20 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       Map("f" -> tick(0), "x" -> vari(0))
     )
   }
+
+  it should "type check a simple program using dereference" in {
+    TypeChecker((), Map(), Map(), Map()).check(
+      let (mut) ("x" be alloc (tick(0)) (5)) {
+        let (mut) ("y" be borrow (tick(1)) (mut) ("x")) {
+          deref (borrow (tick(2)) (imm) ("y"))
+        }
+      }
+    ) should be (
+      u32,
+      Map(tick(0) -> (u32, none, MNone),
+          tick(1) -> (u32, whole / 2, MAlias(tick(0))),
+          tick(2) -> (u32, whole / 2, MAlias(tick(1)))),
+      Map("x" -> tick(0), "y" -> tick(1))
+    )
+  }
 }

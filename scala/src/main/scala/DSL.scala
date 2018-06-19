@@ -95,6 +95,7 @@ object DSL {
   def drop(rgn: RConcrete) = EDrop(rgn)
   def borrow(rgn: RConcrete)(mu: MutabilityQuantifier)(idPath: (Identifier, Path)) =
     EBorrow(rgn, mu, idPath._1, idPath._2)
+  def deref(expr: Expression) = EDeref(expr)
 
   implicit class RichExpression(expr: Expression) {
     def apply(exprs: (Expression, Expression)) = (expr, exprs._1, exprs._2)
