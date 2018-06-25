@@ -281,7 +281,7 @@ case class TypeChecker(
 
         for (typ <- typs; param <- params)
           if (typ != subst(param)) throw Errors.TypeError(expected = subst(param), found = typ)
-        (retTyp, rhoPrime, gammaPrime)
+        (retTyp, subst inRegionContext rhoPrime, subst inVarContext gammaPrime)
       }
       case (typ, _, _) => throw Errors.TypeError(
         expected = TRef(AbsRegion, AbsMuta, TFun(Seq(), Seq(), AbsType)),
