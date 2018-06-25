@@ -195,11 +195,10 @@ class TypeCheckerTests extends FlatSpec with Matchers {
     ) should be (
       ref (tick(1)) (mut) (u32),
       Map(tick(0) -> (funTyp, whole / 2, MNone),
-          tick(1) -> (u32, whole, MAlias(vari(0))),
+          tick(1) -> (u32, whole, MAlias(tick(3))),
           tick(2) -> (funTyp, whole / 2, MAlias(tick(0))),
-          tick(3) -> (u32, none, MNone), // FIXME: tick(3) has whole permissions currently
-          vari(0) -> (u32, none, MNone)),
-      Map("f" -> tick(0), "x" -> vari(0))
+          tick(3) -> (u32, none, MNone)), // FIXME: tick(3) has whole permissions currently
+      Map("f" -> tick(0), "x" -> tick(3))
     )
   }
 
