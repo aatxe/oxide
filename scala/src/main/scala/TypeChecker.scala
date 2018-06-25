@@ -179,6 +179,20 @@ case class TypeChecker(
       case None => ???
     }
 
+      // T-VarImm, T-VarMut
+    case EVar(id) => gamma.get(id) match {
+      case Some(rgn) => rho.get(rgn) match {
+        // T-VarMut
+        case Some((typ, FNum(1), _)) => (TRef(rgn, QMut, typ), rho, gamma)
+        // T-VarImm
+        case Some((typ, frac, _)) => if (frac != F0)
+                                       (TRef(rgn, QImm, typ), rho, gamma)
+                                     else throw Errors.InsufficientCapability(FZeta, frac, rgn)
+        case None => throw Errors.UnboundRegion(rgn)
+      }
+      case None => throw Errors.UnboundIdentifier(id)
+    }
+
     // T-True, T-False, T-u32, T-Unit
     case EPrim(ETrue)
        | EPrim(EFalse) => (TBase(TBool), rho, gamma)
@@ -188,6 +202,9 @@ case class TypeChecker(
     // T-LetImm
     case ELet(QImm, id, e1, e2) => this.check(e1) match {
       case (TRef(r1, mu, ty1), rho1, gamma1) => {
+        if (gamma1.values.find(_ == r1).nonEmpty)
+          throw Errors.RegionAlreadyBound(r1, id, gamma1)
+
         val (ty2, rho2, gamma2) = TypeChecker(
           sigma, delta, rho1, gamma1 + (id -> r1)
         ).check(e2)
@@ -203,6 +220,9 @@ case class TypeChecker(
     // T-LetMut
     case ELet(QMut, id, e1, e2) => this.check(e1) match {
       case (TRef(r1, QMut, ty1), rho1, gamma1) => {
+        if (gamma1.values.find(_ == r1).nonEmpty)
+          throw Errors.RegionAlreadyBound(r1, id, gamma1)
+
         val (ty2, rho2, gamma2) = TypeChecker(
           sigma, delta, rho1, gamma1 + (id -> r1)
         ).check(e2)

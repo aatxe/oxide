@@ -75,6 +75,7 @@ object Syntax {
   case object EUnit extends Primitive
 
   sealed trait Expression
+  case class EVar(id: Identifier) extends Expression
   case class EPrim(prim: Primitive) extends Expression
   case class EAlloc(rgn: RConcrete, expr: Expression) extends Expression
   case class ECopy(rgn: RConcrete, expr: Expression) extends Expression
@@ -139,6 +140,10 @@ object Syntax {
   type TyVarContext = Map[Var, Kind]
   type RegionContext = Map[Region, (Type, Fraction, Metadata)]
   type GlobalContext = Unit // FIXME(awe)
+
+  implicit class RichVarContext(ctx: VarContext) {
+    def apply(rgn: Region) = ctx.find({ case (id, idRgn) => idRgn == rgn }).get
+  }
 
   sealed trait Metadata
   case object MNone extends Metadata

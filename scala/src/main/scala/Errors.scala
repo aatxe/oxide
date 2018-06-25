@@ -7,6 +7,12 @@ object Errors {
     s"Region $rgn was already in use in $ctx."
   )
 
+  case class RegionAlreadyBound(
+    rgn: Region, id: Identifier, ctx: VarContext
+  ) extends RuntimeException(
+    s"Region $rgn could not be bound to $id because it was already bound to ${ctx(rgn)} in $ctx."
+  )
+
   case class TypeError(expected: Type, found: Type) extends RuntimeException(
     s"""A type error occurred.
 

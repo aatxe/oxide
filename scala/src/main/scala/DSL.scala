@@ -89,6 +89,7 @@ object DSL {
   implicit def intToExpr(n: Int): Expression = EPrim(ENum(n))
   def unit = EUnit
 
+  implicit def identifierToExpr(id: Identifier): Expression = EVar(id)
   implicit def primToExpr(prim: Primitive): Expression = EPrim(prim)
   def alloc(rgn: RConcrete)(expr: Expression) = EAlloc(rgn, expr)
   def copy(rgn: RConcrete)(expr: Expression) = ECopy(rgn, expr)
