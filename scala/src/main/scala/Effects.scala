@@ -4,11 +4,16 @@ import Syntax._
 
 object Effects {
   def commutes(eff1: Effect, eff2: Effect): Boolean = (eff1, eff2) match {
-    case (EffNewRegion(r1, _, _, _), EffNewRegion(r2, _, _, _)) => r1 != r2
-    case (EffNewRegion(r1, _, _, _), EffDeleteRegion(r2)) => r1 != r2
-    case (EffNewRegion(r1, _, _, _), EffBorrow(_, r2, rPrime2)) => r1 != r2 && r1 != rPrime2
-    case (EffNewRegion(r1, _, _, _), EffSlice(_, _, rPrime2)) => r1 != rPrime2
-    case (EffNewRegion(r1, _, _, _), EffUpdate(r2, _, rPrime2)) => r1 != r2 && r1 != rPrime2
+    case (EffNewRegion(r1, _, _, sub1), EffNewRegion(r2, _, _, sub2)) =>
+      r1 != r2 && sub2.values.find(_ == r1).isEmpty && sub1.values.find(_ == r2).isEmpty
+    case (EffNewRegion(r1, _, _, sub1), EffDeleteRegion(r2)) =>
+      r1 != r2 && sub1.values.find(_ == r2).isEmpty
+    case (EffNewRegion(r1, _, _, sub1), EffBorrow(_, r2, rPrime2)) =>
+      r1 != r2 && r1 != rPrime2 && sub1.values.find(r => r == r2 || r == rPrime2).isEmpty
+    case (EffNewRegion(r1, _, _, sub1), EffSlice(_, r2, rPrime2)) =>
+      r1 != r2 && r1 != rPrime2 && sub1.values.find(r => r == r2 || r == rPrime2).isEmpty
+    case (EffNewRegion(r1, _, _, sub1), EffUpdate(r2, _, rPrime2)) =>
+      r1 != r2 && r1 != rPrime2 && sub1.values.find(r => r == r2 || r == rPrime2).isEmpty
     case (eff1, eff2@EffNewRegion(_, _, _, _)) => commutes(eff2, eff1)
 
     case (EffDeleteRegion(r1), EffDeleteRegion(r2)) => r1 != r2
