@@ -83,6 +83,29 @@ object DSL {
   implicit def typeToGenType(typ: Type): GenType = TTyp(typ)
   implicit def rgnToGenType(rgn: Region): GenType = TRgn(rgn)
 
+  def newrgn(typ: Type, frac: Fraction, subs: Map[ImmediatePath, Region]) =
+    PartialEffNewRegion(typ, frac, subs)
+  case class PartialEffNewRegion(typ: Type, frac: Fraction, subs: Map[ImmediatePath, Region]) {
+    def as(rgn: Region) = EffNewRegion(rgn, typ, frac, subs)
+  }
+
+  def delrgn(rgn: Region) = EffDeleteRegion(rgn)
+
+  def borrow(mu: MutabilityQuantifier, rgn: Region) = PartialEffBorrow(mu, rgn)
+  case class PartialEffBorrow(mu: MutabilityQuantifier, rgn1: Region) {
+    def as(rgn2: Region) = EffBorrow(mu, rgn1, rgn2)
+  }
+
+  def slice(mu: MutabilityQuantifier, rgn: Region) = PartialEffSlice(mu, rgn)
+  case class PartialEffSlice(mu: MutabilityQuantifier, rgn1: Region) {
+    def as(rgn2: Region) = EffSlice(mu, rgn1, rgn2)
+  }
+
+  def update(rgn1: Region, pi: Path) = PartialEffUpdate(rgn1, pi)
+  case class PartialEffUpdate(rgn1: Region, pi: Path) {
+    def to(rgn2: Region) = EffUpdate(rgn1, pi, rgn2)
+  }
+
   def tru = ETrue
   def fls = EFalse
   implicit def intToPrim(n: Int): Primitive = ENum(n)

@@ -68,7 +68,10 @@ object Syntax {
   || Effects ||
   \*=========*/
 
-  sealed trait Effect
+  sealed trait Effect {
+    def commutesWith(that: Effect): Boolean = Effects.commutes(this, that)
+  }
+
   case class EffNewRegion(
     rgn: Region, typ: Type, frac: Fraction, subs: Map[ImmediatePath, Region]
   ) extends Effect
