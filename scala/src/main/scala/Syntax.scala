@@ -64,6 +64,20 @@ object Syntax {
   case class TRgn(rgn: Region) extends GenType
   type GenTypes = Seq[GenType]
 
+  /*=========*\
+  || Effects ||
+  \*=========*/
+
+  sealed trait Effect
+  case class EffNewRegion(
+    rgn: Region, typ: Type, frac: Fraction, subs: Map[ImmediatePath, Region]
+  ) extends Effect
+  case class EffDeleteRegion(rgn: Region) extends Effect
+  case class EffBorrow(mu: MutabilityQuantifier, rgn1: Region, rgn2: Region) extends Effect
+  case class EffSlice(mu: MutabilityQuantifier, rgn1: Region, rgn2: Region) extends Effect
+  case class EffUpdate(rgn1: Region, pi: Path, rgn2: Region) extends Effect
+  type Effects = Seq[Effect]
+
   /*===============*\
   ||  Expressions  ||
   \*===============*/
