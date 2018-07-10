@@ -34,5 +34,12 @@ object Effects {
     case (EffUpdate(r1, pi1, _), EffUpdate(r2, pi2, _)) => r1 != r2 || pi1 != pi2
   }
 
+  def commutingGroups(eff: Effects): Seq[Set[Effect]] =
+    eff.foldLeft[Seq[Set[Effect]]](Seq(Set())) {
+      case (groups :+ latestGroup, eff) if latestGroup.forall(commutes(_, eff)) =>
+        groups :+ (latestGroup + eff)
+      case (groups, eff) => groups :+ Set(eff)
+    }
+
   def compose(eff1: Effects, eff2: Effects): Effects = ???
 }
