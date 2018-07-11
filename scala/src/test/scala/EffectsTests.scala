@@ -49,7 +49,7 @@ class EffectsTests extends FlatSpec with Matchers {
     }
   }
 
-  it should "not duplicate any effects" in {
+  it should "have the same total size as the original effect" in {
     val eff = Seq(
       newrgn (Tu32, whole, Map()) as tick(0),
       newrgn (Tu32, whole, Map()) as tick(1),
