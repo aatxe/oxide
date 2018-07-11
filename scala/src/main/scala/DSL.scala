@@ -106,6 +106,10 @@ object DSL {
     def to(rgn2: Region) = EffUpdate(rgn1, pi, rgn2)
   }
 
+  implicit class RichEffects(eff: Effects) {
+    lazy val commutingGroups = Effects.commutingGroups(eff)
+  }
+
   def tru = ETrue
   def fls = EFalse
   implicit def intToPrim(n: Int): Primitive = ENum(n)
