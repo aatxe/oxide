@@ -207,26 +207,31 @@ case class TypeChecker(
 
     // T-App
     case EApp(fun, tyargs, args) => this.check(fun) match {
-      case (TRef(_, _, TFun(typarams, params, retTyp)), rhoF, gammaF) => {
-        val (typs, TypeChecker(_, _, rhoPrime, gammaPrime)) =
-          TypeChecker(sigma, delta, rhoF, gammaF).checkThread(args)
+      case (TRef(_, _, TFun(typarams, params, funEff, retTyp)), effF) => {
+        // val (typs, TypeChecker(_, _, rhoPrime, gammaPrime)) =
+        //   TypeChecker(sigma, delta, rhoF, gammaF).checkThread(args)
 
-        val subst = TypeSubstitution(typarams.map(_._1).zip(tyargs).toMap)
+        // val subst = TypeSubstitution(typarams.map(_._1).zip(tyargs).toMap)
 
-        for (typ <- typs; param <- params)
-          if (typ != subst(param)) throw Errors.TypeError(expected = subst(param), found = typ)
-        (retTyp, subst inRegionContext rhoPrime, subst inVarContext gammaPrime)
+        // for (typ <- typs; param <- params)
+        //   if (typ != subst(param)) throw Errors.TypeError(expected = subst(param), found = typ)
+        // (retTyp, subst inRegionContext rhoPrime, subst inVarContext gammaPrime)
+        ???
       }
-      case (typ, _, _) => throw Errors.TypeError(
-        expected = TRef(AbsRegion, AbsMuta, TFun(Seq(), Seq(), AbsType)),
+      case (typ, _) => throw Errors.TypeError(
+        expected = TRef(AbsRegion, AbsMuta, TFun(Seq(), Seq(), Seq(), AbsType)),
         found = typ
       )
     }
 
     // T-Seq
     case ESeq(e1, e2) => this.check(e1) match {
-      case (TBase(TUnit), rho1, gamma1) => TypeChecker(sigma, delta, rho1, gamma1).check(e2)
-      case (typ, _, _) => throw Errors.TypeError(
+      case (TBase(TUnit), eff1) => {
+        val (ty2, eff2) =
+          TypeChecker(sigma, delta, Effects.apply(eff1, rho), Effects.apply(eff1, gamma)).check(e2)
+        (ty2, Effects.compose(eff1, eff2))
+      }
+      case (typ, _) => throw Errors.TypeError(
         expected = TBase(TUnit),
         found = typ
       )
@@ -234,17 +239,18 @@ case class TypeChecker(
 
     // T-If
     case EIf(pred, cons, alt) => this.check(pred) match {
-      case (TRef(_, _, TBase(TBool)), rho1, gamma1) =>
-        TypeChecker(sigma, delta, rho1, gamma1).check(cons) match {
-          case (typ2, rho2, gamma2) => TypeChecker(sigma, delta, rho1, gamma1).check(alt) match {
-            case (typ3, rho3, gamma3) => {
-              assert(typ2 == typ3)
-              // FIXME: join the two environments somehow? or maybe that's not necessary anymore?
-              (typ3, rho3, gamma3)
-            }
+      case (TRef(_, _, TBase(TBool)), eff1) => {
+        val (rho1, gamma1) = (Effects.apply(eff1, rho), Effects.apply(eff1, gamma))
+        (TypeChecker(sigma, delta, rho1, gamma1).check(cons),
+         TypeChecker(sigma, delta, rho1, gamma1).check(alt)) match {
+          case ((typ2, eff2), (typ3, eff3)) => {
+            assert(typ2 == typ3)
+            // FIXME: join the two environments somehow? or maybe that's not necessary anymore?
+            (typ2, Effects.compose(eff1, eff2))
           }
         }
-      case (typ, _, _) => throw Errors.TypeError(
+      }
+      case (typ, _) => throw Errors.TypeError(
         expected = TBase(TBool),
         found = typ
       )
