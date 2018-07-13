@@ -52,7 +52,9 @@ object Syntax {
   case class TVar(id: Identifier) extends Type with Var
   case class TBase(bt: BaseType) extends Type
   case class TRef(rgn: Region, mu: MutabilityQuantifier, typ: Type) extends Type
-  case class TFun(quantifiers: Quantifiers, typparams: Seq[TRef], ret: Type) extends Type
+  case class TFun(
+    quantifiers: Quantifiers, typparams: Seq[TRef], eff: Effects, ret: Type
+  ) extends Type
   case class TArray(typ: Type, len: Int) extends Type
   case class TSlice(typ: Type) extends Type
   case class TProd(typs: Seq[Type]) extends Type

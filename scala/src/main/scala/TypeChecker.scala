@@ -6,18 +6,6 @@ import Syntax._
 case class TypeChecker(
   sigma: GlobalContext, delta: TyVarContext, rho: RegionContext, gamma: VarContext
 ) {
-  def checkThread(expr: Expression): (Type, TypeChecker) = this.check(expr) match {
-    case (typ, rhoPrime, gammaPrime) => (typ, TypeChecker(sigma, delta, rhoPrime, gammaPrime))
-  }
-
-  def checkThread(exprs: Expressions): (Seq[Type], TypeChecker) =
-    exprs.foldLeft[(Seq[Type], TypeChecker)]((Seq(), this)) {
-      case ((acc, checker), expr) => {
-        val (typ, checkerPrime) = checker.checkThread(expr)
-        (acc :+ typ, checkerPrime)
-      }
-    }
-
   private def mutaToFrac(mu: MutabilityQuantifier): Fraction = mu match {
     case QImm => FZeta
     case QMut => F1
@@ -30,30 +18,17 @@ case class TypeChecker(
     case _ => ???
   }
 
-  def check(expr: Expression): (Type, RegionContext, VarContext) = expr match {
+  def check(expr: Expression): (Type, Effects) = expr match {
     // T-AllocPrim
     case EAlloc(rgn, inner@EPrim(_)) => if (rho.contains(rgn) == false) {
-      val (typ, rhoPrime, gammaPrime) = this.check(inner)
-      assert(rhoPrime == rho)
-      assert(gammaPrime == gamma)
-      (TRef(rgn, QMut, typ), rho + (rgn -> (typ, F1, MNone)), gamma)
+      val (typ, eff) = this.check(inner)
+      assert(eff.isEmpty)
+      (TRef(rgn, QMut, typ), Seq(EffNewRegion(rgn, typ, F1, Map())))
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
     // T-AllocTup
     case EAlloc(rgn, EProd(exprs)) => if (rho.contains(rgn) == false) {
-      val (typs, TypeChecker(_, _, rhoPrime, gammaPrime)) = this.checkThread(exprs)
-      val meta = MAggregate(typs.zipWithIndex.map {
-        case (TRef(rgn, _, _), idx) => PProj(idx) -> rgn
-        case (typ, _) => throw Errors.TypeError(
-          expected = TRef(AbsRegion, AbsMuta, AbsType),
-          found = typ
-        )
-      }.toMap)
-      val innerTyps = typs.map {
-        case TRef(_, _, typ) => typ
-        case _ => throw Errors.Unreachable
-      }
-      (TRef(rgn, QMut, TProd(typs)), rhoPrime + (rgn -> (TProd(innerTyps), F1, meta)), gammaPrime)
+      ???
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
     // T-AllocClosure
@@ -75,21 +50,22 @@ case class TypeChecker(
       // seq[x -> r]
       val argumentBindings = params.map { case (id, TRef(rgn, _, _)) => id -> rgn }
 
-      val (retTyp, rhoPrime, gammaPrime) = TypeChecker(
+      val (retTyp, funEff) = TypeChecker(
         sigma, delta ++ quantifiers, rho ++ quantifiedRegionBindings, gamma ++ argumentBindings
       ).check(body)
+      // FIXME: variable capture in closures
 
-      val funTyp = TFun(quantifiers, params.map(_._2), retTyp)
-      (TRef(rgn, QMut, funTyp), rhoPrime + (rgn -> (funTyp, F1, MNone)), gammaPrime)
+      val funTyp = TFun(quantifiers, params.map(_._2), funEff, retTyp)
+      (TRef(rgn, QMut, funTyp), Seq(EffNewRegion(rgn, funTyp, F1, Map())))
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
     // T-Copy
     case ECopy(rgn, expr) => this.check(expr) match {
-      case (TRef(src, mu, typ@TBase(_)), rhoPrime, gammaPrime) =>
-        if (rhoPrime.contains(rgn) == false) {
-          (TRef(rgn, QMut, typ), rhoPrime + (rgn -> (typ, F1, MNone)), gammaPrime)
-        } else throw Errors.RegionAlreadyInUse(rgn, rhoPrime)
-      case (TRef(_, _, typ), _, _) => throw Errors.TypeError(
+      case (TRef(src, mu, typ@TBase(_)), eff) =>
+        if (rho.contains(rgn) == false) {
+          (TRef(rgn, QMut, typ), Effects.compose(eff, Seq(EffNewRegion(rgn, typ, F1, Map()))))
+        } else throw Errors.RegionAlreadyInUse(rgn, rho)
+      case (TRef(_, _, typ), _) => throw Errors.TypeError(
         expected = TBase(AbsBaseType),
         found = typ
       )
@@ -108,10 +84,7 @@ case class TypeChecker(
         throw Errors.InsufficientCapability(F1, FNum(0), rgnPi)
       case Some((rgnPi, (typ, frac, meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
         AdditionalJudgments.RegionWellFormed(rhoPrime)(QImm, rgnPi)
-        (TRef(rgn, QMut, typ),
-         rhoPrime ++ Seq(rgnPi -> (typ, FDiv(frac, FNum(2)).norm, meta),
-                         rgn -> ((typ, FDiv(frac, FNum(2)).norm, MAlias(rgnPi)))),
-         gamma)
+        (TRef(rgn, QImm, typ), Seq(EffBorrow(QImm, rgnPi, rgn)))
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
       case None => ???
     }
@@ -123,17 +96,15 @@ case class TypeChecker(
     }) match {
       case Some((rgnPi, (typ, FNum(1), meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
         AdditionalJudgments.RegionWellFormed(rhoPrime)(QMut, rgnPi)
-        (TRef(rgn, QMut, typ),
-         rhoPrime ++ Seq(rgnPi -> (typ, F0, meta), rgn -> ((typ, F1, MAlias(rgnPi)))),
-         gamma)
+        (TRef(rgn, QMut, typ), Seq(EffBorrow(QImm, rgnPi, rgn)))
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
       case Some((rgnPi, (_, frac, _), _)) => throw Errors.InsufficientCapability(F1, frac, rgnPi)
       case None => ???
     }
 
     case EDeref(expr) => this.check(expr) match {
-      case (TRef(rgn, mu, typ), rhoPrime, gammaPrime) => (typ, rhoPrime, gammaPrime)
-      case (typ, _, _) => throw Errors.TypeError(
+      case (TRef(rgn, mu, typ), eff) => (typ, eff)
+      case (typ, _) => throw Errors.TypeError(
         expected = TRef(AbsRegion, AbsMuta, AbsType),
         found = typ
       )
@@ -143,35 +114,19 @@ case class TypeChecker(
     case EDrop(rgn) => rho.get(rgn) match {
       // T-Drop
       case Some((typ, frac, MAlias(src))) => rho.get(src) match {
-        case Some((srcTyp, srcFrac, srcMeta)) => (
-          TBase(TUnit),
-          rho - rgn + (src -> (srcTyp, FAdd(frac, srcFrac).norm, srcMeta)),
-          gamma.filter {
-            case (_, vRgn) => vRgn != rgn
-          }
-        )
+        case Some((srcTyp, srcFrac, srcMeta)) => (TBase(TUnit), Seq(EffDeleteRegion(rgn)))
         case None => ???
       }
 
       // T-FreeImmediate
-      case Some((typ, FNum(1), MNone)) => (
-        TBase(TUnit), rho - rgn,
-        gamma.filter {
-          case (_, vRgn) => vRgn != rgn
-        }
-      )
+      case Some((typ, FNum(1), MNone)) => (TBase(TUnit), Seq(EffDeleteRegion(rgn)))
 
       // T-Free
       case Some((typ, FNum(1), MAggregate(paths))) => paths.find {
         case (_, vRgn) => rho.contains(vRgn)
       } match {
         case Some((path, unfreedRgn)) => throw Errors.BadAggregateFree(rgn, path, unfreedRgn)
-        case None => (
-          TBase(TUnit), rho - rgn,
-          gamma.filter {
-            case (_, vRgn) => vRgn != rgn
-          }
-        )
+        case None => (TBase(TUnit), Seq(EffDeleteRegion(rgn)))
       }
 
       case Some((typ, frac, _)) => throw Errors.InsufficientCapability(F1, frac.norm, rgn)
@@ -183,10 +138,10 @@ case class TypeChecker(
     case EVar(id) => gamma.get(id) match {
       case Some(rgn) => rho.get(rgn) match {
         // T-VarMut
-        case Some((typ, FNum(1), _)) => (TRef(rgn, QMut, typ), rho, gamma)
+        case Some((typ, FNum(1), _)) => (TRef(rgn, QMut, typ), Seq())
         // T-VarImm
         case Some((typ, frac, _)) => if (frac != F0)
-                                       (TRef(rgn, QImm, typ), rho, gamma)
+                                       (TRef(rgn, QImm, typ), Seq())
                                      else throw Errors.InsufficientCapability(FZeta, frac, rgn)
         case None => throw Errors.UnboundRegion(rgn)
       }
@@ -195,23 +150,24 @@ case class TypeChecker(
 
     // T-True, T-False, T-u32, T-Unit
     case EPrim(ETrue)
-       | EPrim(EFalse) => (TBase(TBool), rho, gamma)
-    case EPrim(ENum(n)) => (TBase(Tu32), rho, gamma) // FIXME(awe): fix bounds on n
-    case EPrim(EUnit) => (TBase(TUnit), rho, gamma)
+       | EPrim(EFalse) => (TBase(TBool), Seq())
+    case EPrim(ENum(n)) => (TBase(Tu32), Seq()) // FIXME(awe): fix bounds on n
+    case EPrim(EUnit) => (TBase(TUnit), Seq())
 
     // T-LetImm
     case ELet(QImm, id, e1, e2) => this.check(e1) match {
-      case (TRef(r1, mu, ty1), rho1, gamma1) => {
+      case (TRef(r1, mu, ty1), eff1) => {
+        val gamma1 = Effects.apply(eff1, gamma)
         if (gamma1.values.find(_ == r1).nonEmpty)
           throw Errors.RegionAlreadyBound(r1, id, gamma1)
 
-        val (ty2, rho2, gamma2) = TypeChecker(
-          sigma, delta, rho1, gamma1 + (id -> r1)
+        val (ty2, eff2) = TypeChecker(
+          sigma, delta, Effects.apply(eff1, rho), gamma1 + (id -> r1)
         ).check(e2)
         // assert(rho2.contains(r1) == false)
-        (ty2, rho2, gamma2)
+        (ty2, Effects.compose(eff1, eff2))
       }
-      case (typ, _, _) => throw Errors.TypeError(
+      case (typ, _) => throw Errors.TypeError(
         expected = TRef(AbsRegion, AbsMuta, AbsType),
         found = typ
       )
@@ -219,53 +175,31 @@ case class TypeChecker(
 
     // T-LetMut
     case ELet(QMut, id, e1, e2) => this.check(e1) match {
-      case (TRef(r1, QMut, ty1), rho1, gamma1) => {
+      case (TRef(r1, QMut, ty1), eff1) => {
+        val gamma1 = Effects.apply(eff1, gamma)
         if (gamma1.values.find(_ == r1).nonEmpty)
           throw Errors.RegionAlreadyBound(r1, id, gamma1)
 
-        val (ty2, rho2, gamma2) = TypeChecker(
-          sigma, delta, rho1, gamma1 + (id -> r1)
+        val (ty2, eff2) = TypeChecker(
+          sigma, delta, Effects.apply(eff1, rho), gamma1 + (id -> r1)
         ).check(e2)
         // assert(rho2.contains(r1) == false)
-        (ty2, rho2, gamma2)
+        (ty2, Effects.compose(eff1, eff2))
       }
-      case (typ, _, _) => throw Errors.TypeError(
+      case (typ, _) => throw Errors.TypeError(
         expected = TRef(AbsRegion, AbsMuta, AbsType),
         found = typ
       )
     }
 
-    case EAssign(id, path :+ lastPath, expr) => gamma.get(id) match {
-      case Some(rgn) => AdditionalJudgments.RegionValidAlongPath(rho)(QMut, path, rgn) match {
-        case (typPi, rgnPi, rhoPi) => {
-          AdditionalJudgments.RegionWellFormed(rhoPi)(QMut, rgnPi)
-          TypeChecker(sigma, delta, rhoPi, gamma).check(expr) match {
-            case (TRef(rgn, QMut, typ), rhoPrime, gammaPrime) => {
-              val (typPi, FNum(1), MAggregate(map)) = rhoPrime(rgnPi)
-              (TBase(TUnit),
-               rhoPrime + (rgnPi -> (typPi, F1, MAggregate(map + (lastPath -> rgn)))),
-               gammaPrime)
-            }
-            case (typ, _, _) => throw Errors.TypeError(
-              expected = TRef(AbsRegion, QMut, AbsType),
-              found = typ
-            )
-          }
-        }
+    // T-Assign
+    case EAssign(id, path, expr) => this.check(expr) match {
+      case (TRef(rgn, QMut, typ), eff) => {
+        if (gamma.get(id).isEmpty)
+          throw Errors.UnboundIdentifier(id)
+        (TBase(TUnit), Effects.compose(eff, Seq(EffUpdate(gamma(id), path, rgn))))
       }
-      case None => throw Errors.UnboundIdentifier(id)
-    }
-
-    // T-AssignEpsilon
-    case EAssign(id, Seq(), expr) => this.check(expr) match {
-      case (TRef(rgn, QMut, typ), rhoPrime, gammaPrime) => {
-        gamma.get(id) match {
-          case Some(idRgn) => AdditionalJudgments.RegionWellFormed(rhoPrime)(QMut, idRgn)
-          case None => throw Errors.UnboundIdentifier(id)
-        }
-        (TBase(TUnit), rhoPrime, gammaPrime + (id -> rgn))
-      }
-      case (typ, _, _) => throw Errors.TypeError(
+      case (typ, _) => throw Errors.TypeError(
         expected = TRef(AbsRegion, QMut, AbsType),
         found = typ
       )

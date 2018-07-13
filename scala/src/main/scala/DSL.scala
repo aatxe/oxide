@@ -108,6 +108,9 @@ object DSL {
 
   implicit class RichEffects(eff: Effects) {
     lazy val commutingGroups = Effects.commutingGroups(eff)
+
+    def apply(rho: RegionContext): RegionContext = Effects.apply(eff, rho)
+    def apply(gamma: VarContext): VarContext = Effects.apply(eff, gamma)
   }
 
   def tru = ETrue

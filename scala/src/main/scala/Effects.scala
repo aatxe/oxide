@@ -50,9 +50,10 @@ object Effects {
     }
 
   def compose(eff1: Effects, eff2: Effects): Effects =
-    commutingGroups(eff1).zip(commutingGroups(eff2)).map {
-      case (group1, group2) => compose(group1, group2)
-    }.flatten
+    eff1 ++ eff2
+    // commutingGroups(eff1).zip(commutingGroups(eff2)).map {
+    //   case (group1, group2) => compose(group1, group2)
+    // }.flatten
 
   def compose(eff1: CommutingGroup, eff2: CommutingGroup): CommutingGroup = ???
     /**
@@ -90,4 +91,19 @@ object Effects {
          effects when we find a cancelling pair. I think this could make more things commute and so
          we might need to return to step 2 and continue iterating until we reach a fixed point.
       */
+
+
+  def apply(row: Effects, rho: RegionContext): RegionContext =
+    row.foldLeft(rho) {
+      case (currRho, eff) => apply(eff, currRho)
+    }
+
+  def apply(eff: Effect, rho: RegionContext): RegionContext = ???
+
+  def apply(row: Effects, gamma: VarContext): VarContext =
+    row.foldLeft(gamma) {
+      case (currGamma, eff) => apply(eff, currGamma)
+    }
+
+  def apply(eff: Effect, gamma: VarContext): VarContext = ???
 }
