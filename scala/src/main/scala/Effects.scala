@@ -93,17 +93,97 @@ object Effects {
       */
 
 
-  def apply(row: Effects, rho: RegionContext): RegionContext =
+  def applyToRegionCtx(row: Effects, rho: RegionContext): RegionContext =
     row.foldLeft(rho) {
-      case (currRho, eff) => apply(eff, currRho)
+      case (currRho, eff) => applyToRegionCtx(eff, currRho)
     }
 
-  def apply(eff: Effect, rho: RegionContext): RegionContext = ???
+  def applyToRegionCtx(eff: Effect, rho: RegionContext): RegionContext = eff match {
+    case EffNewRegion(rgn, typ, frac, subs) =>
+      if (subs.nonEmpty) rho + (rgn -> (typ, frac, MAggregate(subs)))
+      else rho + (rgn -> (typ, frac, MNone))
 
-  def apply(row: Effects, gamma: VarContext): VarContext =
+    case EffDeleteRegion(rgn) => rho.get(rgn) match {
+      //  Deleting an aliased region.
+      case Some((typ, frac, MAlias(src))) => rho.get(src) match {
+        case Some((typSrc, fracSrc, metaSrc)) =>
+          (rho - rgn) + (src -> (typSrc, FAdd(frac, fracSrc).norm, metaSrc))
+        case None => throw Errors.UnboundRegion(src)
+      }
+      // Deleting an allocated region.
+      case Some(_) => rho - rgn
+      case None => throw Errors.UnboundRegion(rgn)
+    }
+
+    // Borrowing immutably.
+    case EffBorrow(QImm, fromRgn, toRgn) => rho.get(fromRgn) match {
+      case Some((typ, frac, meta)) =>
+        rho + (fromRgn -> (typ, FDiv(frac, FNum(2)).norm, meta)) +
+          (toRgn -> (typ, FDiv(frac, FNum(2)).norm, MAlias(fromRgn)))
+      case None => throw Errors.UnboundRegion(fromRgn)
+    }
+
+    // Borrowing mutably.
+    case EffBorrow(QMut, fromRgn, toRgn) => rho.get(fromRgn) match {
+      case Some((typ, FNum(1), meta)) =>
+        rho + (fromRgn -> (typ, F0, meta)) + (toRgn -> (typ, F1, MAlias(fromRgn)))
+      case Some((_, frac, _)) => throw Errors.InsufficientCapability(F1, frac, fromRgn)
+      case None => throw Errors.UnboundRegion(fromRgn)
+    }
+
+    // Slicing immutably.
+    case EffSlice(QImm, fromRgn, toRgn) => rho.get(fromRgn) match {
+      case Some((arrTyp@TArray(typ, _), frac, meta)) =>
+        rho + (fromRgn -> (arrTyp, FDiv(frac, FNum(2)).norm, meta)) +
+          (toRgn -> (TSlice(typ), FDiv(frac, FNum(2)).norm, MAlias(fromRgn)))
+      case Some((typ,_ ,_)) => throw Errors.TypeError(
+        expected = TArray(AbsType, -1),
+        found = typ,
+      )
+      case None => throw Errors.UnboundRegion(fromRgn)
+    }
+
+    // Sliceing mutably.
+    case EffSlice(QMut, fromRgn, toRgn) => rho.get(fromRgn) match {
+      case Some((arrTyp@TArray(typ, _), FNum(1), meta)) =>
+        rho + (fromRgn -> (arrTyp, F0, meta)) + (toRgn -> (TSlice(typ), F1, MAlias(fromRgn)))
+      case Some((TArray(_, _), frac, _)) => throw Errors.InsufficientCapability(F1, frac, fromRgn)
+      case Some((typ, _,_)) => throw Errors.TypeError(
+        expected = TArray(AbsType, -1),
+        found = typ,
+      )
+      case None => throw Errors.UnboundRegion(fromRgn)
+    }
+
+    case EffBorrow(AbsMuta, _, _) => throw Errors.Unreachable
+    case EffSlice(AbsMuta, _, _) => throw Errors.Unreachable
+
+    case EffUpdate(baseRgn, pi :+ lastPath, newRgn) => {
+      val (typPi, rgnPi, newRho) = AdditionalJudgments.RegionValidAlongPath(rho)(QMut, pi, baseRgn)
+      val newBinding = newRho.get(rgnPi) match {
+        case Some((typ, frac, MAggregate(map))) =>
+          (typ, frac, MAggregate(map + (lastPath -> newRgn)))
+        case Some((_, _, meta)) => throw Errors.UnexpectedMetadata(
+          found = meta,
+          expected = MAggregate(Map()),
+          rgn = rgnPi,
+        )
+        case None => throw Errors.UnboundRegion(rgnPi)
+      }
+      newRho + (rgnPi -> newBinding)
+    }
+  }
+
+  def applyToVarCtx(row: Effects, gamma: VarContext): VarContext =
     row.foldLeft(gamma) {
-      case (currGamma, eff) => apply(eff, currGamma)
+      case (currGamma, eff) => applyToVarCtx(eff, currGamma)
     }
 
-  def apply(eff: Effect, gamma: VarContext): VarContext = ???
+  def applyToVarCtx(eff: Effect, gamma: VarContext): VarContext = eff match {
+    case EffDeleteRegion(rgn) => gamma.toSeq.filter({ case (_, value) => value != rgn }).toMap
+    case EffNewRegion(_, _, _, _)
+       | EffBorrow(_, _, _)
+       | EffSlice(_, _, _)
+       | EffUpdate(_, _, _) => gamma
+  }
 }
