@@ -69,7 +69,7 @@ case class TypeChecker(
         expected = TBase(AbsBaseType),
         found = typ
       )
-      case (typ, _, _) => throw Errors.TypeError(
+      case (typ, _) => throw Errors.TypeError(
         expected = TRef(AbsRegion, AbsMuta, AbsType),
         found = typ
       )
@@ -157,12 +157,12 @@ case class TypeChecker(
     // T-LetImm
     case ELet(QImm, id, e1, e2) => this.check(e1) match {
       case (TRef(r1, mu, ty1), eff1) => {
-        val gamma1 = Effects.apply(eff1, gamma)
+        val gamma1 = Effects.applyToVarCtx(eff1, gamma)
         if (gamma1.values.find(_ == r1).nonEmpty)
           throw Errors.RegionAlreadyBound(r1, id, gamma1)
 
         val (ty2, eff2) = TypeChecker(
-          sigma, delta, Effects.apply(eff1, rho), gamma1 + (id -> r1)
+          sigma, delta, Effects.applyToRegionCtx(eff1, rho), gamma1 + (id -> r1)
         ).check(e2)
         // assert(rho2.contains(r1) == false)
         (ty2, Effects.compose(eff1, eff2))
@@ -176,12 +176,12 @@ case class TypeChecker(
     // T-LetMut
     case ELet(QMut, id, e1, e2) => this.check(e1) match {
       case (TRef(r1, QMut, ty1), eff1) => {
-        val gamma1 = Effects.apply(eff1, gamma)
+        val gamma1 = Effects.applyToVarCtx(eff1, gamma)
         if (gamma1.values.find(_ == r1).nonEmpty)
           throw Errors.RegionAlreadyBound(r1, id, gamma1)
 
         val (ty2, eff2) = TypeChecker(
-          sigma, delta, Effects.apply(eff1, rho), gamma1 + (id -> r1)
+          sigma, delta, Effects.applyToRegionCtx(eff1, rho), gamma1 + (id -> r1)
         ).check(e2)
         // assert(rho2.contains(r1) == false)
         (ty2, Effects.compose(eff1, eff2))
@@ -228,7 +228,9 @@ case class TypeChecker(
     case ESeq(e1, e2) => this.check(e1) match {
       case (TBase(TUnit), eff1) => {
         val (ty2, eff2) =
-          TypeChecker(sigma, delta, Effects.apply(eff1, rho), Effects.apply(eff1, gamma)).check(e2)
+          TypeChecker(
+            sigma, delta, Effects.applyToRegionCtx(eff1, rho), Effects.applyToVarCtx(eff1, gamma)
+          ).check(e2)
         (ty2, Effects.compose(eff1, eff2))
       }
       case (typ, _) => throw Errors.TypeError(
@@ -240,7 +242,7 @@ case class TypeChecker(
     // T-If
     case EIf(pred, cons, alt) => this.check(pred) match {
       case (TRef(_, _, TBase(TBool)), eff1) => {
-        val (rho1, gamma1) = (Effects.apply(eff1, rho), Effects.apply(eff1, gamma))
+        val (rho1, gamma1) = (Effects.applyToRegionCtx(eff1, rho), Effects.applyToVarCtx(eff1, gamma))
         (TypeChecker(sigma, delta, rho1, gamma1).check(cons),
          TypeChecker(sigma, delta, rho1, gamma1).check(alt)) match {
           case ((typ2, eff2), (typ3, eff3)) => {

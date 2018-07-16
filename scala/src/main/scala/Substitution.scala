@@ -17,7 +17,7 @@ object Substitution {
     }
     case TBase(_) => typ
     case TRef(rgn, mu, typ) => TRef(substitute(rgn, subst), mu, substitute(typ, subst))
-    case TFun(_, _, _) => typ // FIXME: capture-avoidance is work
+    case TFun(_, _, _, _) => typ // FIXME: capture-avoidance is work
     case TArray(typ, len) => TArray(substitute(typ, subst), len)
     case TSlice(typ) => TSlice(substitute(typ, subst))
     case TProd(typs) => TProd(typs.map(substitute(_, subst)))

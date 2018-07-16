@@ -39,7 +39,7 @@ object DSL {
   def forall(quantifiers: Quantifier*): Quantifiers = quantifiers.toSeq
 
   implicit class RichQuantifiers(quantifiers: Quantifiers) {
-    def apply(arrow: (Seq[TRef], Type)) = TFun(quantifiers, arrow._1, arrow._2)
+    def apply(arrow: (Seq[TRef], Effects, Type)) = TFun(quantifiers, arrow._1, arrow._2, arrow._3)
 
     // EClosure
     def apply(arrow: (Seq[(Identifier, TRef)], Expression)) =
@@ -56,9 +56,14 @@ object DSL {
 
   def Fn(tys: TRef*): Seq[TRef] = tys.toSeq
   implicit class RichTRefs(trefs: Seq[TRef]) {
-    def ->(ret: Type): (Seq[TRef], Type) = (trefs, ret)
+    def ->(ret: Type): (Seq[TRef], Effects, Type) = (trefs, Seq(), ret)
+    def -(eff: Effects): ArgsEffPair = ArgsEffPair(trefs, eff)
   }
-  implicit def quantifierlessFunctions(p: (Seq[TRef], Type)): Type = TFun(Seq(), p._1, p._2)
+  case class ArgsEffPair(trefs: Seq[TRef], eff: Effects) {
+    def >(ret: Type): (Seq[TRef], Effects, Type) = (trefs, eff, ret)
+  }
+  implicit def quantifierlessFunctions(p: (Seq[TRef], Effects, Type)): Type =
+    TFun(Seq(), p._1, p._2, p._3)
 
   def array(typ: Type, len: Int) = TArray(typ, len)
   def slice(typ: Type) = TSlice(typ)
@@ -109,8 +114,8 @@ object DSL {
   implicit class RichEffects(eff: Effects) {
     lazy val commutingGroups = Effects.commutingGroups(eff)
 
-    def apply(rho: RegionContext): RegionContext = Effects.apply(eff, rho)
-    def apply(gamma: VarContext): VarContext = Effects.apply(eff, gamma)
+    def onRegionCtx(rho: RegionContext): RegionContext = Effects.applyToRegionCtx(eff, rho)
+    def onVarCtx(gamma: VarContext): VarContext = Effects.applyToVarCtx(eff, gamma)
   }
 
   def tru = ETrue
