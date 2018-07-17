@@ -18,6 +18,19 @@ case class TypeChecker(
     case _ => ???
   }
 
+  def checkThreaded(exprs: Expressions): Seq[(Type, Effects)] =
+    exprs.foldLeft[(_, Seq[(Type, Effects)])]((this, Seq()))({
+      case ((TypeChecker(sigmaC, deltaC, rhoC, gammaC), res), expr) => {
+        val effectsSoFar = res.map(_._2).foldLeft[Effects](Seq())(Effects.compose)
+        val newChecker = TypeChecker(
+          sigmaC, deltaC,
+          Effects.applyToRegionCtx(effectsSoFar, rhoC),
+          Effects.applyToVarCtx(effectsSoFar, gammaC),
+        )
+        (newChecker, res :+ newChecker.check(expr))
+      }
+    })._2
+
   def check(expr: Expression): (Type, Effects) = expr match {
     // T-AllocPrim
     case EAlloc(rgn, inner@EPrim(_)) => if (rho.contains(rgn) == false) {
@@ -28,7 +41,17 @@ case class TypeChecker(
 
     // T-AllocTup
     case EAlloc(rgn, EProd(exprs)) => if (rho.contains(rgn) == false) {
-      ???
+      val (types, effects) = this.checkThreaded(exprs).unzip
+      assert(types.forall(_.isInstanceOf[TRef]))
+      val subs = types.zipWithIndex.map {
+        case (TRef(rgn, muta, typ), n) => PProj(n).asInstanceOf[ImmediatePath] -> rgn
+        case _ => throw Errors.Unreachable
+      }.toMap
+      (TRef(rgn, QMut, TProd(types)),
+       Effects.compose(
+         effects.foldLeft[Effects](Seq())(Effects.compose),
+         Seq(EffNewRegion(rgn, TProd(types), F1, subs))
+       ))
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
     // T-AllocClosure

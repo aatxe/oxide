@@ -55,7 +55,7 @@ object Effects {
     //   case (group1, group2) => compose(group1, group2)
     // }.flatten
 
-  def compose(eff1: CommutingGroup, eff2: CommutingGroup): CommutingGroup = ???
+  def composeGroups(eff1: CommutingGroup, eff2: CommutingGroup): CommutingGroup = ???
     /**
       This is not quite right. Or the notion of a commuting group is not quite right.
 
