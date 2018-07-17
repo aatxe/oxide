@@ -127,7 +127,7 @@ case class TypeChecker(
     }) match {
       case Some((rgnPi, (typ, FNum(1), meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
         AdditionalJudgments.RegionWellFormed(rhoPrime)(QMut, rgnPi)
-        (TRef(rgn, QMut, typ), Seq(EffBorrow(QImm, rgnPi, rgn)))
+        (TRef(rgn, QMut, typ), Seq(EffBorrow(QMut, rgnPi, rgn)))
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
       case Some((rgnPi, (_, frac, _), _)) => throw Errors.InsufficientCapability(F1, frac, rgnPi)
       case None => ???
