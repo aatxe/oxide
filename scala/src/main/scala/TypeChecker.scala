@@ -276,7 +276,7 @@ case class TypeChecker(
         }
       }
       case (typ, _) => throw Errors.TypeError(
-        expected = TBase(TBool),
+        expected = TRef(AbsRegion, AbsMuta, TBase(TBool)),
         found = typ
       )
     }
