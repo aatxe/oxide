@@ -3,6 +3,14 @@ package oxide
 import Substitution._
 import Syntax._
 
+object TypeChecker {
+  def check(expr: Expression): (Type, Effects) = TypeChecker(Map(), Map(), Map(), Map()).check(expr)
+  def checkPost(expr: Expression): (Type, RegionContext) = {
+    val (typ, eff) = TypeChecker.check(expr)
+    (typ, Effects.applyToRegionCtx(eff, Map().asInstanceOf[RegionContext]))
+  }
+}
+
 case class TypeChecker(
   sigma: GlobalContext, delta: TyVarContext, rho: RegionContext, gamma: VarContext
 ) {
