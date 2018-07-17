@@ -95,7 +95,7 @@ class TypeCheckerTests extends FlatSpec with Matchers {
 
   it should "type check simple if expressions" in {
     TypeChecker.checkPost(
-      let (imm) ("pred" be alloc (tick(0)) (tru)) {
+      let (imm) ("pred" be alloc (tick(0)) (true)) {
         let (imm) (
           "x" be (
             ite (borrow (tick(1)) (imm) ("pred")) {
@@ -118,13 +118,13 @@ class TypeCheckerTests extends FlatSpec with Matchers {
   it should "not type check allocating a region at different types with branching" in {
     a [AssertionError] should be thrownBy {
       TypeChecker.checkPost(
-        let (imm) ("pred" be alloc (tick(0)) (tru)) {
+        let (imm) ("pred" be alloc (tick(0)) (true)) {
           let (imm) (
             "x" be (
               ite (borrow (tick(1)) (imm) ("pred")) {
                 alloc (tick(2)) (5)
               } {
-                alloc (tick(2)) (fls)
+                alloc (tick(2)) (false)
               }
             )
           ) {
@@ -206,6 +206,53 @@ class TypeCheckerTests extends FlatSpec with Matchers {
       u32,
       Map(tick(0) -> (u32, none, MNone),
           tick(1) -> (u32, whole / 2, MAlias(tick(0))),
+          tick(2) -> (u32, whole / 2, MAlias(tick(1))))
+    )
+  }
+
+  it should "type check a basic branching program" in {
+    TypeChecker.checkPost(
+      let (mut) ("x" be alloc (tick(0)) (true)) {
+        let (mut) ("y" be (
+                     ite(borrow (tick(3)) (imm) ("x")) {
+                       (alloc (tick(1)) (8))
+                     } {
+                       (alloc (tick(1)) (1))
+                     }
+                   )) {
+          deref (borrow (tick(2)) (imm) ("y"))
+        }
+      }
+    ) should be (
+      u32,
+      Map(tick(0) -> (bool, whole / 2, MNone),
+          tick(3) -> (bool, whole / 2, MAlias(tick(0))),
+          tick(1) -> (u32, whole / 2, MNone),
+          tick(2) -> (u32, whole / 2, MAlias(tick(1))))
+    )
+  }
+
+  it should "type check a branching program with a mutable borrow opposite an alloc" in {
+    TypeChecker.checkPost(
+      let (mut) ("pred" be alloc (tick(0)) (true)) {
+        let (mut) ("x" be alloc (tick(4)) (7)) {
+          let (mut) ("y" be (
+                       ite(borrow (tick(3)) (imm) ("pred")) {
+                         (borrow (tick(1)) (mut) ("x"))
+                       } {
+                         (alloc (tick(1)) (1))
+                       }
+                     )) {
+            deref (borrow (tick(2)) (imm) ("y"))
+          }
+        }
+      }
+    ) should be (
+      u32,
+      Map(tick(0) -> (bool, whole / 2, MNone),
+          tick(4) -> (u32, none, MNone),
+          tick(3) -> (bool, whole / 2, MAlias(tick(0))),
+          tick(1) -> (u32, whole / 2, MNone), // FIXME: MAlias(tick(4)) in the first branch
           tick(2) -> (u32, whole / 2, MAlias(tick(1))))
     )
   }

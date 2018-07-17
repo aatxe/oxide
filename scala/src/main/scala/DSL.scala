@@ -118,8 +118,8 @@ object DSL {
     def onVarCtx(gamma: VarContext): VarContext = Effects.applyToVarCtx(eff, gamma)
   }
 
-  def tru = ETrue
-  def fls = EFalse
+  implicit def boolToPrim(b: Boolean): Primitive = if (b) ETrue else EFalse
+  implicit def boolToExpr(b: Boolean): Expression = if (b) ETrue else EFalse
   implicit def intToPrim(n: Int): Primitive = ENum(n)
   implicit def intToExpr(n: Int): Expression = EPrim(ENum(n))
   def unit = EUnit
