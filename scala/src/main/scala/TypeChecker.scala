@@ -106,30 +106,17 @@ case class TypeChecker(
       )
     }
 
-    // T-BorrowImm
-    case EBorrow(rgn, QImm, id, pi) => gamma.get(id).flatMap(rgnId => {
-      val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(QImm, pi, rgnId)
+    // T-Borrow
+    case EBorrow(rgn, muta, id, pi) => gamma.get(id).flatMap(rgnId => {
+      val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(muta, pi, rgnId)
       rhoPrime.get(rgnPi).map { case (typ, frac, mt) => (rgnPi, (typ, frac.norm, mt), rhoPrime) }
     }) match {
       case Some((rgnPi, (_, FNum(0), _), _)) =>
         throw Errors.InsufficientCapability(F1, FNum(0), rgnPi)
       case Some((rgnPi, (typ, frac, meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
-        AdditionalJudgments.RegionWellFormed(rhoPrime)(QImm, rgnPi)
-        (TRef(rgn, QImm, typ), Seq(EffBorrow(QImm, rgnPi, rgn)))
+        AdditionalJudgments.RegionWellFormed(rhoPrime)(muta, rgnPi)
+        (TRef(rgn, muta, typ), Seq(EffBorrow(muta, rgnPi, rgn)))
       } else throw Errors.RegionAlreadyInUse(rgn, rho)
-      case None => ???
-    }
-
-    // T-BorrowMut
-    case EBorrow(rgn, QMut, id, pi) => gamma.get(id).flatMap(rgnId => {
-      val (typPi, rgnPi, rhoPrime) = AdditionalJudgments.RegionValidAlongPath(rho)(QMut, pi, rgnId)
-      rhoPrime.get(rgnPi).map { case (typ, frac, mt) => (rgnPi, (typ, frac.norm, mt), rhoPrime) }
-    }) match {
-      case Some((rgnPi, (typ, FNum(1), meta), rhoPrime)) => if (rhoPrime.contains(rgn) == false) {
-        AdditionalJudgments.RegionWellFormed(rhoPrime)(QMut, rgnPi)
-        (TRef(rgn, QMut, typ), Seq(EffBorrow(QMut, rgnPi, rgn)))
-      } else throw Errors.RegionAlreadyInUse(rgn, rho)
-      case Some((rgnPi, (_, frac, _), _)) => throw Errors.InsufficientCapability(F1, frac, rgnPi)
       case None => ???
     }
 
