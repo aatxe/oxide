@@ -51,14 +51,19 @@ case class TypeChecker(
     case EAlloc(rgn, EProd(exprs)) => if (rho.contains(rgn) == false) {
       val (types, effects) = this.checkThreaded(exprs).unzip
       assert(types.forall(_.isInstanceOf[TRef]))
+      val innerTypes = types.map {
+        case TRef(_, QMut, typ) => typ
+        case TRef(rgn, QImm, _) => throw Errors.InsufficientCapability(F1, FZeta, rgn)
+        case _ => throw Errors.Unreachable
+      }
       val subs = types.zipWithIndex.map {
         case (TRef(rgn, muta, typ), n) => PProj(n).asInstanceOf[ImmediatePath] -> rgn
         case _ => throw Errors.Unreachable
       }.toMap
-      (TRef(rgn, QMut, TProd(types)),
+      (TRef(rgn, QMut, TProd(innerTypes)),
        Effects.compose(
          effects.foldLeft[Effects](Seq())(Effects.compose),
-         Seq(EffNewRegion(rgn, TProd(types), F1, subs))
+         Seq(EffNewRegion(rgn, TProd(innerTypes), F1, subs))
        ))
     } else throw Errors.RegionAlreadyInUse(rgn, rho)
 
