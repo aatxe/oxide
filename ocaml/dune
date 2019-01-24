@@ -1,2 +1,3 @@
 (executable
-  (name oxide))
+  (name oxide)
+  (preprocess (pps ppx_deriving.std)))
