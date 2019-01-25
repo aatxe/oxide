@@ -65,9 +65,12 @@ let rec normalize (frac : frac) : frac =
   match frac with
   | Num x -> Num x
   | Add (f1, f2) -> normalize (add_frac f1 f2)
+  | Div (Num 0, _) -> Num 0
+  | Div (Num n, Num 1) -> Num n
   | Div (Num n, Num d) ->
       let gcd = gcd n d
-      in Div (Num (n / gcd), Num (d / gcd))
+      in let maybe_normalize frac = if gcd = 1 then frac else normalize frac
+      in maybe_normalize (Div (Num (n / gcd), Num (d / gcd)))
   | Div (f1, f2) -> normalize (mult_frac f1 (Div (Num 1, f2)))
 
 let make_loan (gamma : var_env) (mu : muta) (from_pi : place) : var_env =
@@ -108,11 +111,13 @@ let excl (gamma : var_env) (pi : place) : var_env =
 
 let main =
   let env1 = [(Var 1, (Num 1, BaseTy U32))]
-  in let ref_ty = Ref ([Loan (1, Div (Num 1, Num 2), Var 1)], Imm, BaseTy U32)
-  in let env2 = incl env1 ref_ty
-  in let env3 = excl (List.cons (Var 2, (Num 1, ref_ty)) env2) (Var 2)
+  in let ref_ty id = Ref ([Loan (id, Div (Num 1, Num 2), Var 1)], Imm, BaseTy U32)
+  in let env2 = incl env1 (ref_ty 1)
+  in let env3 = excl (List.cons (Var 2, (Num 1, ref_ty 1)) env2) (Var 2)
+  in let env4 = incl env2 (ref_ty 2)
   in begin
     Format.printf "%a@." pp_var_env env1;
     Format.printf "%a@." pp_var_env env2;
     Format.printf "%a@." pp_var_env env3;
+    Format.printf "%a@." pp_var_env env4;
   end
