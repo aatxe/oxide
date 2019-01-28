@@ -68,6 +68,7 @@ let rec normalize (frac : frac) : frac =
   | Num x -> Num x
   | Add (f1, f2) -> normalize (add_frac f1 f2)
   | Div (Num 0, _) -> Num 0
+  | Div (_, Num 0) -> Div (Num 0, Num 0)
   | Div (Num n, Num 1) -> Num n
   | Div (Num n, Num d) ->
       let gcd = gcd n d
