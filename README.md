@@ -1,6 +1,6 @@
 # Oxide
 
-The name is tentative, but the goal of building a Featherweight Rust is not.
+Distilling the Essence of Rust.
 
 ## Background
 
