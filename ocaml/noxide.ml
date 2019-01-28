@@ -113,10 +113,8 @@ let is_safe (gamma : var_env) (mu : muta) (pi : place) : bool =
               is_empty (List.filter relevant (find_loans Unique gamma pi))
 
 let print_is_safe (gamma : var_env) (mu : muta) (pi : place) =
-  if is_safe gamma mu pi then
-    Format.printf "%a is %a safe in@.  %a@." pp_place pi pp_muta mu pp_var_env gamma
-  else
-    Format.printf "%a is not %a safe in@.  %a@." pp_place pi pp_muta mu pp_var_env gamma
+  (if is_safe gamma mu pi then Format.printf "%a is %a safe in@.  %a@."
+   else Format.printf "%a is not %a safe in@.  %a@.") pp_place pi pp_muta mu pp_var_env gamma
 
 let main =
   let (x, y, _) = (1, 2, 3)
