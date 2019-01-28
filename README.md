@@ -25,18 +25,18 @@ similarities to our approach, and may aid in its understanding.
 
 This repository is split into five parts:
 
-1. [`./`](./) — the root, containing the latest version of our semantics
-    - Each language level has its own file starting with safe Rust in [`oxide0.md`](oxide0.md)
-2. [`notes/`](notes/) — an assorted selection of my notes, some about the language levels of Rust
-3. [`examples/`](examples/) — a collection of examples (and counter-examples) at each level
-    - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form.
-4. [`history/`](history/) — largely-iterative prior attempts at building [`oxide0`](oxide0.md)
+1. [`notes/`](notes/) — an assorted selection of my notes, some about the language levels of Rust
+2. [`history/`](history/) — largely-iterative prior attempts at building designing Oxide
     - [`ownershipv1`](history/ownershipv1.md) and [`ownershipv2`](history/ownershipv2.md) both have
       some notes included that might be insightful to some degree. Evidently, I got lazy afterward
-      and stopped writing actual prose in the models.
-5. [`redex/`](redex/) — an outdated attempt at mechanizing the semantics in Redex
-    - Maybe I'll get back to this? Maybe I'll mechanize it in Coq or F* instead?
-6. [`coq/`](coq/) — an ongoing effort to mechanize the Oxide _metatheory_
+      and stopped writing actual prose in the models. Afterward, I switched to LaTeX.
+3. [`history/examples/`](history/examples/) — a collection of old examples (and counter-examples) at each level
+    - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form at the time.
+4. [`redex/`](redex/) — probably my first attempt at mechanizing the semantics (in Redex)
+5. [`coq/`](coq/) — a follow-up effort to mechanize the Oxide _metatheory_
+6. [`ocaml/`](ocaml/) — an implementation of Oxide in OCaml
+    - Currently, it's just some small parts of Oxide for experimentation.
+
 
 ## Related Works
 
