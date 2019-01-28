@@ -120,11 +120,13 @@ let print_is_safe (gamma : var_env) (mu : muta) (pi : place) =
 
 let main =
   let (x, y, _) = (1, 2, 3)
+  in let u32  = BaseTy U32
   in let pi1 = Var x
   in let pi2 = IndexProj (Var x, 0)
-  in let ref_ty id from = Ref ([Loan (id, from)], Shared, BaseTy U32)
-  in let env1 = [(x, Tup [BaseTy U32])]
-  in let env2 = [(x, Tup [BaseTy U32]); (y, ref_ty 1 pi2)]
+  in let shared_ref id from ty = Ref ([Loan (id, from)], Shared, ty)
+  in let env1 = [(x, Tup [u32])]
+  in let env2 = [(x, Tup [u32]); (y, shared_ref 1 pi2 u32)]
+  in let env3 = [(x, Tup [u32]); (y, shared_ref 1 pi1 (Tup [u32]))]
   in begin
     print_is_safe env1 Unique pi1;
     print_is_safe env1 Unique pi2;
@@ -132,4 +134,6 @@ let main =
     print_is_safe env2 Unique pi2;
     print_is_safe env2 Shared pi1;
     print_is_safe env2 Shared pi2;
+    print_is_safe env3 Shared pi2;
+    print_is_safe env3 Unique pi2;
   end
