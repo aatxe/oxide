@@ -95,6 +95,7 @@ let frac_to_muta (frac : frac) : muta =
   | Num 1 -> Unique
   | _ -> Shared
 
+(* walks the given type tau changing gamma with the change function according to the loans in tau *)
 let rec walk (change : var_env -> frac -> place -> var_env) (gamma : var_env) (tau : ty) : var_env =
   match tau with
   | Ref (rgn, _, inner_tau) ->
