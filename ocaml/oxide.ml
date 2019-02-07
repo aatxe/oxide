@@ -10,17 +10,12 @@ type place =
   | FieldProj of place * string
   | IndexProj of place * int
   [@@deriving show]
-
-type frac =
-  | Num of int
-  | Div of frac * frac
-  | Add of frac * frac
-  [@@deriving show]
 type rgn_atom =
   | RgnVar of rgn_var
-  | Loan of loan_id * frac * place
+  | Loan of loan_id * place
   [@@deriving show]
 type rgn = rgn_atom list [@@deriving show]
+type loans = (loan_id * place) list [@@deriving show]
 
 type kind = Star | Rgn [@@deriving show]
 type base_ty = Bool | U32 | Unit [@@deriving show]
@@ -35,98 +30,125 @@ type ty =
 
 type global_env = () (* TODO: actual global environment definition *)
 type tyvar_env = rgn_var list * ty_var list
-type var_env = (place * (frac * ty)) list [@@deriving show]
+type var_env = (var * ty) list [@@deriving show]
 
-let var_env_lookup (gamma : var_env) (pi : place) : (frac * ty) = List.assoc pi gamma
+let var_env_lookup (gamma : var_env) (x : var) : ty = List.assoc x gamma
+let var_env_include (gamma : var_env) (x : var) (typ : ty) = List.cons (x, typ) gamma
+let var_env_exclude (gamma : var_env) (x : var) = List.remove_assoc x gamma
 
-let rec add_frac (f1 : frac) (f2 : frac) =
-  match (f1, f2) with
-  | (Num n1, Num n2) -> Num (n1 + n2)
-  | (Add (n1, n2), f2) -> add_frac (add_frac n1 n2) f2
-  | (f1, Add (n1, n2)) -> add_frac f1 (add_frac n1 n2)
-  | (Div (n1, d1), Div (n2, d2)) -> Div (add_frac (mult_frac n1 d2) (mult_frac n2 d1),
-                                         mult_frac d1 d2)
-  | (Div (n1, d1), Num n) -> Div (add_frac n1 (mult_frac d1 (Num n)), d1)
-  | (Num n, Div (n1, d1)) -> Div (add_frac n1 (mult_frac d1 (Num n)), d1)
-and mult_frac (f1 : frac) (f2 : frac)  =
-  match (f1, f2)  with
-  | (Num n1, Num  n2) -> Num (n1 * n2)
-  | (Add (n1, n2), f2) -> mult_frac (add_frac n1 n2) f2
-  | (f1, Add (n1, n2)) -> mult_frac f1 (add_frac n1 n2)
-  | (Div (n1, d1), Div (n2, d2)) -> Div (mult_frac n1 n2, mult_frac d1 d2)
-  | (Div (n1, d1), Num n) -> Div (mult_frac n1 (Num n), d1)
-  | (Num n, Div (n1, d1)) -> Div (mult_frac n1 (Num n), d1)
+let is_empty (lst : 'a list) : bool = List.length lst = 0
 
-let rec gcd a b =
-  match (a mod b) with
-  | 0 -> b
-  | r -> gcd b r
+(* checks that mu_prime is at least mu *)
+let is_at_least (mu : muta) (mu_prime : muta) : bool =
+  match (mu, mu_prime) with
+  | (Shared, _) -> true
+  | (Unique, Unique) -> true
+  | (Unique, Shared) -> false
 
-(* evaluates away additions and divisions and the simplest form of frac *)
-let rec normalize (frac : frac) : frac =
-  match frac with
-  | Num x -> Num x
-  | Add (f1, f2) -> normalize (add_frac f1 f2)
-  | Div (Num 0, _) -> Num 0
-  | Div (_, Num 0) -> Div (Num 0, Num 0)
-  | Div (Num n, Num 1) -> Num n
-  | Div (Num n, Num d) ->
-      let gcd = gcd n d
-      in let maybe_normalize frac = if gcd = 1 then frac else normalize frac
-      in maybe_normalize (Div (Num (n / gcd), Num (d / gcd)))
-  | Div (f1, f2) -> normalize (mult_frac f1 (Div (Num 1, f2)))
+(* extract all the specific loans from a given region *)
+let rgn_to_loans (rgn : rgn) : loans =
+  let work (atom : rgn_atom) (loans : loans) : loans =
+    match atom with
+    | RgnVar _ -> loans
+    | Loan (id, pi) -> List.cons (id, pi) loans
+  in List.fold_right work rgn []
 
-(* updates the capability for from_pi in gamma for a mu-loan *)
-let make_loan (gamma : var_env) (mu : muta) (from_pi : place) : var_env =
-  let (curr_frac, tau) = var_env_lookup gamma from_pi
-  in let base_gamma = List.remove_assoc from_pi gamma
+(* compute all the at-least-mu loans in a given gamma *)
+let all_loans (mu : muta) (gamma : var_env) : loans =
+  let rec work (typ : ty) (loans : loans) : loans =
+    match typ with
+    | BaseTy _ -> loans
+    | TyVar _ -> loans
+    | Ref (rgn, mu_prime, typ) ->
+      if is_at_least mu mu_prime then List.append (rgn_to_loans rgn) (work typ loans)
+      else work typ loans
+    | Fun (_, _, _, _) -> loans
+    | Array (typ, _) -> work typ loans
+    | Tup typs -> List.fold_right List.append (List.map (fun typ -> work typ []) typs) loans
+  in List.fold_right (fun entry -> work (snd entry)) gamma []
+
+(*  compute all subplaces from a given place *)
+let all_subplaces (pi : place) : place list =
+  let rec work (pi : place) (places : place list) : place list =
+    match pi with
+    | Var _ -> List.cons pi places
+    | Deref pi_prime -> List.cons pi (work pi_prime places)
+    | FieldProj (pi_prime, _) -> List.cons pi (work pi_prime places)
+    | IndexProj (pi_prime, _) -> List.cons pi (work pi_prime places)
+  in work pi []
+
+(* find the root of a given place *)
+let rec root_of (pi : place) : var =
+  match pi with
+  | Var root -> root
+  | Deref pi_prime -> root_of pi_prime
+  | FieldProj (pi_prime, _) -> root_of pi_prime
+  | IndexProj (pi_prime, _) -> root_of pi_prime
+
+(* find all at-least-mu loans in gamma that have to do with pi *)
+let find_loans (mu : muta) (gamma : var_env) (pi : place) : loans =
+  (* n.b. this is actually too permissive because of reborrowing and deref *)
+  let root_of_pi = root_of pi
+  in let relevant (pair : loan_id * place) : bool =
+    (* a loan is relevant if it is a descendant of any subplace of pi *)
+    let (_, pi_prime) = pair
+       (* the easiest way to check is to check if their roots are the same *)
+    in root_of_pi = root_of pi_prime
+  in List.filter relevant (all_loans mu gamma)
+
+(* given a gamma, determines whether it is safe to use pi according to mu *)
+let is_safe (gamma : var_env) (mu : muta) (pi : place) : bool =
+  let subplaces_of_pi = all_subplaces pi
+  in let relevant (pair : loan_id * place) : bool =
+    (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
+    let (_, pi_prime) = pair
+        (* either pi is an ancestor of pi_prime *)
+    in List.exists (fun x -> x = pi) (all_subplaces pi_prime)
+        (* or pi_prime is a subplace of pi *)
+        || List.exists (fun x -> x = pi_prime) subplaces_of_pi
   in match mu with
-     | Shared -> List.cons (from_pi, (normalize (Div (curr_frac, Num 2)), tau)) base_gamma
-     | Unique -> List.cons (from_pi, (Num 0, tau)) base_gamma
+  | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
+              is_empty (List.filter relevant (find_loans Shared gamma pi))
+  | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
+              is_empty (List.filter relevant (find_loans Unique gamma pi))
 
-(* updates the capability for from_pi in gamma by adding back frac *)
-let return_loan (gamma : var_env) (frac : frac) (from_pi : place) : var_env =
-  let (curr_frac, tau) = var_env_lookup gamma from_pi
-  in let base_gamma = List.remove_assoc from_pi gamma
-  in List.cons (from_pi, (normalize (Add (curr_frac, frac)), tau)) base_gamma
+(* given a root identier x, compute all the places based on tau *)
+let compute_places (x : var) (tau : ty) : (place * ty) list =
+  let rec loop (pi : place) (tau : ty) :  (place * ty) list =
+    match tau with
+    | BaseTy _ -> [(pi, tau)]
+    | TyVar _ -> [(pi, tau)]
+    | Ref (_, _, tauPrime) -> List.cons (pi, tau) (loop (Deref pi) tauPrime)
+    | Fun (_, _, _, _) -> [(pi, tau)]
+    | Array(_, _) -> [(pi, tau)]
+    | Tup(tys) ->
+      let work (acc : (place * ty) list) (pair : place * ty) =
+        let (pi, ty) = pair
+        in List.concat [acc; loop pi ty]
+      in let projs = List.mapi (fun idx -> fun ty -> (IndexProj  (pi, idx), ty)) tys
+      in List.fold_left work [(pi, tau)] projs
+  in loop (Var x) tau
 
-(* converts a fraction into the appropriate mu *)
-let frac_to_muta (frac : frac) : muta =
-  match frac with
-  | Num 1 -> Unique
-  | _ -> Shared
-
-(* walks the given type tau changing gamma with the change function according to the loans in tau *)
-let rec walk (change : var_env -> frac -> place -> var_env) (gamma : var_env) (tau : ty) : var_env =
-  match tau with
-  | Ref (rgn, _, inner_tau) ->
-      let work (gamma : var_env) (atom : rgn_atom) : var_env =
-        match atom with
-        | RgnVar _ -> gamma
-        | Loan (_, frac, from_pi) -> change gamma frac from_pi
-      in walk change (List.fold_left work gamma rgn) inner_tau
-  | Array (inner_tau, _) -> walk change gamma inner_tau
-  | Tup taus -> List.fold_left (walk change) gamma taus
-  | _ -> gamma
-
-(* changes gamma by making all the loans in tau happen *)
-let incl (gamma : var_env) (tau : ty) : var_env =
-  walk (fun gamma -> fun frac -> make_loan gamma (frac_to_muta frac)) gamma tau
-
-(* changes gamma by removing pi and returning any loans it has *)
-let excl (gamma : var_env) (pi : place) : var_env =
-  let (_, tau) = var_env_lookup gamma pi
-  in walk return_loan (List.remove_assoc pi gamma) tau
+let print_is_safe (gamma : var_env) (mu : muta) (pi : place) =
+  (if is_safe gamma mu pi then Format.printf "%a is %a safe in@.  %a@."
+   else Format.printf "%a is not %a safe in@.  %a@.") pp_place pi pp_muta mu pp_var_env gamma
 
 let main =
-  let env1 = [(Var 1, (Num 1, BaseTy U32))]
-  in let ref_ty id = Ref ([Loan (id, Div (Num 1, Num 2), Var 1)], Shared, BaseTy U32)
-  in let env2 = incl env1 (ref_ty 1)
-  in let env3 = excl (List.cons (Var 2, (Num 1, ref_ty 1)) env2) (Var 2)
-  in let env4 = incl env2 (ref_ty 2)
+  let (x, y, _) = (1, 2, 3)
+  in let u32  = BaseTy U32
+  in let pi1 = Var x
+  in let pi2 = IndexProj (Var x, 0)
+  in let shared_ref id from ty = Ref ([Loan (id, from)], Shared, ty)
+  in let env1 = [(x, Tup [u32])]
+  in let env2 = [(x, Tup [u32]); (y, shared_ref 1 pi2 u32)]
+  in let env3 = [(x, Tup [u32]); (y, shared_ref 1 pi1 (Tup [u32]))]
   in begin
-    Format.printf "%a@." pp_var_env env1;
-    Format.printf "%a@." pp_var_env env2;
-    Format.printf "%a@." pp_var_env env3;
-    Format.printf "%a@." pp_var_env env4;
+    print_is_safe env1 Unique pi1;
+    print_is_safe env1 Unique pi2;
+    print_is_safe env2 Unique pi1;
+    print_is_safe env2 Unique pi2;
+    print_is_safe env2 Shared pi1;
+    print_is_safe env2 Shared pi2;
+    print_is_safe env3 Shared pi2;
+    print_is_safe env3 Unique pi2;
   end
