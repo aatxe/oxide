@@ -9,11 +9,11 @@ type place =
   | Deref of place
   | FieldProj of place * string
   | IndexProj of place * int
-  [@@deriving show]
+[@@deriving show]
 type rgn_atom =
   | RgnVar of rgn_var
   | Loan of loan_id * muta * place
-  [@@deriving show]
+[@@deriving show]
 type rgn = rgn_atom list [@@deriving show]
 type loans = (loan_id * muta * place) list [@@deriving show]
 
@@ -26,10 +26,52 @@ type ty =
   | Fun of rgn_var list * ty_var list * ty list * ty
   | Array of ty * int
   | Tup of ty list
-  [@@deriving show]
+[@@deriving show]
 
-type global_env = () (* TODO: actual global environment definition *)
-type tyvar_env = rgn_var list * ty_var list
+type prim =
+  | Unit
+  | Num of int
+  | True
+  | False
+[@@deriving show]
+
+type expr =
+  | Prim of prim
+  | Borrow of loan_id * muta * place
+  | BorrowIdx of loan_id * muta * place * expr
+  | BorrowSlice of loan_id * muta * place * expr * expr
+  | Let of var * ty * expr * expr
+  | Assign of place * expr
+  | Seq of expr * expr
+  | Fun of rgn_var list * ty_var list * (var * ty) list * expr
+  | App of expr * rgn list * ty list * expr list
+  | Idx of place * expr
+  | Abort of string
+  | Branch of expr * expr * expr
+  | For of var * expr * expr
+  | Tup of expr list
+  | Array of expr list
+[@@deriving show]
+
+type value =
+  | Prim of prim
+  | Fun of rgn_var list * ty_var list * (var * ty) list * expr
+  | Tup of value list
+  | Array of value list
+[@@deriving show]
+
+(* shapes are referred to as explicit path values in the Oxide formalization *)
+type shape =
+  | Prim of prim
+  | Fun of rgn_var list * ty_var list * (var * ty) list * expr
+  | Tup of unit list
+  | Array of value list
+[@@deriving show]
+
+type store = (place * shape) list [@@deriving show]
+
+type global_env = unit (* TODO: actual global environment definition *)
+type tyvar_env = rgn_var list * ty_var list [@@deriving show]
 type var_env = (var * ty) list [@@deriving show]
 
 let var_env_lookup (gamma : var_env) (x : var) : ty = List.assoc x gamma
@@ -129,6 +171,29 @@ let compute_places (x : var) (tau : ty) : (place * ty) list =
       in List.fold_left work [(pi, tau)] projs
   in loop (Var x) tau
 
+(* given a root place pi, compute all the places and shapes based on v *)
+let rec compute_places_shapes (pi : place) (v : value) : (place * shape) list =
+  match v with
+  | Prim p -> [(pi, Prim p)]
+  | Fun (rgnvars, tyvars, params, body) -> [(pi, Fun (rgnvars, tyvars, params, body))]
+  | Tup values ->
+    let work (acc : (place * shape) list) (pair : place * value) =
+      let (pi, v) = pair
+      in List.concat [acc; compute_places_shapes pi v]
+    in let projs = List.mapi (fun idx -> fun v -> (IndexProj  (pi, idx), v)) values
+    in List.fold_left work [(pi, Tup (List.map (fun _ -> ()) values))] projs
+  | Array values -> [(pi, Array values)]
+
+(* given a store sigma, compute the value at pi from its shape in sigma *)
+let rec compute_value (sigma : store) (pi : place) : value =
+  match List.assoc pi sigma with
+  | Prim p -> Prim p
+  | Fun (rgnvars, tyvars, params, body) -> Fun (rgnvars, tyvars, params, body)
+  | Tup boxes ->
+    let values = List.mapi (fun idx -> fun () -> compute_value sigma (IndexProj (pi, idx))) boxes
+    in Tup values
+  | Array values -> Array values
+
 let print_is_safe (gamma : var_env) (mu : muta) (pi : place) =
   (if is_safe gamma mu pi then Format.printf "%a is %a safe in@.  %a@."
    else Format.printf "%a is not %a safe in@.  %a@.") pp_place pi pp_muta mu pp_var_env gamma
@@ -138,10 +203,10 @@ let main =
   in let u32  = BaseTy U32
   in let pi1 = Var x
   in let pi2 = IndexProj (Var x, 0)
-  in let shared_ref id from ty = Ref ([Loan (id, from)], Shared, ty)
-  in let env1 = [(x, Tup [u32])]
-  in let env2 = [(x, Tup [u32]); (y, shared_ref 1 pi2 u32)]
-  in let env3 = [(x, Tup [u32]); (y, shared_ref 1 pi1 (Tup [u32]))]
+  in let shared_ref id from ty : ty = Ref ([Loan (id, Shared, from)], Shared, ty)
+  in let env1 : var_env = [(x, Tup [u32])]
+  in let env2 : var_env = [(x, Tup [u32]); (y, shared_ref 1 pi2 u32)]
+  in let env3 : var_env = [(x, Tup [u32]); (y, shared_ref 1 pi1 (Tup [u32]))]
   in begin
     print_is_safe env1 Unique pi1;
     print_is_safe env1 Unique pi2;
