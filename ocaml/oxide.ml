@@ -12,10 +12,10 @@ type place =
   [@@deriving show]
 type rgn_atom =
   | RgnVar of rgn_var
-  | Loan of loan_id * place
+  | Loan of loan_id * muta * place
   [@@deriving show]
 type rgn = rgn_atom list [@@deriving show]
-type loans = (loan_id * place) list [@@deriving show]
+type loans = (loan_id * muta * place) list [@@deriving show]
 
 type kind = Star | Rgn [@@deriving show]
 type base_ty = Bool | U32 | Unit [@@deriving show]
@@ -50,7 +50,7 @@ let rgn_to_loans (rgn : rgn) : loans =
   let work (atom : rgn_atom) (loans : loans) : loans =
     match atom with
     | RgnVar _ -> loans
-    | Loan (id, pi) -> List.cons (id, pi) loans
+    | Loan (id, muta, pi) -> List.cons (id, muta, pi) loans
   in List.fold_right work rgn []
 
 (* compute all the at-least-mu loans in a given gamma *)
@@ -89,9 +89,9 @@ let rec root_of (pi : place) : var =
 let find_loans (mu : muta) (gamma : var_env) (pi : place) : loans =
   (* n.b. this is actually too permissive because of reborrowing and deref *)
   let root_of_pi = root_of pi
-  in let relevant (pair : loan_id * place) : bool =
+  in let relevant (pair : loan_id * muta * place) : bool =
     (* a loan is relevant if it is a descendant of any subplace of pi *)
-    let (_, pi_prime) = pair
+    let (_, _, pi_prime) = pair
        (* the easiest way to check is to check if their roots are the same *)
     in root_of_pi = root_of pi_prime
   in List.filter relevant (all_loans mu gamma)
@@ -99,9 +99,9 @@ let find_loans (mu : muta) (gamma : var_env) (pi : place) : loans =
 (* given a gamma, determines whether it is safe to use pi according to mu *)
 let is_safe (gamma : var_env) (mu : muta) (pi : place) : bool =
   let subplaces_of_pi = all_subplaces pi
-  in let relevant (pair : loan_id * place) : bool =
+  in let relevant (pair : loan_id * muta * place) : bool =
     (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
-    let (_, pi_prime) = pair
+    let (_, _, pi_prime) = pair
         (* either pi is an ancestor of pi_prime *)
     in List.exists (fun x -> x = pi) (all_subplaces pi_prime)
         (* or pi_prime is a subplace of pi *)
