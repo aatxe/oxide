@@ -114,9 +114,9 @@ let all_subplaces (pi : place) : place list =
   let rec work (pi : place) (places : place list) : place list =
     match pi with
     | Var _ -> List.cons pi places
-    | Deref pi_prime -> List.cons pi (work pi_prime places)
-    | FieldProj (pi_prime, _) -> List.cons pi (work pi_prime places)
-    | IndexProj (pi_prime, _) -> List.cons pi (work pi_prime places)
+    | Deref pi_prime -> work pi_prime (List.cons pi places)
+    | FieldProj (pi_prime, _) -> work pi_prime (List.cons pi places)
+    | IndexProj (pi_prime, _) -> work pi_prime (List.cons pi places)
   in work pi []
 
 (* find the root of a given place *)
