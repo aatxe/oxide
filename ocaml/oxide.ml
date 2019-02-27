@@ -180,13 +180,13 @@ let rec prefixed_by (target : place) (in_pi : place) : bool =
   | FieldProj (piPrime, _) -> prefixed_by target piPrime
   | IndexProj (piPrime, _) -> prefixed_by target piPrime
 
-let rec replace (target : place) (new_pi : place)  (in_pi : place) : place =
-  if target = in_pi then new_pi
+let rec replace (prefix : place) (new_pi : place)  (in_pi : place) : place =
+  if prefix = in_pi then new_pi
   else match in_pi with
   | Var x -> Var x
-  | Deref piPrime -> Deref (replace target new_pi piPrime)
-  | FieldProj (piPrime, field) -> FieldProj (replace target new_pi piPrime, field)
-  | IndexProj (piPrime, idx) -> IndexProj (replace target new_pi piPrime, idx)
+  | Deref piPrime -> Deref (replace prefix new_pi piPrime)
+  | FieldProj (piPrime, field) -> FieldProj (replace prefix new_pi piPrime, field)
+  | IndexProj (piPrime, idx) -> IndexProj (replace prefix new_pi piPrime, idx)
 
 (* given a root place pi, compute all the places and shapes based on v *)
 let rec places_val (sigma : store) (pi : place) (v : value) : (place * shape) list =
