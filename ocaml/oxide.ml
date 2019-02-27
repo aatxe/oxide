@@ -51,6 +51,7 @@ type expr =
   | For of var * expr * expr
   | Tup of expr list
   | Array of expr list
+  | Ptr of muta * place
 [@@deriving show]
 
 type value =
@@ -58,14 +59,16 @@ type value =
   | Fun of rgn_var list * ty_var list * (var * ty) list * expr
   | Tup of value list
   | Array of value list
+  | Ptr of muta * place
 [@@deriving show]
 
-(* shapes are referred to as explicit path values in the Oxide formalization *)
 type shape =
+  | Hole
   | Prim of prim
   | Fun of rgn_var list * ty_var list * (var * ty) list * expr
   | Tup of unit list
   | Array of value list
+  | Ptr of muta * place
 [@@deriving show]
 
 type store = (place * shape) list [@@deriving show]
@@ -155,42 +158,75 @@ let is_safe (gamma : var_env) (mu : muta) (pi : place) : bool =
               is_empty (List.filter relevant (find_loans Unique gamma pi))
 
 (* given a root identier x, compute all the places based on tau *)
-let compute_places (x : var) (tau : ty) : (place * ty) list =
-  let rec loop (pi : place) (tau : ty) :  (place * ty) list =
-    match tau with
-    | BaseTy _ -> [(pi, tau)]
-    | TyVar _ -> [(pi, tau)]
-    | Ref (_, _, tauPrime) -> List.cons (pi, tau) (loop (Deref pi) tauPrime)
-    | Fun (_, _, _, _) -> [(pi, tau)]
-    | Array(_, _) -> [(pi, tau)]
-    | Tup(tys) ->
-      let work (acc : (place * ty) list) (pair : place * ty) =
-        let (pi, ty) = pair
-        in List.concat [acc; loop pi ty]
-      in let projs = List.mapi (fun idx -> fun ty -> (IndexProj  (pi, idx), ty)) tys
-      in List.fold_left work [(pi, tau)] projs
-  in loop (Var x) tau
+let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
+  match tau with
+  | BaseTy _ -> [(pi, tau)]
+  | TyVar _ -> [(pi, tau)]
+  | Ref (_, _, tauPrime) -> List.cons (pi, tau) (places_typ (Deref pi) tauPrime)
+  | Fun (_, _, _, _) -> [(pi, tau)]
+  | Array(_, _) -> [(pi, tau)]
+  | Tup(tys) ->
+    let work (acc : (place * ty) list) (pair : place * ty) =
+      let (pi, ty) = pair
+      in List.concat [acc; places_typ pi ty]
+    in let projs = List.mapi (fun idx -> fun ty -> (IndexProj  (pi, idx), ty)) tys
+    in List.fold_left work [(pi, tau)] projs
+
+let rec prefixed_by (target : place) (in_pi : place) : bool =
+  if target = in_pi then true
+  else match in_pi with
+  | Var x -> false
+  | Deref piPrime -> prefixed_by target piPrime
+  | FieldProj (piPrime, _) -> prefixed_by target piPrime
+  | IndexProj (piPrime, _) -> prefixed_by target piPrime
+
+let rec replace (target : place) (new_pi : place)  (in_pi : place) : place =
+  if target = in_pi then new_pi
+  else match in_pi with
+  | Var x -> Var x
+  | Deref piPrime -> Deref (replace target new_pi piPrime)
+  | FieldProj (piPrime, field) -> FieldProj (replace target new_pi piPrime, field)
+  | IndexProj (piPrime, idx) -> IndexProj (replace target new_pi piPrime, idx)
 
 (* given a root place pi, compute all the places and shapes based on v *)
-let rec compute_places_shapes (pi : place) (v : value) : (place * shape) list =
+let rec places_val (sigma : store) (pi : place) (v : value) : (place * shape) list =
   match v with
   | Prim p -> [(pi, Prim p)]
+  | Ptr (mu, piPrime) ->
+    let work (pair : place * shape) =
+      let (pi, _) = pair
+      in (replace piPrime (Deref pi) pi, Hole)
+    in let inner_places = List.filter (fun (store_pi, _) -> prefixed_by pi store_pi) sigma
+    in List.cons (pi, Ptr (mu, piPrime)) (List.map work inner_places)
   | Fun (rgnvars, tyvars, params, body) -> [(pi, Fun (rgnvars, tyvars, params, body))]
   | Tup values ->
     let work (acc : (place * shape) list) (pair : place * value) =
       let (pi, v) = pair
-      in List.concat [acc; compute_places_shapes pi v]
+      in List.concat [acc; places_val sigma pi v]
     in let projs = List.mapi (fun idx -> fun v -> (IndexProj  (pi, idx), v)) values
     in List.fold_left work [(pi, Tup (List.map (fun _ -> ()) values))] projs
   | Array values -> [(pi, Array values)]
 
+(* follow dereferences appropriately to find the pi where the non-trivial shape is located *)
+let rec handle_derefs (sigma : store) (pi : place) : place =
+  match pi with
+  | Var x -> Var x
+  | FieldProj (piPrime, field) -> FieldProj (handle_derefs sigma piPrime, field)
+  | IndexProj (piPrime, idx) -> IndexProj (handle_derefs sigma piPrime, idx)
+  | Deref piPrime ->
+    match List.assoc (handle_derefs sigma piPrime) sigma with
+    | Ptr (_, targetpi) -> targetpi
+    | _ -> failwith "malformed store"
+
 (* given a store sigma, compute the value at pi from its shape in sigma *)
-let rec compute_value (sigma : store) (pi : place) : value =
+let rec value (sigma : store) (pi : place) : value =
   match List.assoc pi sigma with
+  | Hole -> value sigma (handle_derefs sigma pi)
   | Prim p -> Prim p
+  | Ptr (mu, pi) -> Ptr (mu, pi)
   | Fun (rgnvars, tyvars, params, body) -> Fun (rgnvars, tyvars, params, body)
   | Tup boxes ->
-    let values = List.mapi (fun idx -> fun () -> compute_value sigma (IndexProj (pi, idx))) boxes
+    let values = List.mapi (fun idx -> fun () -> value sigma (IndexProj (pi, idx))) boxes
     in Tup values
   | Array values -> Array values
 
