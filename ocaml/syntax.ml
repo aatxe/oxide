@@ -83,8 +83,8 @@ type store = (place * shape) list [@@deriving show]
 
 type global_env = unit (* TODO: actual global environment definition *)
 type tyvar_env = prov_var list * ty_var list [@@deriving show]
-type var_env = (var * ty) list [@@deriving show]
+type place_env = (place * ty) list [@@deriving show]
 
-let var_env_lookup (gamma : var_env) (x : var) : ty = List.assoc x gamma
-let var_env_include (gamma : var_env) (x : var) (typ : ty) = List.cons (x, typ) gamma
-let var_env_exclude (gamma : var_env) (x : var) = List.remove_assoc x gamma
+let place_env_lookup (gamma : place_env) (x : place) : ty = List.assoc x gamma
+let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x, typ) gamma
+let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
