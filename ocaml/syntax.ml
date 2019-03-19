@@ -81,10 +81,10 @@ type shape =
 
 type store = (place * shape) list [@@deriving show]
 
-type global_env = unit (* TODO: actual global environment definition *)
-type tyvar_env = prov_var list * ty_var list [@@deriving show]
-type place_env = (place * ty) list [@@deriving show]
+type global_ctx = unit (* TODO: actual global context definition *)
+type tyvar_ctx = prov_var list * ty_var list [@@deriving show]
+type place_ctx = (place * ty) list [@@deriving show]
 
-let place_env_lookup (gamma : place_env) (x : place) : ty = List.assoc x gamma
-let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x, typ) gamma
-let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
+let place_ctx_lookup (gamma : place_ctx) (x : place) : ty = List.assoc x gamma
+let place_ctx_include (gamma : place_ctx) (x : place) (typ : ty) = List.cons (x, typ) gamma
+let place_ctx_exclude (gamma : place_ctx) (x : place) = List.remove_assoc x gamma

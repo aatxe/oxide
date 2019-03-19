@@ -17,7 +17,7 @@ let prov_to_loans (prov : prov) : loans =
   | ProvSet lns -> lns
 
 (* compute all the at-least-mu loans in a given gamma *)
-let all_loans (mu : muta) (gamma : place_env) : loans =
+let all_loans (mu : muta) (gamma : place_ctx) : loans =
   let rec work (typ : ty) (loans : loans) : loans =
     match typ with
     | BaseTy _ -> loans
@@ -50,7 +50,7 @@ let rec root_of (pi : place) : var =
   | IndexProj (pi_prime, _) -> root_of pi_prime
 
 (* find all at-least-mu loans in gamma that have to do with pi *)
-let find_loans (mu : muta) (gamma : place_env) (pi : place) : loans =
+let find_loans (mu : muta) (gamma : place_ctx) (pi : place) : loans =
   (* n.b. this is actually too permissive because of reborrowing and deref *)
   let root_of_pi = root_of pi
   in let relevant (pair : muta * place) : bool =
@@ -61,7 +61,7 @@ let find_loans (mu : muta) (gamma : place_env) (pi : place) : loans =
   in List.filter relevant (all_loans mu gamma)
 
 (* given a gamma, determines whether it is safe to use pi according to mu *)
-let is_safe (gamma : place_env) (mu : muta) (pi : place) : bool =
+let is_safe (gamma : place_ctx) (mu : muta) (pi : place) : bool =
   let subplaces_of_pi = all_subplaces pi
   in let relevant (pair : muta * place) : bool =
     (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
