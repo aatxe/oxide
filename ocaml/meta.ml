@@ -3,9 +3,9 @@ open Syntax
 (* checks if the given list is empty *)
 let is_empty (lst : 'a list) : bool = List.length lst = 0
 
-(* checks that mu_prime is at least mu *)
-let is_at_least (mu : muta) (mu_prime : muta) : bool =
-  match (mu, mu_prime) with
+(* checks that omega_prime is at least omega *)
+let is_at_least (omega : owned) (omega_prime : owned) : bool =
+  match (omega, omega_prime) with
   | (Shared, _) -> true
   | (Unique, Unique) -> true
   | (Unique, Shared) -> false
@@ -16,14 +16,14 @@ let prov_to_loans (prov : prov) : loans =
   | ProvVar _ -> []
   | ProvSet lns -> lns
 
-(* compute all the at-least-mu loans in a given gamma *)
-let all_loans (mu : muta) (gamma : place_ctx) : loans =
+(* compute all the at-least-omega loans in a given gamma *)
+let all_loans (omega : owned) (gamma : place_ctx) : loans =
   let rec work (typ : ty) (loans : loans) : loans =
     match typ with
     | BaseTy _ -> loans
     | TyVar _ -> loans
-    | Ref (prov, mu_prime, typ) ->
-      if is_at_least mu mu_prime then List.append (prov_to_loans prov) (work typ loans)
+    | Ref (prov, omega_prime, typ) ->
+      if is_at_least omega omega_prime then List.append (prov_to_loans prov) (work typ loans)
       else work typ loans
     | Fun (_, _, _, _) -> loans
     | Array (typ, _) -> work typ loans
@@ -49,28 +49,28 @@ let rec root_of (pi : place) : var =
   | FieldProj (pi_prime, _) -> root_of pi_prime
   | IndexProj (pi_prime, _) -> root_of pi_prime
 
-(* find all at-least-mu loans in gamma that have to do with pi *)
-let find_loans (mu : muta) (gamma : place_ctx) (pi : place) : loans =
+(* find all at-least-omega loans in gamma that have to do with pi *)
+let find_loans (omega : owned) (gamma : place_ctx) (pi : place) : loans =
   (* n.b. this is actually too permissive because of reborrowing and deref *)
   let root_of_pi = root_of pi
-  in let relevant (pair : muta * place) : bool =
+  in let relevant (pair : owned * place) : bool =
     (* a loan is relevant if it is a descendant of any subplace of pi *)
     let (_, pi_prime) = pair
        (* the easiest way to check is to check if their roots are the same *)
     in root_of_pi = root_of pi_prime
-  in List.filter relevant (all_loans mu gamma)
+  in List.filter relevant (all_loans omega gamma)
 
-(* given a gamma, determines whether it is safe to use pi according to mu *)
-let is_safe (gamma : place_ctx) (mu : muta) (pi : place) : bool =
+(* given a gamma, determines whether it is safe to use pi according to omega *)
+let is_safe (gamma : place_ctx) (omega : owned) (pi : place) : bool =
   let subplaces_of_pi = all_subplaces pi
-  in let relevant (pair : muta * place) : bool =
+  in let relevant (pair : owned * place) : bool =
     (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
     let (_, pi_prime) = pair
         (* either pi is an ancestor of pi_prime *)
     in List.exists (fun x -> x = pi) (all_subplaces pi_prime)
         (* or pi_prime is a subplace of pi *)
         || List.exists (fun x -> x = pi_prime) subplaces_of_pi
-  in match mu with
+  in match omega with
   | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
               is_empty (List.filter relevant (find_loans Shared gamma pi))
   | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
@@ -112,12 +112,12 @@ let rec replace (prefix : place) (new_pi : place)  (in_pi : place) : place =
 let rec places_val (sigma : store) (pi : place) (v : value) : (place * shape) list =
   match v with
   | Prim p -> [(pi, Prim p)]
-  | Ptr (mu, piPrime) ->
+  | Ptr (omega, piPrime) ->
     let work (pair : place * shape) =
       let (pi, _) = pair
       in (replace piPrime (Deref pi) pi, Hole)
     in let inner_places = List.filter (fun (store_pi, _) -> prefixed_by pi store_pi) sigma
-    in List.cons (pi, Ptr (mu, piPrime)) (List.map work inner_places)
+    in List.cons (pi, Ptr (omega, piPrime)) (List.map work inner_places)
   | Fun (provvars, tyvars, params, body) -> [(pi, Fun (provvars, tyvars, params, body))]
   | Tup values ->
     let work (acc : (place * shape) list) (pair : place * value) =
@@ -143,7 +143,7 @@ let rec value (sigma : store) (pi : place) : value =
   match List.assoc pi sigma with
   | Hole -> value sigma (handle_derefs sigma pi)
   | Prim p -> Prim p
-  | Ptr (mu, pi) -> Ptr (mu, pi)
+  | Ptr (omega, pi) -> Ptr (omega, pi)
   | Fun (provvars, tyvars, params, body) -> Fun (provvars, tyvars, params, body)
   | Tup boxes ->
     let values = List.mapi (fun idx -> fun () -> value sigma (IndexProj (pi, idx))) boxes

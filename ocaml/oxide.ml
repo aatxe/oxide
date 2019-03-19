@@ -1,9 +1,10 @@
 open Syntax
 open Meta
 
-let print_is_safe (gamma : place_ctx) (mu : muta) (pi : place) =
-  (if is_safe gamma mu pi then Format.printf "%a is %a safe in@.  %a@."
-   else Format.printf "%a is not %a safe in@.  %a@.") pp_place pi pp_muta mu pp_place_ctx gamma
+let print_is_safe (gamma : place_ctx) (omega : owned) (pi : place) =
+  (if is_safe gamma omega pi then Format.printf "%a is %a safe in@.  %a@."
+   else Format.printf "%a is not %a safe in@.  %a@.")
+    pp_place pi pp_owned omega pp_place_ctx gamma
 
 let main =
   let (x, y, _) = (Var 1, Var 2, Var 3)

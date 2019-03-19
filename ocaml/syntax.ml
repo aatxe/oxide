@@ -2,7 +2,7 @@ type var = int [@@deriving show]
 type ty_var = int [@@deriving show]
 type prov_var = int [@@deriving show]
 
-type muta = Shared | Unique [@@deriving show]
+type owned = Shared | Unique [@@deriving show]
 type place =
   | Var of var
   | Deref of place
@@ -10,8 +10,8 @@ type place =
   | IndexProj of place * int
 [@@deriving show]
 
-type loan = muta * place [@@deriving show]
-type loans = (muta * place) list [@@deriving show]
+type loan = owned * place [@@deriving show]
+type loans = (owned * place) list [@@deriving show]
 type prov =
   | ProvVar of prov_var
   | ProvSet of loans
@@ -22,7 +22,7 @@ type base_ty = Bool | U32 | Unit [@@deriving show]
 type ty =
   | BaseTy of base_ty
   | TyVar of ty_var
-  | Ref of prov * muta * ty
+  | Ref of prov * owned * ty
   | Fun of prov_var list * ty_var list * ty list * ty
   | Array of ty * int
   | Slice of ty
@@ -45,9 +45,10 @@ type prim =
 
 type expr =
   | Prim of prim
-  | Borrow of muta * place
-  | BorrowIdx of muta * place * expr
-  | BorrowSlice of muta * place * expr * expr
+  | Move of place
+  | Borrow of owned * place
+  | BorrowIdx of owned * place * expr
+  | BorrowSlice of owned * place * expr * expr
   | Let of var * ty * expr * expr
   | Assign of place * expr
   | Seq of expr * expr
@@ -59,7 +60,7 @@ type expr =
   | For of var * expr * expr
   | Tup of expr list
   | Array of expr list
-  | Ptr of muta * place
+  | Ptr of owned * place
 [@@deriving show]
 
 type value =
@@ -67,7 +68,7 @@ type value =
   | Fun of prov_var list * ty_var list * (var * ty) list * expr
   | Tup of value list
   | Array of value list
-  | Ptr of muta * place
+  | Ptr of owned * place
 [@@deriving show]
 
 type shape =
@@ -76,7 +77,7 @@ type shape =
   | Fun of prov_var list * ty_var list * (var * ty) list * expr
   | Tup of unit list
   | Array of value list
-  | Ptr of muta * place
+  | Ptr of owned * place
 [@@deriving show]
 
 type store = (place * shape) list [@@deriving show]
