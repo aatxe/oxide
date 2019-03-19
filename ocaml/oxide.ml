@@ -9,12 +9,12 @@ type place =
   | FieldProj of place * string
   | IndexProj of place * int
 [@@deriving show]
-type prov_atom =
-  | ProvVar of prov_var
-  | Loan of muta * place
-[@@deriving show]
-type prov = prov_atom list [@@deriving show]
+type loan = muta * place [@@deriving show]
 type loans = (muta * place) list [@@deriving show]
+type prov =
+  | ProvVar of prov_var
+  | ProvSet of loans
+[@@deriving show]
 
 type kind = Star | Prov [@@deriving show]
 type base_ty = Bool | U32 | Unit [@@deriving show]
@@ -91,11 +91,9 @@ let is_at_least (mu : muta) (mu_prime : muta) : bool =
 
 (* extract all the specific loans from a given region *)
 let prov_to_loans (prov : prov) : loans =
-  let work (atom : prov_atom) (loans : loans) : loans =
-    match atom with
-    | ProvVar _ -> loans
-    | Loan (muta, pi) -> List.cons (muta, pi) loans
-  in List.fold_right work prov []
+  match prov with
+  | ProvVar _ -> []
+  | ProvSet lns -> lns
 
 (* compute all the at-least-mu loans in a given gamma *)
 let all_loans (mu : muta) (gamma : var_env) : loans =
@@ -238,7 +236,7 @@ let main =
   in let u32  = BaseTy U32
   in let pi1 = Var x
   in let pi2 = IndexProj (Var x, 0)
-  in let shared_ref from ty : ty = Ref ([Loan (Shared, from)], Shared, ty)
+  in let shared_ref from ty : ty = Ref (ProvSet [(Shared, from)], Shared, ty)
   in let env1 : var_env = [(x, Tup [u32])]
   in let env2 : var_env = [(x, Tup [u32]); (y, shared_ref pi2 u32)]
   in let env3 : var_env = [(x, Tup [u32]); (y, shared_ref pi1 (Tup [u32]))]
