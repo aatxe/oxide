@@ -1,7 +1,6 @@
 type var = int [@@deriving show]
 type ty_var = int [@@deriving show]
-type rgn_var = int [@@deriving show]
-type loan_id = int [@@deriving show]
+type prov_var = int [@@deriving show]
 
 type muta = Shared | Unique [@@deriving show]
 type place =
@@ -10,20 +9,20 @@ type place =
   | FieldProj of place * string
   | IndexProj of place * int
 [@@deriving show]
-type rgn_atom =
-  | RgnVar of rgn_var
-  | Loan of loan_id * muta * place
+type prov_atom =
+  | ProvVar of prov_var
+  | Loan of muta * place
 [@@deriving show]
-type rgn = rgn_atom list [@@deriving show]
-type loans = (loan_id * muta * place) list [@@deriving show]
+type prov = prov_atom list [@@deriving show]
+type loans = (muta * place) list [@@deriving show]
 
-type kind = Star | Rgn [@@deriving show]
+type kind = Star | Prov [@@deriving show]
 type base_ty = Bool | U32 | Unit [@@deriving show]
 type ty =
   | BaseTy of base_ty
   | TyVar of ty_var
-  | Ref of rgn * muta * ty
-  | Fun of rgn_var list * ty_var list * ty list * ty
+  | Ref of prov * muta * ty
+  | Fun of prov_var list * ty_var list * ty list * ty
   | Array of ty * int
   | Tup of ty list
 [@@deriving show]
@@ -37,14 +36,14 @@ type prim =
 
 type expr =
   | Prim of prim
-  | Borrow of loan_id * muta * place
-  | BorrowIdx of loan_id * muta * place * expr
-  | BorrowSlice of loan_id * muta * place * expr * expr
+  | Borrow of muta * place
+  | BorrowIdx of muta * place * expr
+  | BorrowSlice of muta * place * expr * expr
   | Let of var * ty * expr * expr
   | Assign of place * expr
   | Seq of expr * expr
-  | Fun of rgn_var list * ty_var list * (var * ty) list * expr
-  | App of expr * rgn list * ty list * expr list
+  | Fun of prov_var list * ty_var list * (var * ty) list * expr
+  | App of expr * prov list * ty list * expr list
   | Idx of place * expr
   | Abort of string
   | Branch of expr * expr * expr
@@ -56,7 +55,7 @@ type expr =
 
 type value =
   | Prim of prim
-  | Fun of rgn_var list * ty_var list * (var * ty) list * expr
+  | Fun of prov_var list * ty_var list * (var * ty) list * expr
   | Tup of value list
   | Array of value list
   | Ptr of muta * place
@@ -65,7 +64,7 @@ type value =
 type shape =
   | Hole
   | Prim of prim
-  | Fun of rgn_var list * ty_var list * (var * ty) list * expr
+  | Fun of prov_var list * ty_var list * (var * ty) list * expr
   | Tup of unit list
   | Array of value list
   | Ptr of muta * place
@@ -74,7 +73,7 @@ type shape =
 type store = (place * shape) list [@@deriving show]
 
 type global_env = unit (* TODO: actual global environment definition *)
-type tyvar_env = rgn_var list * ty_var list [@@deriving show]
+type tyvar_env = prov_var list * ty_var list [@@deriving show]
 type var_env = (var * ty) list [@@deriving show]
 
 let var_env_lookup (gamma : var_env) (x : var) : ty = List.assoc x gamma
@@ -91,12 +90,12 @@ let is_at_least (mu : muta) (mu_prime : muta) : bool =
   | (Unique, Shared) -> false
 
 (* extract all the specific loans from a given region *)
-let rgn_to_loans (rgn : rgn) : loans =
-  let work (atom : rgn_atom) (loans : loans) : loans =
+let prov_to_loans (prov : prov) : loans =
+  let work (atom : prov_atom) (loans : loans) : loans =
     match atom with
-    | RgnVar _ -> loans
-    | Loan (id, muta, pi) -> List.cons (id, muta, pi) loans
-  in List.fold_right work rgn []
+    | ProvVar _ -> loans
+    | Loan (muta, pi) -> List.cons (muta, pi) loans
+  in List.fold_right work prov []
 
 (* compute all the at-least-mu loans in a given gamma *)
 let all_loans (mu : muta) (gamma : var_env) : loans =
@@ -104,8 +103,8 @@ let all_loans (mu : muta) (gamma : var_env) : loans =
     match typ with
     | BaseTy _ -> loans
     | TyVar _ -> loans
-    | Ref (rgn, mu_prime, typ) ->
-      if is_at_least mu mu_prime then List.append (rgn_to_loans rgn) (work typ loans)
+    | Ref (prov, mu_prime, typ) ->
+      if is_at_least mu mu_prime then List.append (prov_to_loans prov) (work typ loans)
       else work typ loans
     | Fun (_, _, _, _) -> loans
     | Array (typ, _) -> work typ loans
@@ -134,9 +133,9 @@ let rec root_of (pi : place) : var =
 let find_loans (mu : muta) (gamma : var_env) (pi : place) : loans =
   (* n.b. this is actually too permissive because of reborrowing and deref *)
   let root_of_pi = root_of pi
-  in let relevant (pair : loan_id * muta * place) : bool =
+  in let relevant (pair : muta * place) : bool =
     (* a loan is relevant if it is a descendant of any subplace of pi *)
-    let (_, _, pi_prime) = pair
+    let (_, pi_prime) = pair
        (* the easiest way to check is to check if their roots are the same *)
     in root_of_pi = root_of pi_prime
   in List.filter relevant (all_loans mu gamma)
@@ -144,9 +143,9 @@ let find_loans (mu : muta) (gamma : var_env) (pi : place) : loans =
 (* given a gamma, determines whether it is safe to use pi according to mu *)
 let is_safe (gamma : var_env) (mu : muta) (pi : place) : bool =
   let subplaces_of_pi = all_subplaces pi
-  in let relevant (pair : loan_id * muta * place) : bool =
+  in let relevant (pair : muta * place) : bool =
     (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
-    let (_, _, pi_prime) = pair
+    let (_, pi_prime) = pair
         (* either pi is an ancestor of pi_prime *)
     in List.exists (fun x -> x = pi) (all_subplaces pi_prime)
         (* or pi_prime is a subplace of pi *)
@@ -175,7 +174,7 @@ let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
 let rec prefixed_by (target : place) (in_pi : place) : bool =
   if target = in_pi then true
   else match in_pi with
-  | Var x -> false
+  | Var _ -> false
   | Deref piPrime -> prefixed_by target piPrime
   | FieldProj (piPrime, _) -> prefixed_by target piPrime
   | IndexProj (piPrime, _) -> prefixed_by target piPrime
@@ -198,7 +197,7 @@ let rec places_val (sigma : store) (pi : place) (v : value) : (place * shape) li
       in (replace piPrime (Deref pi) pi, Hole)
     in let inner_places = List.filter (fun (store_pi, _) -> prefixed_by pi store_pi) sigma
     in List.cons (pi, Ptr (mu, piPrime)) (List.map work inner_places)
-  | Fun (rgnvars, tyvars, params, body) -> [(pi, Fun (rgnvars, tyvars, params, body))]
+  | Fun (provvars, tyvars, params, body) -> [(pi, Fun (provvars, tyvars, params, body))]
   | Tup values ->
     let work (acc : (place * shape) list) (pair : place * value) =
       let (pi, v) = pair
@@ -224,7 +223,7 @@ let rec value (sigma : store) (pi : place) : value =
   | Hole -> value sigma (handle_derefs sigma pi)
   | Prim p -> Prim p
   | Ptr (mu, pi) -> Ptr (mu, pi)
-  | Fun (rgnvars, tyvars, params, body) -> Fun (rgnvars, tyvars, params, body)
+  | Fun (provvars, tyvars, params, body) -> Fun (provvars, tyvars, params, body)
   | Tup boxes ->
     let values = List.mapi (fun idx -> fun () -> value sigma (IndexProj (pi, idx))) boxes
     in Tup values
@@ -239,10 +238,10 @@ let main =
   in let u32  = BaseTy U32
   in let pi1 = Var x
   in let pi2 = IndexProj (Var x, 0)
-  in let shared_ref id from ty : ty = Ref ([Loan (id, Shared, from)], Shared, ty)
+  in let shared_ref from ty : ty = Ref ([Loan (Shared, from)], Shared, ty)
   in let env1 : var_env = [(x, Tup [u32])]
-  in let env2 : var_env = [(x, Tup [u32]); (y, shared_ref 1 pi2 u32)]
-  in let env3 : var_env = [(x, Tup [u32]); (y, shared_ref 1 pi1 (Tup [u32]))]
+  in let env2 : var_env = [(x, Tup [u32]); (y, shared_ref pi2 u32)]
+  in let env3 : var_env = [(x, Tup [u32]); (y, shared_ref pi1 (Tup [u32]))]
   in begin
     print_is_safe env1 Unique pi1;
     print_is_safe env1 Unique pi2;
