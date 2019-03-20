@@ -17,7 +17,7 @@ let prov_to_loans (prov : prov) : loans =
   | ProvSet lns -> lns
 
 (* compute all the at-least-omega loans in a given gamma *)
-let all_loans (omega : owned) (gamma : place_ctx) : loans =
+let all_loans (omega : owned) (gamma : place_env) : loans =
   let rec work (typ : ty) (loans : loans) : loans =
     match typ with
     | BaseTy _ -> loans
@@ -50,7 +50,7 @@ let rec root_of (pi : place) : var =
   | IndexProj (pi_prime, _) -> root_of pi_prime
 
 (* find all at-least-omega loans in gamma that have to do with pi *)
-let find_loans (omega : owned) (gamma : place_ctx) (pi : place) : loans =
+let find_loans (omega : owned) (gamma : place_env) (pi : place) : loans =
   (* n.b. this is actually too permissive because of reborrowing and deref *)
   let root_of_pi = root_of pi
   in let relevant (pair : owned * place) : bool =
@@ -61,7 +61,7 @@ let find_loans (omega : owned) (gamma : place_ctx) (pi : place) : loans =
   in List.filter relevant (all_loans omega gamma)
 
 (* given a gamma, determines whether it is safe to use pi according to omega *)
-let is_safe (gamma : place_ctx) (omega : owned) (pi : place) : bool =
+let is_safe (gamma : place_env) (omega : owned) (pi : place) : bool =
   let subplaces_of_pi = all_subplaces pi
   in let relevant (pair : owned * place) : bool =
     (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
@@ -93,10 +93,10 @@ let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
     in List.fold_left work [(pi, tau)] projs
 
 (* remove the whole set of identifiers rooted at the place pi from gamma *)
-let place_ctx_subtract (gamma : place_ctx) (pi : place) : place_ctx =
-  let gammaSub = places_typ pi (place_ctx_lookup gamma pi)
+let place_env_subtract (gamma : place_env) (pi : place) : place_env =
+  let gammaSub = places_typ pi (place_env_lookup gamma pi)
   in let ids = List.map (fun (pi, _) -> pi) gammaSub
-  in List.fold_left place_ctx_exclude gamma ids
+  in List.fold_left place_env_exclude gamma ids
 
 let rec prefixed_by (target : place) (in_pi : place) : bool =
   if target = in_pi then true
