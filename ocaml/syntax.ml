@@ -95,7 +95,7 @@ let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x,
 let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
 
 type tc_error =
-  | TypeMismatch of source_loc * ty * ty
+  | TypeMismatch of source_loc * ty * ty (* source_loc * expected * found *)
   | SafetyErr of source_loc * owned * place
 
 type 'a tc =

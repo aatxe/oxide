@@ -16,5 +16,17 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : place_env) (exp
       (match omega_safe gamma omega pi with
        | Some ty -> Succ (Ref (ProvSet [(omega, pi)], omega, ty), gamma)
        | None -> Fail (SafetyErr (fst expr, omega, pi)))
+    | Seq (e1, e2) ->
+      (match tc delta gamma e1 with
+       | Succ (_, gamma1) -> tc delta gamma1 e2
+       | Fail err -> Fail err)
+    | Branch (e1, e2, e3) ->
+      (match tc delta gamma e1 with
+       | Succ (BaseTy Bool, gamma1) ->
+         (match (tc delta gamma1 e2, tc delta gamma1 e3) with
+          | (Succ (ty2, gamma2), Succ (ty3, gamma3)) -> failwith "unimplemented"
+          | (Fail err, _) | (_, Fail err) -> Fail err)
+       | Succ (found, _) -> Fail (TypeMismatch (fst e1, BaseTy Bool, found))
+       | Fail err -> Fail err)
   | _ -> failwith "unimplemented"
   in tc delta gamma expr
