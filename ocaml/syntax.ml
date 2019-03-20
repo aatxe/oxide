@@ -1,3 +1,4 @@
+type source_loc = int * int [@@deriving show]
 type var = int [@@deriving show]
 type ty_var = int [@@deriving show]
 type prov_var = int [@@deriving show]
@@ -30,6 +31,8 @@ type ty =
 [@@deriving show]
 and place_env = (place * ty) list [@@deriving show]
 
+type ann_ty = source_loc * ty [@@deriving show]
+
 (* is the given type a sized type? *)
 let is_sized (typ : ty) : bool =
   (* this exists so that we don't have to stratify our types *)
@@ -44,17 +47,17 @@ type prim =
   | False
 [@@deriving show]
 
-type expr =
+type preexpr =
   | Prim of prim
   | Move of place
   | Borrow of owned * place
   | BorrowIdx of owned * place * expr
   | BorrowSlice of owned * place * expr * expr
-  | Let of var * ty * expr * expr
+  | Let of var * ann_ty * expr * expr
   | Assign of place * expr
   | Seq of expr * expr
-  | Fun of prov_var list * ty_var list * (var * ty) list * expr
-  | App of expr * prov list * ty list * expr list
+  | Fun of prov_var list * ty_var list * (var * ann_ty) list * expr
+  | App of expr * prov list * ann_ty list * expr list
   | Idx of place * expr
   | Abort of string
   | Branch of expr * expr * expr
@@ -62,11 +65,12 @@ type expr =
   | Tup of expr list
   | Array of expr list
   | Ptr of owned * place
+and expr = source_loc * preexpr
 [@@deriving show]
 
 type value =
   | Prim of prim
-  | Fun of prov_var list * ty_var list * (var * ty) list * expr
+  | Fun of prov_var list * ty_var list * (var * ann_ty) list * expr
   | Tup of value list
   | Array of value list
   | Ptr of owned * place
@@ -75,7 +79,7 @@ type value =
 type shape =
   | Hole
   | Prim of prim
-  | Fun of prov_var list * ty_var list * (var * ty) list * expr
+  | Fun of prov_var list * ty_var list * (var * ann_ty) list * expr
   | Tup of unit list
   | Array of value list
   | Ptr of owned * place
@@ -89,3 +93,11 @@ type tyvar_env = prov_var list * ty_var list [@@deriving show]
 let place_env_lookup (gamma : place_env) (x : place) : ty = List.assoc x gamma
 let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x, typ) gamma
 let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
+
+type tc_error =
+  | TypeMismatch of source_loc * ty * ty
+  | SafetyErr of source_loc * owned * place
+
+type 'a tc =
+  | Succ of 'a
+  | Fail of tc_error
