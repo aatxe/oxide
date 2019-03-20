@@ -23,11 +23,12 @@ type ty =
   | BaseTy of base_ty
   | TyVar of ty_var
   | Ref of prov * owned * ty
-  | Fun of prov_var list * ty_var list * ty list * ty
+  | Fun of prov_var list * ty_var list * ty list * place_ctx * ty
   | Array of ty * int
   | Slice of ty
   | Tup of ty list
 [@@deriving show]
+and place_ctx = (place * ty) list [@@deriving show]
 
 (* is the given type a sized type? *)
 let is_sized (typ : ty) : bool =
@@ -84,7 +85,6 @@ type store = (place * shape) list [@@deriving show]
 
 type global_ctx = unit (* TODO: actual global context definition *)
 type tyvar_ctx = prov_var list * ty_var list [@@deriving show]
-type place_ctx = (place * ty) list [@@deriving show]
 
 let place_ctx_lookup (gamma : place_ctx) (x : place) : ty = List.assoc x gamma
 let place_ctx_include (gamma : place_ctx) (x : place) (typ : ty) = List.cons (x, typ) gamma

@@ -25,7 +25,7 @@ let all_loans (omega : owned) (gamma : place_ctx) : loans =
     | Ref (prov, omega_prime, typ) ->
       if is_at_least omega omega_prime then List.append (prov_to_loans prov) (work typ loans)
       else work typ loans
-    | Fun (_, _, _, _) -> loans
+    | Fun (_, _, _, _, _) -> loans
     | Array (typ, _) -> work typ loans
     | Slice typ -> work typ loans
     | Tup typs -> List.fold_right List.append (List.map (fun typ -> work typ []) typs) loans
@@ -82,7 +82,7 @@ let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
   | BaseTy _ -> [(pi, tau)]
   | TyVar _ -> [(pi, tau)]
   | Ref (_, _, tauPrime) -> List.cons (pi, tau) (places_typ (Deref pi) tauPrime)
-  | Fun (_, _, _, _) -> [(pi, tau)]
+  | Fun (_, _, _, _, _) -> [(pi, tau)]
   | Array(_, _) -> [(pi, tau)]
   | Slice(_)  -> [(pi, tau)]
   | Tup(tys) ->
@@ -91,6 +91,12 @@ let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
       in List.concat [acc; places_typ pi ty]
     in let projs = List.mapi (fun idx -> fun ty -> (IndexProj  (pi, idx), ty)) tys
     in List.fold_left work [(pi, tau)] projs
+
+(* remove the whole set of identifiers rooted at the place pi from gamma *)
+let place_ctx_subtract (gamma : place_ctx) (pi : place) : place_ctx =
+  let gammaSub = places_typ pi (place_ctx_lookup gamma pi)
+  in let ids = List.map (fun (pi, _) -> pi) gammaSub
+  in List.fold_left place_ctx_exclude gamma ids
 
 let rec prefixed_by (target : place) (in_pi : place) : bool =
   if target = in_pi then true
@@ -149,3 +155,16 @@ let rec value (sigma : store) (pi : place) : value =
     let values = List.mapi (fun idx -> fun () -> value sigma (IndexProj (pi, idx))) boxes
     in Tup values
   | Array values -> Array values
+
+let rec noncopyable (typ : ty) : bool =
+  match typ with
+  | BaseTy _ -> false
+  | TyVar _ -> true
+  | Ref (_, Unique, _) -> true
+  | Ref (_, Shared, typPrime) -> noncopyable typPrime
+  | Fun (_, _, _, _, _) -> false
+  | Array (typPrime, _) -> noncopyable typPrime
+  | Slice typPrime -> noncopyable typPrime
+  | Tup typs -> List.for_all noncopyable typs
+
+let copyable (typ : ty) : bool = not (noncopyable typ)
