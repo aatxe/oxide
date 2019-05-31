@@ -5,8 +5,12 @@ let rec omega_safe (gamma : place_env) (omega : owned) (pi : place) : ty option 
   if is_safe gamma omega pi then Some (List.assoc pi gamma)
   else None
 
-let type_check (sigma : global_env) (delta : tyvar_env) (gamma : place_env) (expr : expr) : (ty * place_env) tc =
-  let rec tc (delta : tyvar_env) (gamma : place_env) (expr : expr) : (ty * place_env) tc =
+let unify (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env * ty = failwith "unimplemented"
+
+let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
+               (expr : expr) : (ty * loan_env * place_env) tc =
+  let rec tc (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
+             (expr : expr) : (ty * place_env) tc =
     match snd expr with
     | Move pi ->
       (match omega_safe gamma Unique pi with
