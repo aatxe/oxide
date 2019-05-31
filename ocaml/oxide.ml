@@ -1,5 +1,6 @@
 open Syntax
 open Meta
+open Typeck
 
 let print_is_safe (ell : loan_env )(gamma : place_env) (omega : owned) (pi : place) =
   (if is_safe ell gamma omega pi then Format.printf "%a is %a safe in@.  %a@."

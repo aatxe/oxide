@@ -55,9 +55,9 @@ type prim =
 type preexpr =
   | Prim of prim
   | Move of place_expr
-  | Borrow of prov_var * owned * place
-  | BorrowIdx of prov_var * owned * place * expr
-  | BorrowSlice of prov_var * owned * place * expr * expr
+  | Borrow of prov_var * owned * place_expr
+  | BorrowIdx of prov_var * owned * place_expr * expr
+  | BorrowSlice of prov_var * owned * place_expr * expr * expr
   | Let of var * ann_ty * expr * expr
   | Assign of place_expr * expr
   | Seq of expr * expr
@@ -95,8 +95,12 @@ type store = (place * shape) list [@@deriving show]
 type global_env = unit (* TODO: actual global context definition *)
 type tyvar_env = prov_var list * ty_var list [@@deriving show]
 type loan_env = (prov_var * loans) list [@@deriving show]
-(* place_env is mutually recursive with ty and as such, is defined above *)
 
+let loan_env_lookup (ell : loan_env) (var : prov_var) : loans = List.assoc var ell
+let loan_env_include (ell : loan_env) (var : prov_var) (loans : loans) = List.cons (var, loans) ell
+let loan_env_exclude (ell : loan_env) (var : prov_var) = List.remove_assoc var ell
+
+(* place_env is mutually recursive with ty and as such, is defined above *)
 let place_env_lookup (gamma : place_env) (x : place) : ty = List.assoc x gamma
 let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x, typ) gamma
 let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
