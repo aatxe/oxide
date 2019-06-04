@@ -58,6 +58,7 @@ type preexpr =
   | Borrow of prov_var * owned * place_expr
   | BorrowIdx of prov_var * owned * place_expr * expr
   | BorrowSlice of prov_var * owned * place_expr * expr * expr
+  | LetProv of prov_var list * expr
   | Let of var * ann_ty * expr * expr
   | Assign of place_expr * expr
   | Seq of expr * expr

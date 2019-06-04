@@ -16,11 +16,18 @@ let intersect (envs1 : loan_env * place_env) (envs2 : loan_env * place_env) : lo
 let valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (ty : ty) : () tc =
   failwith "unimplemented"
 
+let type_of (prim : prim) : ty =
+  match prim with
+  | Unit -> BaseTy Unit
+  | Num _ -> BaseTy U32
+  | True | False -> BaseTy Bool
+
 let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
                (expr : expr) : (ty * loan_env * place_env) tc =
   let rec tc (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
              (expr : expr) : (ty * loan_env * place_env) tc =
     match snd expr with
+    | Prim prim -> (type_of prim, ell, gamma)
     | Move pi ->
       (match omega_safe ell gamma Unique pi with
        | Some (ty, _) -> Succ (ty, ell, if noncopyable ty then place_env_subtract gamma pi else gamma)
@@ -66,5 +73,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
           | (Fail err, _) | (_, Fail err) -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatch (fst e1, BaseTy Bool, found))
        | Fail err -> Fail err)
+    | LetProv (new_provars, e) ->
+      let (provars, tyvars) = delta
+      in tc (List.append new_provars provars, tyvars) ell gamma e
   | _ -> failwith "unimplemented"
   in tc delta ell gamma expr
