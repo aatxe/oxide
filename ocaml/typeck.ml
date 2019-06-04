@@ -56,6 +56,17 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
           | Fail err -> Fail err)
        | Some (found, _, _) -> Fail (TypeMismatch (fst e1, BaseTy U32, found))
        | Fail err -> Fail err)
+    | Idx (pi, e) ->
+      (match tc delta ell gamma e with
+       | Some (BaseTy U32, ell1, gamma1) ->
+         (match omega_safe ell1 gamma1 Shrd pi with
+          | Some (Array (ty, _), loans) ->
+            if copyable ty then Succ (ty, loan_env_include ell prov loans, gamma)
+            else Fail (CannotMove (fst expr, pi))
+          | Some (found, _, _) -> Fail (TypeMisMatch (fst expr, Array (TyVar -1, -1), found))
+          | None -> Fail (SafetyErr (fst expr, omega, pi)))
+       | Some (found, _, _) -> Fail (TypeMismatch (fst e, BaseTy U32, found))
+       | Fail err -> Fail err)
     | Seq (e1, e2) ->
       (match tc delta ell gamma e1 with
        | Succ (_, ell1, gamma1) -> tc delta ell1 gamma1 e2

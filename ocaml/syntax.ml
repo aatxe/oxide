@@ -109,6 +109,7 @@ let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamm
 type tc_error =
   | TypeMismatch of source_loc * ty * ty (* source_loc * expected * found *)
   | SafetyErr of source_loc * owned * place
+  | CannotMove of source_loc * place_expr
 
 type 'a tc =
   | Succ of 'a
