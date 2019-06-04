@@ -29,6 +29,26 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       (match omega_safe ell gamma omega pi with
        | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
        | None -> Fail (SafetyErr (fst expr, omega, pi)))
+    | BorrowIdx (prov, omega, pi, e) ->
+      (match tc delta ell gamma e1 with
+       | Some (BaseTy U32, ell1, gamma1) ->
+         (match omega_safe ell1 gamma1 omega pi with
+          | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
+          | None -> Fail (SafetyErr (fst expr, omega, pi)))
+       | Some (found, _, _) -> Fail (TypeMismatch (fst e, BaseTy U32, found))
+       | Fail err -> Fail err)
+    | BorrowSlice (prov, omega, pi, e1, e2) ->
+      (match tc delta ell gamma e1 with
+       | Some (BaseTy U32, ell1, gamma1) ->
+         (match tc delta ell1 gamma1 e2 with
+          | Some (BaseTy U32, ell2, gamma2) ->
+            (match omega_safe ell2 gamma2 omega pi with
+             | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
+             | None -> Fail (SafetyErr (fst expr, omega, pi)))
+          | Some (found, _, _) -> Fail (TypeMismatch (fst e2, BaseTy U32, found))
+          | Fail err -> Fail err)
+       | Some (found, _, _) -> Fail (TypeMismatch (fst e1, BaseTy U32, found))
+       | Fail err -> Fail err)
     | Seq (e1, e2) ->
       (match tc delta ell gamma e1 with
        | Succ (_, ell1, gamma1) -> tc delta ell1 gamma1 e2
