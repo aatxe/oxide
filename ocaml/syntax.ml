@@ -110,6 +110,7 @@ type tc_error =
   | TypeMismatch of source_loc * ty * ty (* source_loc * expected * found *)
   | SafetyErr of source_loc * owned * place
   | CannotMove of source_loc * place_expr
+  | UnificationFailed of ty * ty
 
 type 'a tc =
   | Succ of 'a

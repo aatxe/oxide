@@ -6,7 +6,53 @@ let omega_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place_
   (* if is_safe ell gamma omega pi then Some (List.assoc pi gamma)
    * else None *)
 
-let unify (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env * ty = failwith "unimplemented"
+let unify_prov (ell : loan_env) (prov1 : prov) (prov2 : prov) : loan_env * prov =
+  match (prov1, prov2) with
+  | (ProvVar v1, ProvVar v2) ->
+    let (rep1, rep2) = (loan_env_lookup ell v1, loan_env_lookup ell v2)
+    in (loan_env_include ell v1 (List.append rep1 rep2), prov1)
+  | (ProvSet loans1, ProvSet loans2) -> (ell, ProvSet (List.append loans1 loans2))
+  | _ ->  failwith "unreachable?"
+
+let unify (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env * ty) option =
+  let rec uni (ell : loan_env) (ty1 : ty) (ty2 : ty) (swapped : bool) : (loan_env * ty) option =
+    match (ty1, ty2, swapped) with
+    | (BaseTy bt1, BaseTy bt2, _) -> if bt1 = bt2 then Some (ell, BaseTy bt1) else None
+    | (TyVar v1, TyVar v2, _) -> if v1 = v2 then Some (ell, TyVar v1) else None
+    | (Array (t1, m), Array (t2, n), _) ->
+      if m = n then
+        match uni ell t1 t2 false with
+        | Some (ellPrime, ty) -> Some (ellPrime, Array (ty, n))
+        | None -> None
+      else None
+    | (Slice t1, Slice t2, _) ->
+      (match uni ell t1 t2 false with
+       | Some (ellPrime, ty) -> Some (ellPrime, Slice ty)
+       | None -> None)
+    | (Tup tys1, Tup tys2, _) ->
+      (let work (acc : (loan_env * ty list) option) (tys : ty * ty) =
+         match acc with
+         | None -> None
+         | Some (ell, tylst) ->
+           (let (ty1, ty2) = tys
+            in match uni ell ty1 ty2 false with
+            | Some (ellPrime, ty) -> Some (ellPrime, List.append tylst [ty])
+            | None -> None)
+       in match List.fold_left work (Some (ell, [])) (List.combine tys1 tys2) with
+       | Some (ellPrime, tys) -> Some (ellPrime, Tup tys)
+       | None -> None)
+    | (Ref (v1, o1, t1), Ref (v2, o2, t2), _) ->
+      if o1 = o2 then
+        match unify_prov ell (ProvVar v1) (ProvVar v2) with
+        | (_, ProvSet _) -> failwith "unreachable"
+        | (ellPrime, ProvVar prov) ->
+          match uni ellPrime t1 t2 false with
+          | Some (ellFinal, ty) -> Some (ellFinal, Ref (prov, o1, ty))
+          | None -> None
+      else None
+    | (ty1, ty2, false) -> uni ell ty2 ty1 true
+    | (_, _, true) -> None
+  in uni ell ty1 ty2 false
 
 let intersect (envs1 : loan_env * place_env) (envs2 : loan_env * place_env) : loan_env * place_env =
   let (ell1, gamma1) = envs1
