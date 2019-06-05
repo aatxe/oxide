@@ -84,34 +84,34 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | None -> Fail (SafetyErr (fst expr, omega, pi)))
     | BorrowIdx (prov, omega, pi, e) ->
       (match tc delta ell gamma e1 with
-       | Some (BaseTy U32, ell1, gamma1) ->
+       | Succ (BaseTy U32, ell1, gamma1) ->
          (match omega_safe ell1 gamma1 omega pi with
           | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
           | None -> Fail (SafetyErr (fst expr, omega, pi)))
-       | Some (found, _, _) -> Fail (TypeMismatch (fst e, BaseTy U32, found))
+       | Succ (found, _, _) -> Fail (TypeMismatch (fst e, BaseTy U32, found))
        | Fail err -> Fail err)
     | BorrowSlice (prov, omega, pi, e1, e2) ->
       (match tc delta ell gamma e1 with
-       | Some (BaseTy U32, ell1, gamma1) ->
+       | Succ (BaseTy U32, ell1, gamma1) ->
          (match tc delta ell1 gamma1 e2 with
-          | Some (BaseTy U32, ell2, gamma2) ->
+          | Succ (BaseTy U32, ell2, gamma2) ->
             (match omega_safe ell2 gamma2 omega pi with
              | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
              | None -> Fail (SafetyErr (fst expr, omega, pi)))
-          | Some (found, _, _) -> Fail (TypeMismatch (fst e2, BaseTy U32, found))
+          | Succ (found, _, _) -> Fail (TypeMismatch (fst e2, BaseTy U32, found))
           | Fail err -> Fail err)
-       | Some (found, _, _) -> Fail (TypeMismatch (fst e1, BaseTy U32, found))
+       | Succ (found, _, _) -> Fail (TypeMismatch (fst e1, BaseTy U32, found))
        | Fail err -> Fail err)
     | Idx (pi, e) ->
       (match tc delta ell gamma e with
-       | Some (BaseTy U32, ell1, gamma1) ->
+       | Succ (BaseTy U32, ell1, gamma1) ->
          (match omega_safe ell1 gamma1 Shrd pi with
           | Some (Array (ty, _), loans) ->
             if copyable ty then Succ (ty, loan_env_include ell prov loans, gamma)
             else Fail (CannotMove (fst expr, pi))
-          | Some (found, _, _) -> Fail (TypeMisMatch (fst expr, Array (TyVar -1, -1), found))
+          | Succ (found, _, _) -> Fail (TypeMisMatch (fst expr, Array (TyVar -1, -1), found))
           | None -> Fail (SafetyErr (fst expr, omega, pi)))
-       | Some (found, _, _) -> Fail (TypeMismatch (fst e, BaseTy U32, found))
+       | Succ (found, _, _) -> Fail (TypeMismatch (fst e, BaseTy U32, found))
        | Fail err -> Fail err)
     | Seq (e1, e2) ->
       (match tc delta ell gamma e1 with
@@ -132,6 +132,20 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Fail err -> Fail err)
     | LetProv (new_provars, e) ->
       let (provars, tyvars) = delta
-      in tc (List.append new_provars provars, tyvars) ell gamma e
+      in let to_loan_entry (var : provar) : provar * loans = (var, [])
+      in let deltaPrime = (List.append new_provars provars, tyvars)
+      in let ellPrime = List.append (List.map to_loan_entry provars) ell
+      in tc deltaPrime ellPrime gamma e
+    | Let (var, ann_ty, e1, e2) ->
+      (match tc delta ell gamma e1 with
+       | Succ (ty1, ell1, gamma1) ->
+         (match unify ell1 ty1 ann_ty with
+          | Some (ell1Prime, ty) ->
+            let gam_ext = places_typ (Var var) ty
+            in (match tc delta ell1 (List.append gam_ext gamma1) with
+                | Succ (ty2, ell2, gamma2) -> (ty2, ell2, place_enc_exclude gamma (Var var))
+                | Fail err -> Fail err)
+          | None -> Fail (UnificationFailed (ty1, ann_ty)))
+       | Fail err -> Fail err)
   | _ -> failwith "unimplemented"
   in tc delta ell gamma expr
