@@ -147,5 +147,20 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
                 | Fail err -> Fail err)
           | None -> Fail (UnificationFailed (ty1, ann_ty)))
        | Fail err -> Fail err)
+    | Assign (pi, e) ->
+      (match omega_safe ell gamma Uniq pi with
+       | Some (ty_old, loans) ->
+         (match tc delta ell gamma e with
+          | Succ (ty_update, ell1, gamma1) ->
+            (match unify ell1 ty_old ty_update with
+             | Some (ellPrime, ty_new) ->
+               let places = List.map snd loans
+               in let work (acc : place_env) (pi : place) =
+                    List.append (places_typ pi ty_new) acc
+               in let gammaPrime = List.fold_left work gamma1 places
+               in Succ (BaseTy Unit, ellPrime, gammaPrime)
+             | None -> Fail (UnificationFailed (ty_old, ty_update)))
+          | Fail err -> Fail err)
+       | None -> Fail (SafetyErr (fst expr, Uniq, pi)))
   | _ -> failwith "unimplemented"
   in tc delta ell gamma expr
