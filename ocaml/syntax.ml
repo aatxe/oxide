@@ -1,6 +1,7 @@
 type source_loc = int * int [@@deriving show]
 type var = int [@@deriving show]
 type ty_var = int [@@deriving show]
+type fn_var = int [@@deriving show]
 type prov_var = int [@@deriving show]
 
 type owned = Shared | Unique [@@deriving show]
@@ -62,6 +63,7 @@ type preexpr =
   | Let of var * ann_ty * expr * expr
   | Assign of place_expr * expr
   | Seq of expr * expr
+  | Fn of fn_var
   | Fun of prov_var list * ty_var list * (var * ann_ty) list * expr
   | App of expr * prov list * ann_ty list * expr list
   | Idx of place_expr * expr
@@ -93,7 +95,21 @@ type shape =
 
 type store = (place * shape) list [@@deriving show]
 
-type global_env = unit (* TODO: actual global context definition *)
+type fn_def = fn_var * prov_var list * ty_var list * (var * ty) list * ty * expr
+type global_entry =
+  | FnDef of fn_def
+[@@deriving show]
+
+type global_env = global_entry list [@@deriving show]
+
+let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
+  let is_right_fn (entry : global_entry) : bool =
+    match entry with
+    | FnDef (fn_here, _, _, _, _, _) -> fn_here = fn
+  in match List.find_opt is_right_fn sigma with
+  | Some (FnDef defn) -> Some defn
+  | _ -> None
+
 type tyvar_env = prov_var list * ty_var list [@@deriving show]
 type loan_env = (prov_var * loans) list [@@deriving show]
 
@@ -114,6 +130,7 @@ type tc_error =
   | SafetyErr of source_loc * owned * place
   | CannotMove of source_loc * place_expr
   | UnificationFailed of ty * ty
+  | UnknownFunction of source_loc * fn_var
 
 type 'a tc =
   | Succ of 'a

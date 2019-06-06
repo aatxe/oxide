@@ -187,5 +187,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
              | Fail err -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatchIterable (fst e1, found))
        | Fail err -> Fail err)
+    | Fn fn ->
+      (match global_env_find_fn sigma fn with
+       | Some (fn, provs, tyvars, params, ret_ty, _) ->
+         Succ (Fun (provs, tyvars, List.map snd params, [], ret_ty))
+       | None -> Fail (UnknownFunction (fst expr, fn)))
   | _ -> failwith "unimplemented"
   in tc delta ell gamma expr
