@@ -59,6 +59,10 @@ let intersect (envs1 : loan_env * place_env) (envs2 : loan_env * place_env) : lo
   in let (ell2, gamma2) = envs2
   in failwith "unimplemented"
 
+let place_env_diff (gam1 : place_env) (gam2 : place_env) : place_env =
+  let not_in_gam2 (entry1 : place * ty) = not (List.exists (fun entry2 -> fst entry2 = fst entry1) gam2)
+  in List.filter not_in_gam2 gam1
+
 let valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (ty : ty) : () tc =
   failwith "unimplemented"
 
@@ -192,5 +196,15 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Some (fn, provs, tyvars, params, ret_ty, _) ->
          Succ (Fun (provs, tyvars, List.map snd params, [], ret_ty))
        | None -> Fail (UnknownFunction (fst expr, fn)))
+    | Fun (provs, tyvars, params, body) ->
+      let places_type_u (pair : place * ty) = places_typ (fst pair) (snd pair)
+      in let gam_ext = List.fold List.append [] (List.map places_typ_u params)
+      in let deltaPrime = (List.append provs (fst delta), List.append tyvars (snd delta))
+      in (match tc deltaPrime ell (List.append gam_ext gamma) body with
+          | Succ (ret_ty, ellPrime, gammaPrime) ->
+            let gamma_c = place_env_diff gamma gammaPrime
+            in Succ (Fun (provs, tyvars, List.map snd params, gamma_c, ret_ty),
+                     ellPrime, gammaPrime)
+          | Fail err -> Fail err)
   | _ -> failwith "unimplemented"
   in tc delta ell gamma expr
