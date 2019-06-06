@@ -162,5 +162,30 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
              | None -> Fail (UnificationFailed (ty_old, ty_update)))
           | Fail err -> Fail err)
        | None -> Fail (SafetyErr (fst expr, Uniq, pi)))
+    | Abort _ -> failwith "unimplemented abort"
+    | For (var, e1, e2) ->
+      (match tc delta ell gamma e1 with
+       | Succ (Array (elem_ty, n), ell1, gamma1) ->
+         let gam_ext = places_typ (Var var) elem_ty
+         in (match tc delta ell1 (List.append gam_ext gamma1) e2 with
+             | Succ (ty2, ell2, gamma2) ->
+               let gamma2Prime = place_env_exclude gamma2 (Var var)
+               in if gamma2Prime = gamma1 then
+                 if ell1 = ell2 then (BaseTy Unit, ell2, gamma2)
+                 else Fail (LoanEnvMisMatch (fst e2, ell1, ell2))
+               else Fail (PlaceEnvMismatch (fst e2, gamma1, gamma2Prime))
+             | Fail err -> Fail err)
+       | Succ (Ref (prov, omega, Slice (elem)), ell1, gamma1) ->
+         let gam_ext = places_typ (Var var) (Ref (prov, omega, elem_ty))
+         in (match tc delta ell1 (List.append gam_ext gamma1) e2 with
+             | Succ (ty2, ell2, gamma2) ->
+               let gamma2Prime = place_env_exclude gamma2 (Var var)
+               in if gamma2Prime = gamma1 then
+                 if ell1 = ell2 then (BaseTy Unit, ell2, gamma2)
+                 else Fail (LoanEnvMisMatch (fst e2, ell1, ell2))
+               else Fail (PlaceEnvMismatch (fst e2, gamma1, gamma2Prime))
+             | Fail err -> Fail err)
+       | Succ (found, _, _) -> Fail (TypeMismatchIterable (fst e1, found))
+       | Fail err -> Fail err)
   | _ -> failwith "unimplemented"
   in tc delta ell gamma expr
