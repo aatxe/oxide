@@ -52,7 +52,7 @@ let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env 
         | (ellPrime, ProvVar prov) ->
           match uni ellPrime t1 t2 false with
           | Succ (ellFinal, ty) -> Succ (ellFinal, Ref (prov, o1, ty))
-          | Fail err -> Fail err 
+          | Fail err -> Fail err
       else Fail (UnificationFailed (loc, ty1, ty2))
     | (Any, ty, _) -> Succ (ell, ty)
     | (ty1, ty2, false) -> uni ell ty2 ty1 true
@@ -70,10 +70,24 @@ let unify_many (loc : source_loc) (ell : loan_env) (tys : ty list) : (loan_env *
       | Fail err -> Fail err
     in List.fold_left work (Succ (ell, ty)) tys
 
+let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
+  let work (acc : loan_env) (pair : prov_var * loans) : loan_env =
+    let (prov, loans) = pair
+    in match List.assoc_opt prov acc with
+    | Some (curr_loans) -> loan_env_include (loan_env_exclude acc prov) prov (List.append loans curr_loans)
+    | None -> loan_env_include acc prov loans
+  in List.fold_left work ell1 ell2
+
 let intersect (envs1 : loan_env * place_env) (envs2 : loan_env * place_env) : loan_env * place_env =
   let (ell1, gamma1) = envs1
   in let (ell2, gamma2) = envs2
-  in failwith "unimplemented"
+  in let ell = union ell1 ell2
+  in let also_in_gamma2 (pair : place * ty) =
+       let (pi, ty) = pair
+       in match List.assoc_opt pi gamma2 with
+       | Some ty2 -> ty = ty2 (* TODO: maybe unify, but then were changing ell *)
+       | None -> false
+  in (ell, List.find_all also_in_gamma2 gamma1)
 
 let place_env_diff (gam1 : place_env) (gam2 : place_env) : place_env =
   let not_in_gam2 (entry1 : place * ty) = not (List.exists (fun entry2 -> fst entry2 = fst entry1) gam2)
