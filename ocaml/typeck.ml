@@ -213,7 +213,24 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
           | Fail err -> Fail err)
     | App (fn, provs, tys, args) ->
       (match tc delta ell gamma fn with
-       | Succ (Fun (provars, tyvars, params, _, ret_ty), ellF, gammaF) -> failwith "unimplemented"
+       | Succ (Fun (provars, tyvars, params, _, ret_ty), ellF, gammaF) ->
+         let work (acc : (ty list * loan_env * place_env) tc) (e : expr) =
+           match acc with
+           | Fail err -> Fail err
+           | Succ (curr_tys, curr_ell, curr_gamma) ->
+             match tc delta curr_ell curr_gamma e with
+             | Succ (ty, ellPrime, gammaPrime) -> Succ (List.cons ty curr_tys, ellPrime, gammaPrime)
+             | Fail err -> Fail err
+         in (match List.fold_left work (Succ ([], ell, gamma)) args with
+             | Succ (arg_tys, ellN, gammaN) ->
+               let ty_pairs = List.combine params arg_tys (* TODO: substitution on params *)
+               in let types_match (tys : ty * ty) : bool =
+                  let (expected, found) = tys
+                  in expected = found
+               in (match List.find_opt types_match ty_pairs with
+               | None -> Succ (ret_ty, ellN, gammaN) (* TODO: substitution on ret_ty *)
+               | Some (expected, found) -> Fail (TypeMismatch (fst expr, expected, found)))
+             | Fail err -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatchFunction (fst fn, found))
        | Fail err -> Fail err)
   | _ -> failwith "unimplemented"
