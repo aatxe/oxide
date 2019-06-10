@@ -27,6 +27,7 @@ type prov =
 type kind = Star | Prov [@@deriving show]
 type base_ty = Bool | U32 | Unit [@@deriving show]
 type ty =
+  | Any
   | BaseTy of base_ty
   | TyVar of ty_var
   | Ref of prov_var * owned * ty

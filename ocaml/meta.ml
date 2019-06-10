@@ -20,6 +20,7 @@ let prov_to_loans (ell : loan_env) (prov : prov) : loans =
 let all_loans (omega : owned) (ell : loan_env) (gamma : place_env) : loans =
   let rec work (typ : ty) (loans : loans) : loans =
     match typ with
+    | Any -> loans
     | BaseTy _ -> loans
     | TyVar _ -> loans
     | Ref (var, omega_prime, typ) ->
@@ -77,6 +78,7 @@ let is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place) : 
 (* given a root identier x, compute all the places based on tau *)
 let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
   match tau with
+  | Any -> [(pi, tau)]
   | BaseTy _ -> [(pi, tau)]
   | TyVar _ -> [(pi, tau)]
   | Ref (_, _, _) -> [(pi, tau)]
@@ -144,6 +146,7 @@ let rec value (sigma : store) (pi : place) : value =
 
 let rec noncopyable (typ : ty) : bool =
   match typ with
+  | Any -> false
   | BaseTy _ -> false
   | TyVar _ -> true
   | Ref (_, Unique, _) -> true
