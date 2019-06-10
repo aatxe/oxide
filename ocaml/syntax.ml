@@ -95,7 +95,7 @@ type shape =
 
 type store = (place * shape) list [@@deriving show]
 
-type fn_def = fn_var * prov_var list * ty_var list * (var * ty) list * ty * expr
+type fn_def = fn_var * prov_var list * ty_var list * (var * ty) list * ty * expr [@@deriving show]
 type global_entry =
   | FnDef of fn_def
 [@@deriving show]
@@ -129,7 +129,7 @@ type tc_error =
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
   | SafetyErr of source_loc * owned * place
   | CannotMove of source_loc * place_expr
-  | UnificationFailed of ty * ty
+  | UnificationFailed of source_loc * ty * ty
   | UnknownFunction of source_loc * fn_var
 
 type 'a tc =

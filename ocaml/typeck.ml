@@ -63,7 +63,7 @@ let place_env_diff (gam1 : place_env) (gam2 : place_env) : place_env =
   let not_in_gam2 (entry1 : place * ty) = not (List.exists (fun entry2 -> fst entry2 = fst entry1) gam2)
   in List.filter not_in_gam2 gam1
 
-let valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (ty : ty) : () tc =
+let valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (ty : ty) : unit tc =
   failwith "unimplemented"
 
 let type_of (prim : prim) : ty =
@@ -77,7 +77,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
   let rec tc (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
              (expr : expr) : (ty * loan_env * place_env) tc =
     match snd expr with
-    | Prim prim -> (type_of prim, ell, gamma)
+    | Prim prim -> Succ (type_of prim, ell, gamma)
     | Move pi ->
       (match omega_safe ell gamma Unique pi with
        | Some (ty, _) -> Succ (ty, ell, if noncopyable ty then place_env_subtract gamma pi else gamma)
@@ -109,12 +109,12 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Idx (pi, e) ->
       (match tc delta ell gamma e with
        | Succ (BaseTy U32, ell1, gamma1) ->
-         (match omega_safe ell1 gamma1 Shrd pi with
+         (match omega_safe ell1 gamma1 Shared pi with
           | Some (Array (ty, _), loans) ->
-            if copyable ty then Succ (ty, loan_env_include ell prov loans, gamma)
+            if copyable ty then Succ (ty, ell1, gamma1)
             else Fail (CannotMove (fst expr, pi))
-          | Succ (found, _, _) -> Fail (TypeMisMatch (fst expr, Array (TyVar -1, -1), found))
-          | None -> Fail (SafetyErr (fst expr, omega, pi)))
+          | Some (found, _) -> Fail (TypeMismatch (fst expr, Array (TyVar (-1), -1), found))
+          | None -> Fail (SafetyErr (fst expr, Shared, pi)))
        | Succ (found, _, _) -> Fail (TypeMismatch (fst e, BaseTy U32, found))
        | Fail err -> Fail err)
     | Seq (e1, e2) ->
@@ -126,33 +126,35 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ (BaseTy Bool, ell1, gamma1) ->
          (match (tc delta ell1 gamma1 e2, tc delta ell1 gamma1 e3) with
           | (Succ (ty2, ell2, gamma2), Succ (ty3, ell3, gamma3)) ->
-            (let (ellPrime, gammaPrime) = intersect (ell2, gamma2) (ell3, gamm3)
-             in let (ellFinal, tyFinal) = unify ellPrime ty2 ty3
-             in match valid_type sigma delta ellFinal gammaPrime tyFinal with
-             | Succ () -> (tyFinal, ellFinal, gammaPrime)
-             | Fail err -> Fail err)
+            (let (ellPrime, gammaPrime) = intersect (ell2, gamma2) (ell3, gamma3)
+             in match unify ellPrime ty2 ty3 with
+             | None -> Fail (UnificationFailed (fst expr, ty2, ty3))
+             | Some (ellFinal, tyFinal) ->
+               match valid_type sigma delta ellFinal gammaPrime tyFinal with
+               | Succ () -> Succ (tyFinal, ellFinal, gammaPrime)
+               | Fail err -> Fail err)
           | (Fail err, _) | (_, Fail err) -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatch (fst e1, BaseTy Bool, found))
        | Fail err -> Fail err)
     | LetProv (new_provars, e) ->
       let (provars, tyvars) = delta
-      in let to_loan_entry (var : provar) : provar * loans = (var, [])
+      in let to_loan_entry (var : prov_var) : prov_var * loans = (var, [])
       in let deltaPrime = (List.append new_provars provars, tyvars)
       in let ellPrime = List.append (List.map to_loan_entry provars) ell
       in tc deltaPrime ellPrime gamma e
     | Let (var, ann_ty, e1, e2) ->
       (match tc delta ell gamma e1 with
        | Succ (ty1, ell1, gamma1) ->
-         (match unify ell1 ty1 ann_ty with
+         (match unify ell1 ty1 (snd ann_ty) with
           | Some (ell1Prime, ty) ->
             let gam_ext = places_typ (Var var) ty
-            in (match tc delta ell1 (List.append gam_ext gamma1) with
-                | Succ (ty2, ell2, gamma2) -> (ty2, ell2, place_enc_exclude gamma (Var var))
+            in (match tc delta ell1 (List.append gam_ext gamma1) e2 with
+                | Succ (ty2, ell2, gamma2) -> Succ (ty2, ell2, place_env_exclude gamma2 (Var var))
                 | Fail err -> Fail err)
-          | None -> Fail (UnificationFailed (ty1, ann_ty)))
+          | None -> Fail (UnificationFailed (fst expr, ty1, ann_ty)))
        | Fail err -> Fail err)
     | Assign (pi, e) ->
-      (match omega_safe ell gamma Uniq pi with
+      (match omega_safe ell gamma Unique pi with
        | Some (ty_old, loans) ->
          (match tc delta ell gamma e with
           | Succ (ty_update, ell1, gamma1) ->
@@ -163,48 +165,50 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
                     List.append (places_typ pi ty_new) acc
                in let gammaPrime = List.fold_left work gamma1 places
                in Succ (BaseTy Unit, ellPrime, gammaPrime)
-             | None -> Fail (UnificationFailed (ty_old, ty_update)))
+             | None -> Fail (UnificationFailed (fst expr, ty_old, ty_update)))
           | Fail err -> Fail err)
-       | None -> Fail (SafetyErr (fst expr, Uniq, pi)))
+       | None -> Fail (SafetyErr (fst expr, Unique, pi)))
     | Abort _ -> failwith "unimplemented abort"
     | For (var, e1, e2) ->
       (match tc delta ell gamma e1 with
        | Succ (Array (elem_ty, n), ell1, gamma1) ->
          let gam_ext = places_typ (Var var) elem_ty
          in (match tc delta ell1 (List.append gam_ext gamma1) e2 with
-             | Succ (ty2, ell2, gamma2) ->
+             | Succ (_, ell2, gamma2) ->
                let gamma2Prime = place_env_exclude gamma2 (Var var)
                in if gamma2Prime = gamma1 then
-                 if ell1 = ell2 then (BaseTy Unit, ell2, gamma2)
-                 else Fail (LoanEnvMisMatch (fst e2, ell1, ell2))
+                 if ell1 = ell2 then Succ (BaseTy Unit, ell2, gamma2)
+                 else Fail (LoanEnvMismatch (fst e2, ell1, ell2))
                else Fail (PlaceEnvMismatch (fst e2, gamma1, gamma2Prime))
              | Fail err -> Fail err)
-       | Succ (Ref (prov, omega, Slice (elem)), ell1, gamma1) ->
+       | Succ (Ref (prov, omega, Slice elem_ty), ell1, gamma1) ->
          let gam_ext = places_typ (Var var) (Ref (prov, omega, elem_ty))
          in (match tc delta ell1 (List.append gam_ext gamma1) e2 with
-             | Succ (ty2, ell2, gamma2) ->
+             | Succ (_, ell2, gamma2) ->
                let gamma2Prime = place_env_exclude gamma2 (Var var)
                in if gamma2Prime = gamma1 then
-                 if ell1 = ell2 then (BaseTy Unit, ell2, gamma2)
-                 else Fail (LoanEnvMisMatch (fst e2, ell1, ell2))
+                 if ell1 = ell2 then Succ (BaseTy Unit, ell2, gamma2)
+                 else Fail (LoanEnvMismatch (fst e2, ell1, ell2))
                else Fail (PlaceEnvMismatch (fst e2, gamma1, gamma2Prime))
              | Fail err -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatchIterable (fst e1, found))
        | Fail err -> Fail err)
     | Fn fn ->
       (match global_env_find_fn sigma fn with
-       | Some (fn, provs, tyvars, params, ret_ty, _) ->
-         Succ (Fun (provs, tyvars, List.map snd params, [], ret_ty))
+       | Some (_, provs, tyvars, params, ret_ty, _) ->
+         let fn_ty : ty = Fun (provs, tyvars, List.map snd params, [], ret_ty)
+         in Succ (fn_ty, ell, gamma)
        | None -> Fail (UnknownFunction (fst expr, fn)))
     | Fun (provs, tyvars, params, body) ->
-      let places_type_u (pair : place * ty) = places_typ (fst pair) (snd pair)
-      in let gam_ext = List.fold List.append [] (List.map places_typ_u params)
+      let sndsnd (p : 'a * ('b * 'c)) : 'c = snd (snd p)
+      in let places_typ_u (pair : var * ann_ty) = places_typ (Var (fst pair)) (sndsnd pair)
+      in let gam_ext = List.fold_right List.append (List.map places_typ_u params) []
       in let deltaPrime = (List.append provs (fst delta), List.append tyvars (snd delta))
       in (match tc deltaPrime ell (List.append gam_ext gamma) body with
           | Succ (ret_ty, ellPrime, gammaPrime) ->
             let gamma_c = place_env_diff gamma gammaPrime
-            in Succ (Fun (provs, tyvars, List.map snd params, gamma_c, ret_ty),
-                     ellPrime, gammaPrime)
+            in let fn_ty : ty = Fun (provs, tyvars, List.map sndsnd params, gamma_c, ret_ty)
+            in Succ (fn_ty, ellPrime, gammaPrime)
           | Fail err -> Fail err)
   | _ -> failwith "unimplemented"
   in tc delta ell gamma expr
