@@ -80,14 +80,15 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Prim prim -> Succ (type_of prim, ell, gamma)
     | Move pi ->
       (match omega_safe ell gamma Unique pi with
-       | Some (ty, _) -> Succ (ty, ell, if noncopyable ty then place_env_subtract gamma pi else gamma)
+       | Some (ty, [(Unique, pi)]) -> Succ (ty, ell, if noncopyable ty then place_env_subtract gamma pi else gamma)
+       | Some _ -> failwith "unreachable"
        | None -> Fail (SafetyErr (fst expr, Unique, pi)))
     | Borrow (prov, omega, pi) ->
       (match omega_safe ell gamma omega pi with
        | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
        | None -> Fail (SafetyErr (fst expr, omega, pi)))
     | BorrowIdx (prov, omega, pi, e) ->
-      (match tc delta ell gamma e1 with
+      (match tc delta ell gamma e with
        | Succ (BaseTy U32, ell1, gamma1) ->
          (match omega_safe ell1 gamma1 omega pi with
           | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
@@ -110,7 +111,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       (match tc delta ell gamma e with
        | Succ (BaseTy U32, ell1, gamma1) ->
          (match omega_safe ell1 gamma1 Shared pi with
-          | Some (Array (ty, _), loans) ->
+          | Some (Array (ty, _), _) ->
             if copyable ty then Succ (ty, ell1, gamma1)
             else Fail (CannotMove (fst expr, pi))
           | Some (found, _) -> Fail (TypeMismatch (fst expr, Array (TyVar (-1), -1), found))
@@ -151,7 +152,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
             in (match tc delta ell1 (List.append gam_ext gamma1) e2 with
                 | Succ (ty2, ell2, gamma2) -> Succ (ty2, ell2, place_env_exclude gamma2 (Var var))
                 | Fail err -> Fail err)
-          | None -> Fail (UnificationFailed (fst expr, ty1, ann_ty)))
+          | None -> Fail (UnificationFailed (fst expr, ty1, snd ann_ty)))
        | Fail err -> Fail err)
     | Assign (pi, e) ->
       (match omega_safe ell gamma Unique pi with
@@ -171,7 +172,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Abort _ -> failwith "unimplemented abort"
     | For (var, e1, e2) ->
       (match tc delta ell gamma e1 with
-       | Succ (Array (elem_ty, n), ell1, gamma1) ->
+       | Succ (Array (elem_ty, _), ell1, gamma1) ->
          let gam_ext = places_typ (Var var) elem_ty
          in (match tc delta ell1 (List.append gam_ext gamma1) e2 with
              | Succ (_, ell2, gamma2) ->
@@ -210,5 +211,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
             in let fn_ty : ty = Fun (provs, tyvars, List.map sndsnd params, gamma_c, ret_ty)
             in Succ (fn_ty, ellPrime, gammaPrime)
           | Fail err -> Fail err)
+    | App (fn, provs, tys, args) ->
+      (match tc delta ell gamma fn with
+       | Succ (Fun (provars, tyvars, params, _, ret_ty), ellF, gammaF) -> failwith "unimplemented"
+       | Succ (found, _, _) -> Fail (TypeMismatchFunction (fst fn, found))
+       | Fail err -> Fail err)
   | _ -> failwith "unimplemented"
   in tc delta ell gamma expr

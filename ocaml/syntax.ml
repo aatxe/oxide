@@ -125,9 +125,10 @@ let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamm
 type tc_error =
   | TypeMismatch of source_loc * ty * ty (* source_loc * expected * found *)
   | TypeMismatchIterable of source_loc * ty (* source_loc * found *)
+  | TypeMismatchFunction of source_loc * ty (* source_loc * found *)
   | PlaceEnvMismatch of source_loc * place_env * place_env (* source_loc * expected * found *)
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
-  | SafetyErr of source_loc * owned * place
+  | SafetyErr of source_loc * owned * place_expr
   | CannotMove of source_loc * place_expr
   | UnificationFailed of source_loc * ty * ty
   | UnknownFunction of source_loc * fn_var
