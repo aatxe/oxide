@@ -133,6 +133,9 @@ type tc_error =
   | CannotMove of source_loc * place_expr
   | UnificationFailed of source_loc * ty * ty
   | UnknownFunction of source_loc * fn_var
+  | InvalidType of source_loc * ty
+  | InvalidProv of source_loc * prov
+  | InvalidArrayLen of source_loc * ty * int
 
 type 'a tc =
   | Succ of 'a

@@ -93,8 +93,39 @@ let place_env_diff (gam1 : place_env) (gam2 : place_env) : place_env =
   let not_in_gam2 (entry1 : place * ty) = not (List.exists (fun entry2 -> fst entry2 = fst entry1) gam2)
   in List.filter not_in_gam2 gam1
 
-let valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (ty : ty) : unit tc =
+let valid_prov (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (prov : prov) : unit tc =
   failwith "unimplemented"
+
+let valid_type (loc : source_loc) (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (ty : ty) : unit tc =
+  let rec valid (ty : ty) : unit tc =
+    match ty with
+    | Any -> Succ ()
+    | BaseTy _ -> Succ ()
+    | TyVar tyvar ->
+      if List.mem tyvar (snd delta) then Succ ()
+      else Fail (InvalidType (loc, ty))
+    | Ref (provar, omega, ty) ->
+      (match valid_prov delta ell gamma (ProvVar provar) with
+       | Succ () ->
+         (match valid ty with
+          | Succ () ->
+            let mismatched_tys = List.find_all (fun (_, pi) -> List.assoc pi gamma != ty) (List.assoc provar ell)
+            in (match mismatched_tys with
+                | [] -> Succ ()
+                | (_, pi) :: _ -> Fail (TypeMismatch (loc, ty, List.assoc pi gamma)))
+          | Fail err -> Fail err)
+       | Fail err -> Fail err)
+    | Fun _ -> failwith "unimplemented"
+    | Array (typ, n) -> if n >= 0 then valid typ else Fail (InvalidArrayLen (loc, ty, n))
+    | Slice typ -> valid typ
+    | Tup tys -> valid_many tys
+  and valid_many (tys : ty list) =
+    let work (ty : ty) (acc : unit tc) =
+      match acc with
+      | Succ () -> valid ty
+      | Fail err -> Fail err
+    in List.fold_right work tys (Succ ())
+  in valid ty
 
 let type_of (prim : prim) : ty =
   match prim with
