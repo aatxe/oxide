@@ -13,7 +13,7 @@ let is_at_least (omega : owned) (omega_prime : owned) : bool =
 (* extract all the specific loans from a given region *)
 let prov_to_loans (ell : loan_env) (prov : prov) : loans =
   match prov with
-  | ProvVar var -> List.assoc var ell
+  | ProvVar var -> loan_env_lookup ell var
   | ProvSet lns -> lns
 
 (* compute all the at-least-omega loans in a given gamma *)
@@ -89,7 +89,7 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
         | Succ loans ->
           match List.assoc_opt (snd loan) gamma with
           | Some (Ref (prov, _, _)) ->
-            (match List.assoc_opt prov ell with
+            (match loan_env_lookup_opt ell prov with
              | Some new_loans -> Succ (List.append loans new_loans)
              | None -> Fail (InvalidProv (loc, ProvVar prov)))
           | Some found -> Fail (TypeMismatchRef (loc, found))
