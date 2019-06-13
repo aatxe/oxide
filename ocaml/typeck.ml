@@ -93,8 +93,19 @@ let place_env_diff (gam1 : place_env) (gam2 : place_env) : place_env =
   let not_in_gam2 (entry1 : place * ty) = not (List.exists (fun entry2 -> fst entry2 = fst entry1) gam2)
   in List.filter not_in_gam2 gam1
 
-let valid_prov (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (prov : prov) : unit tc =
-  failwith "unimplemented"
+let rec valid_prov (loc : source_loc) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (prov : prov) : unit tc =
+  match prov with
+  | ProvVar var ->
+    if List.mem var (fst delta) then
+      match List.assoc_opt var ell with
+      | Some loans -> valid_prov loc delta ell gamma (ProvSet loans)
+      | None -> Fail (InvalidProv (loc, ProvVar var))
+    else Fail (InvalidProv (loc, ProvVar var))
+  | ProvSet loans ->
+    let invalid_loans = List.filter (fun p -> List.mem_assoc (snd p) gamma) loans
+    in match invalid_loans with
+    | [] -> Succ ()
+    | (omega, pi) :: _ -> Fail (InvalidLoan (loc, omega, pi))
 
 let valid_type (loc : source_loc) (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (ty : ty) : unit tc =
   let rec valid (ty : ty) : unit tc =
@@ -105,7 +116,7 @@ let valid_type (loc : source_loc) (sigma : global_env) (delta : tyvar_env) (ell 
       if List.mem tyvar (snd delta) then Succ ()
       else Fail (InvalidType (loc, ty))
     | Ref (provar, omega, ty) ->
-      (match valid_prov delta ell gamma (ProvVar provar) with
+      (match valid_prov loc delta ell gamma (ProvVar provar) with
        | Succ () ->
          (match valid ty with
           | Succ () ->
@@ -192,7 +203,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
              in match unify (fst expr) ellPrime ty2 ty3 with
              | Fail err -> Fail err
              | Succ (ellFinal, tyFinal) ->
-               match valid_type sigma delta ellFinal gammaPrime tyFinal with
+               match valid_type (fst expr) sigma delta ellFinal gammaPrime tyFinal with
                | Succ () -> Succ (tyFinal, ellFinal, gammaPrime)
                | Fail err -> Fail err)
           | (Fail err, _) | (_, Fail err) -> Fail err)

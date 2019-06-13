@@ -135,6 +135,7 @@ type tc_error =
   | UnknownFunction of source_loc * fn_var
   | InvalidType of source_loc * ty
   | InvalidProv of source_loc * prov
+  | InvalidLoan of source_loc * owned * place
   | InvalidArrayLen of source_loc * ty * int
 
 type 'a tc =
