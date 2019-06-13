@@ -115,13 +115,17 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
 type tyvar_env = prov_var list * ty_var list [@@deriving show]
 type loan_env = (prov_var * loans) list [@@deriving show]
 
-let loan_env_lookup (ell : loan_env) (var : prov_var) : loans = List.assoc var ell
+let loan_env_lookup (ell : loan_env) (var : prov_var) = List.assoc var ell
+let loan_env_lookup_opt (ell : loan_env) (var : prov_var) = List.assoc_opt var ell
 let loan_env_include (ell : loan_env) (var : prov_var) (loans : loans) = List.cons (var, loans) ell
+let loan_env_append (ell1 : loan_env) (ell2 : loan_env) = List.append ell1 ell2
 let loan_env_exclude (ell : loan_env) (var : prov_var) = List.remove_assoc var ell
 
 (* place_env is mutually recursive with ty and as such, is defined above *)
-let place_env_lookup (gamma : place_env) (x : place) : ty = List.assoc x gamma
+let place_env_lookup (gamma : place_env) (x : place) = List.assoc x gamma
+let place_env_lookup_opt (gamma : place_env) (x : place) = List.assoc_opt x gamma
 let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x, typ) gamma
+let place_env_append (gamma1 : place_env) (gamma2 : place_env) = List.append gamma1 gamma2
 let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
 
 type tc_error =
