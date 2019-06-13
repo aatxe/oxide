@@ -10,6 +10,7 @@ type place =
   | FieldProj of place * string
   | IndexProj of place * int
 [@@deriving show]
+type places = place list [@@deriving show]
 type place_expr =
   | Var of var
   | Deref of place_expr
@@ -127,9 +128,11 @@ type tc_error =
   | TypeMismatch of source_loc * ty * ty (* source_loc * expected * found *)
   | TypeMismatchIterable of source_loc * ty (* source_loc * found *)
   | TypeMismatchFunction of source_loc * ty (* source_loc * found *)
+  | TypeMismatchRef of source_loc * ty (* source_loc * found *)
   | PlaceEnvMismatch of source_loc * place_env * place_env (* source_loc * expected * found *)
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
-  | SafetyErr of source_loc * owned * place_expr
+  | SafetyErr of source_loc * (owned * place_expr) * (owned * place)
+                (* source_loc * attempted access * conflicting loan *)
   | CannotMove of source_loc * place_expr
   | UnificationFailed of source_loc * ty * ty
   | UnknownFunction of source_loc * fn_var
@@ -137,6 +140,7 @@ type tc_error =
   | InvalidProv of source_loc * prov
   | InvalidLoan of source_loc * owned * place
   | InvalidArrayLen of source_loc * ty * int
+  | UnboundPlace of source_loc * place
 
 type 'a tc =
   | Succ of 'a

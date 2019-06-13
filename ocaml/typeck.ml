@@ -1,11 +1,6 @@
 open Syntax
 open Meta
 
-let omega_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place_expr) : (ty * loans) option =
-  failwith "unimplemented"
-  (* if is_safe ell gamma omega pi then Some (List.assoc pi gamma)
-   * else None *)
-
 let unify_prov (ell : loan_env) (prov1 : prov) (prov2 : prov) : loan_env * prov =
   match (prov1, prov2) with
   | (ProvVar v1, ProvVar v2) ->
@@ -36,7 +31,7 @@ let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env 
     | (Tup tys1, Tup tys2, _) ->
       (let work (acc : (loan_env * ty list) tc) (tys : ty * ty) =
          match acc with
-         | Fail err -> Fail err 
+         | Fail err -> Fail err
          | Succ (ell, tylst) ->
            (let (ty1, ty2) = tys
             in match uni ell ty1 ty2 false with
@@ -144,6 +139,29 @@ let type_of (prim : prim) : ty =
   | Num _ -> BaseTy U32
   | True | False -> BaseTy Bool
 
+let omega_safe (ell : loan_env) (gamma : place_env) (omega : owned)
+    (pi : source_loc * place_expr) : (ty * loans) tc =
+  match eval_place_expr (fst pi) ell gamma omega (snd pi) with
+  | Succ loans ->
+    let safe_then_ty (loan : loan) : ty option * loan =
+      if is_safe ell gamma omega (snd loan) then (Some (List.assoc (snd loan) gamma), loan)
+      else (None, loan)
+    in let opt_tys = List.map safe_then_ty loans
+    in (match List.assoc_opt None opt_tys with
+        | Some (o, place) -> Fail (SafetyErr (fst pi, (omega, snd pi), (o, place)))
+        | None ->
+          let unwrap (opt : 'a option) : 'a =
+            match opt with
+            | Some x -> x
+            | None -> failwith "unreachable"
+          in let tys = List.map (fun pair -> unwrap (fst pair)) opt_tys
+          in match unify_many (fst pi) ell tys with
+          | Succ (ellPrime, ty) ->
+            if ellPrime = ell then Succ (ty, loans)
+            else Fail (LoanEnvMismatch (fst pi, ell, ellPrime))
+          | Fail err -> Fail err)
+  | Fail err -> Fail err
+
 let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
                (expr : expr) : (ty * loan_env * place_env) tc =
   let rec tc (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
@@ -151,20 +169,20 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     match snd expr with
     | Prim prim -> Succ (type_of prim, ell, gamma)
     | Move pi ->
-      (match omega_safe ell gamma Unique pi with
-       | Some (ty, [(Unique, pi)]) -> Succ (ty, ell, if noncopyable ty then place_env_subtract gamma pi else gamma)
-       | Some _ -> failwith "unreachable"
-       | None -> Fail (SafetyErr (fst expr, Unique, pi)))
+      (match omega_safe ell gamma Unique (fst expr, pi) with
+       | Succ (ty, [(Unique, pi)]) -> Succ (ty, ell, if noncopyable ty then place_env_subtract gamma pi else gamma)
+       | Succ _ -> failwith "unreachable"
+       | Fail err -> Fail err)
     | Borrow (prov, omega, pi) ->
-      (match omega_safe ell gamma omega pi with
-       | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
-       | None -> Fail (SafetyErr (fst expr, omega, pi)))
+      (match omega_safe ell gamma omega (fst expr, pi) with
+       | Succ (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
+       | Fail err -> Fail err)
     | BorrowIdx (prov, omega, pi, e) ->
       (match tc delta ell gamma e with
        | Succ (BaseTy U32, ell1, gamma1) ->
-         (match omega_safe ell1 gamma1 omega pi with
-          | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
-          | None -> Fail (SafetyErr (fst expr, omega, pi)))
+         (match omega_safe ell1 gamma1 omega (fst expr, pi) with
+          | Succ (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
+          | Fail err -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatch (fst e, BaseTy U32, found))
        | Fail err -> Fail err)
     | BorrowSlice (prov, omega, pi, e1, e2) ->
@@ -172,9 +190,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ (BaseTy U32, ell1, gamma1) ->
          (match tc delta ell1 gamma1 e2 with
           | Succ (BaseTy U32, ell2, gamma2) ->
-            (match omega_safe ell2 gamma2 omega pi with
-             | Some (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
-             | None -> Fail (SafetyErr (fst expr, omega, pi)))
+            (match omega_safe ell2 gamma2 omega (fst expr, pi) with
+             | Succ (ty, loans) -> Succ (Ref (prov, omega, ty), loan_env_include ell prov loans, gamma)
+             | Fail err -> Fail err)
           | Succ (found, _, _) -> Fail (TypeMismatch (fst e2, BaseTy U32, found))
           | Fail err -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatch (fst e1, BaseTy U32, found))
@@ -182,12 +200,12 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Idx (pi, e) ->
       (match tc delta ell gamma e with
        | Succ (BaseTy U32, ell1, gamma1) ->
-         (match omega_safe ell1 gamma1 Shared pi with
-          | Some (Array (ty, _), _) ->
+         (match omega_safe ell1 gamma1 Shared (fst expr, pi) with
+          | Succ (Array (ty, _), _) ->
             if copyable ty then Succ (ty, ell1, gamma1)
             else Fail (CannotMove (fst expr, pi))
-          | Some (found, _) -> Fail (TypeMismatch (fst expr, Array (Any, -1), found))
-          | None -> Fail (SafetyErr (fst expr, Shared, pi)))
+          | Succ (found, _) -> Fail (TypeMismatch (fst expr, Array (Any, -1), found))
+          | Fail err -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatch (fst e, BaseTy U32, found))
        | Fail err -> Fail err)
     | Seq (e1, e2) ->
@@ -227,8 +245,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
           | Fail err -> Fail err)
        | Fail err -> Fail err)
     | Assign (pi, e) ->
-      (match omega_safe ell gamma Unique pi with
-       | Some (ty_old, loans) ->
+      (match omega_safe ell gamma Unique (fst expr, pi) with
+       | Succ (ty_old, loans) ->
          (match tc delta ell gamma e with
           | Succ (ty_update, ell1, gamma1) ->
             (match unify (fst expr) ell1 ty_old ty_update with
@@ -240,7 +258,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
                in Succ (BaseTy Unit, ellPrime, gammaPrime)
              | Fail err -> Fail err)
           | Fail err -> Fail err)
-       | None -> Fail (SafetyErr (fst expr, Unique, pi)))
+       | Fail err -> Fail err)
     | Abort _ -> failwith "unimplemented abort"
     | For (var, e1, e2) ->
       (match tc delta ell gamma e1 with

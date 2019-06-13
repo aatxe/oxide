@@ -75,6 +75,38 @@ let is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place) : 
   | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
               is_empty (List.filter relevant (find_loans Unique ell gamma pi))
 
+(* evaluates the place expression down to a collection of possible places *)
+let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
+    (omega : owned) (pi : place_expr) : loans tc =
+  match pi with
+  | Var var -> Succ [(omega, Var var)]
+  | Deref pi ->
+    (match eval_place_expr loc ell gamma omega pi with
+    | Succ loans ->
+      let work (acc : loans tc) (loan : loan) : loans tc =
+        match acc with
+        | Fail err -> Fail err
+        | Succ loans ->
+          match List.assoc_opt (snd loan) gamma with
+          | Some (Ref (prov, _, _)) ->
+            (match List.assoc_opt prov ell with
+             | Some new_loans -> Succ (List.append loans new_loans)
+             | None -> Fail (InvalidProv (loc, ProvVar prov)))
+          | Some found -> Fail (TypeMismatchRef (loc, found))
+          | None -> Fail (UnboundPlace (loc, snd loan))
+      in List.fold_left work (Succ []) loans
+    | Fail err -> Fail err)
+  | FieldProj (pi, field) ->
+    let to_proj (loan : loan) : loan = (fst loan, FieldProj (snd loan, field))
+    in (match eval_place_expr loc ell gamma omega pi with
+     | Succ loans -> Succ (List.map to_proj loans)
+     | Fail err -> Fail err)
+  | IndexProj (pi, idx) ->
+    let to_proj (loan : loan) : loan = (fst loan, IndexProj (snd loan, idx))
+    in (match eval_place_expr loc ell gamma omega pi with
+        | Succ loans -> Succ (List.map to_proj loans)
+        | Fail err -> Fail err)
+
 (* given a root identier x, compute all the places based on tau *)
 let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
   match tau with
