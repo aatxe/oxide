@@ -1,58 +1,51 @@
 open Syntax
 open Meta
 
-let unify_prov (ell : loan_env) (prov1 : prov) (prov2 : prov) : loan_env * prov =
+let subtype_prov (ell : loan_env) (prov1 : prov) (prov2 : prov) : loan_env =
   match (prov1, prov2) with
   | (ProvVar v1, ProvVar v2) ->
     let (rep1, rep2) = (loan_env_lookup ell v1, loan_env_lookup ell v2)
-    in (loan_env_include ell v1 (List.append rep1 rep2), prov1)
-  | (ProvSet loans1, ProvSet loans2) -> (ell, ProvSet (List.append loans1 loans2))
+    in loan_env_include ell v1 (List.append rep1 rep2)
   | _ ->  failwith "unreachable?"
 
-let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
-  let rec uni (ell : loan_env) (ty1 : ty) (ty2 : ty) (swapped : bool) : (loan_env * ty) tc =
+let subtype (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
+  let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) (swapped : bool) : loan_env tc =
     match (ty1, ty2, swapped) with
     | (BaseTy bt1, BaseTy bt2, _) ->
-      if bt1 = bt2 then Succ (ell, BaseTy bt1)
+      if bt1 = bt2 then Succ ell
       else Fail (UnificationFailed (loc, ty1, ty2))
     | (TyVar v1, TyVar v2, _) ->
-      if v1 = v2 then Succ (ell, TyVar v1)
+      if v1 = v2 then Succ ell
       else Fail (UnificationFailed (loc, ty1, ty2))
     | (Array (t1, m), Array (t2, n), _) ->
-      if m = n then
-        match uni ell t1 t2 false with
-        | Succ (ellPrime, ty) -> Succ (ellPrime, Array (ty, n))
-        | Fail err -> Fail err
+      if m = n then sub ell t1 t2 false
       else Fail (UnificationFailed (loc, ty1, ty2))
-    | (Slice t1, Slice t2, _) ->
-      (match uni ell t1 t2 false with
-       | Succ (ellPrime, ty) -> Succ (ellPrime, Slice ty)
-       | Fail err -> Fail err)
+    | (Slice t1, Slice t2, _) -> sub ell t1 t2 false
     | (Tup tys1, Tup tys2, _) ->
-      (let work (acc : (loan_env * ty list) tc) (tys : ty * ty) =
-         match acc with
-         | Fail err -> Fail err
-         | Succ (ell, tylst) ->
-           (let (ty1, ty2) = tys
-            in match uni ell ty1 ty2 false with
-            | Succ (ellPrime, ty) -> Succ (ellPrime, List.append tylst [ty])
-            | Fail err -> Fail err)
-       in match List.fold_left work (Succ (ell, [])) (List.combine tys1 tys2) with
-       | Succ (ellPrime, tys) -> Succ (ellPrime, Tup tys)
-       | Fail err -> Fail err)
+      let work (acc : loan_env tc) (tys : ty * ty) =
+        match acc with
+        | Fail err -> Fail err
+        | Succ ell ->
+          let (ty1, ty2) = tys
+          in sub ell ty1 ty2 false
+      in List.fold_left work (Succ ell) (List.combine tys1 tys2)
     | (Ref (v1, o1, t1), Ref (v2, o2, t2), _) ->
       if o1 = o2 then
-        match unify_prov ell (ProvVar v1) (ProvVar v2) with
-        | (_, ProvSet _) -> failwith "unreachable"
-        | (ellPrime, ProvVar prov) ->
-          match uni ellPrime t1 t2 false with
-          | Succ (ellFinal, ty) -> Succ (ellFinal, Ref (prov, o1, ty))
-          | Fail err -> Fail err
+        let ellPrime = subtype_prov ell (ProvVar v1) (ProvVar v2)
+        in sub ellPrime t1 t2 false
       else Fail (UnificationFailed (loc, ty1, ty2))
-    | (Any, ty, _) -> Succ (ell, ty)
-    | (ty1, ty2, false) -> uni ell ty2 ty1 true
+    | (Any, ty, _) -> Succ ell
+    | (ty1, ty2, false) -> sub ell ty2 ty1 true
     | (_, _, true) -> Fail (UnificationFailed (loc, ty1, ty2))
-  in uni ell ty1 ty2 false
+  in sub ell ty1 ty2 false
+
+let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
+  match (subtype loc ell ty1 ty2, subtype loc ell ty2 ty1) with
+  | (Fail err, _) -> Fail err
+  | (_, Fail err) -> Fail err
+  | (Succ ell1, Succ ell2) ->
+    if ell1 = ell2 then Succ (ell2, ty2)
+    else Fail (LoanEnvMismatch (loc, ell1, ell2))
 
 let unify_many (loc : source_loc) (ell : loan_env) (tys : ty list) : (loan_env * ty) tc =
   match tys with
@@ -238,9 +231,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Let (var, ann_ty, e1, e2) ->
       (match tc delta ell gamma e1 with
        | Succ (ty1, ell1, gamma1) ->
-         (match unify (fst expr) ell1 ty1 (snd ann_ty) with
-          | Succ (ell1Prime, ty) ->
-            let gam_ext = places_typ (Var var) ty
+         (match subtype (fst expr) ell1 ty1 (snd ann_ty) with
+          | Succ ell1Prime ->
+            let ty = snd ann_ty
+            in let gam_ext = places_typ (Var var) ty
             in (match tc delta ell1Prime (place_env_append gam_ext gamma1) e2 with
                 | Succ (ty2, ell2, gamma2) -> Succ (ty2, ell2, place_env_exclude gamma2 (Var var))
                 | Fail err -> Fail err)
@@ -251,11 +245,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ (ty_old, loans) ->
          (match tc delta ell gamma e with
           | Succ (ty_update, ell1, gamma1) ->
-            (match unify (fst expr) ell1 ty_old ty_update with
-             | Succ (ellPrime, ty_new) ->
+            (match subtype (fst expr) ell1 ty_update ty_old with
+             | Succ ellPrime ->
                let places = List.map snd loans
                in let work (acc : place_env) (pi : place) =
-                    place_env_append (places_typ pi ty_new) acc
+                    place_env_append (places_typ pi ty_old) acc
                in let gammaPrime = List.fold_left work gamma1 places
                in Succ (BaseTy Unit, ellPrime, gammaPrime)
              | Fail err -> Fail err)
@@ -330,7 +324,6 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
             Succ (Array (unified_ty, List.length tys), ellFinal, gammaPrime)
           | Fail err -> Fail err)
        | Fail err -> Fail err)
-    | _ -> failwith "unimplemented"
   and tc_many (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
       (exprs : expr list) : (ty list * loan_env * place_env) tc =
     let work (acc : (ty list * loan_env * place_env) tc) (e : expr) =
