@@ -374,7 +374,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
                  let (expected, found) = tys
                  in expected == found (* FIXME: why the heck is this ==? it works this way... *)
             in (match List.find_opt types_match ty_pairs with
-                | None -> Succ (do_sub ret_ty, ellN, gammaN)
+                | None ->
+                  let new_ret_ty = do_sub ret_ty
+                  in (match valid_type (fst expr) sigma delta ellN gammaN new_ret_ty with
+                    | Succ () -> Succ (new_ret_ty, ellN, gammaN)
+                    | Fail err -> Fail err)
                 | Some (expected, found) -> Fail (TypeMismatch (fst expr, expected, found)))
           | Fail err -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatchFunction (fst fn, found))
