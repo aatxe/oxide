@@ -60,7 +60,7 @@ let find_loans (omega : owned) (ell : loan_env) (gamma : place_env) (pi : place)
   in List.filter relevant (all_loans omega ell gamma)
 
 (* given a gamma, determines whether it is safe to use pi according to omega *)
-let is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place) : bool =
+let is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place) : loans option =
   let subplaces_of_pi = all_subplaces pi
   in let relevant (pair : owned * place) : bool =
     (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
@@ -71,9 +71,13 @@ let is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place) : 
         || List.exists (fun x -> x = pi_prime) subplaces_of_pi
   in match omega with
   | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
-              is_empty (List.filter relevant (find_loans Shared ell gamma pi))
+    (match List.filter relevant (find_loans Shared ell gamma pi) with
+    | [] -> None
+    | loans -> Some loans)
   | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
-              is_empty (List.filter relevant (find_loans Unique ell gamma pi))
+    (match List.filter relevant (find_loans Unique ell gamma pi) with
+    | [] -> None
+    | loans -> Some loans)
 
 (* evaluates the place expression down to a collection of possible places *)
 let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)

@@ -1,6 +1,6 @@
 open Util
 
-type source_loc = int * int [@@deriving show]
+type source_loc = string * int * int [@@deriving show]
 type var = int [@@deriving show]
 type ty_var = int [@@deriving show]
 type fn_var = int [@@deriving show]
@@ -105,6 +105,7 @@ type global_entry =
 [@@deriving show]
 
 type global_env = global_entry list [@@deriving show]
+let empty_sigma : global_env = []
 
 let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
   let is_right_fn (entry : global_entry) : bool =
@@ -115,30 +116,41 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
   | _ -> None
 
 type tyvar_env = prov_var list * ty_var list [@@deriving show]
+let empty_delta : tyvar_env = ([], [])
 type subty = prov_var * prov_var [@@deriving show]
 type loan_env = (prov_var * loans) list * (prov_var list * subty list) [@@deriving show]
+let empty_ell : loan_env = ([], ([], []))
 
 let loan_env_lookup (ell : loan_env) (var : prov_var) : loans = List.assoc var (fst ell)
+
 let loan_env_lookup_opt (ell : loan_env) (var : prov_var) : loans option =
   List.assoc_opt var (fst ell)
+let loan_env_is_abs (ell : loan_env) (var : prov_var) : bool = List.mem var (sndfst ell)
+let loan_env_abs_sub (ell : loan_env) (v1 : prov_var) (v2 : prov_var) : bool =
+  List.mem (v1, v2) (sndsnd ell)
+
 let loan_env_include (ell : loan_env) (var : prov_var) (loans : loans) : loan_env =
   (List.cons (var, loans) (fst ell), snd ell)
 let loan_env_bind (ell : loan_env) (var : prov_var) : loan_env =
   (fst ell, (List.cons var (sndfst ell), sndsnd ell))
 let loan_env_bindall (ell : loan_env) (vars : prov_var list) : loan_env =
   (fst ell, (List.append vars (sndfst ell), sndsnd ell))
-let loan_env_is_abs (ell : loan_env) (var : prov_var) : bool = List.mem var (sndfst ell)
-let loan_env_abs_sub (ell : loan_env) (v1 : prov_var) (v2 : prov_var) : bool =
-  List.mem (v1, v2) (sndsnd ell)
+let loan_env_add_abs_sub (ell : loan_env) (v1 : prov_var) (v2 : prov_var) : loan_env =
+  let trans_extend (_ : subty list) (_ : prov_var) (_ : prov_var) : subty list =
+    failwith "unimp"
+  in (fst ell, (sndfst ell, trans_extend (sndsnd ell) v1 v2))
 let loan_env_append (ell1 : loan_env) (ell2 : loan_env) : loan_env =
   (List.append (fst ell1) (fst ell2),
    (List.append (sndfst ell1) (sndfst ell2), sndsnd ell2))
+
 let loan_env_exclude (ell : loan_env) (var : prov_var) : loan_env =
   (List.remove_assoc var (fst ell),
    (List.filter (fun v -> v = var) (sndfst ell),
     List.filter (fun cs -> fst cs = var || snd cs = var) (sndsnd ell)))
 
 (* place_env is mutually recursive with ty and as such, is defined above *)
+let empty_gamma : place_env = []
+
 let place_env_lookup (gamma : place_env) (x : place) = List.assoc x gamma
 let place_env_lookup_opt (gamma : place_env) (x : place) = List.assoc_opt x gamma
 let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x, typ) gamma
@@ -163,6 +175,7 @@ type tc_error =
   | InvalidArrayLen of source_loc * ty * int
   | UnboundPlace of source_loc * place
   | AbsProvsNotSubtype of source_loc * prov_var * prov_var
+[@@deriving show]
 
 type 'a tc =
   | Succ of 'a

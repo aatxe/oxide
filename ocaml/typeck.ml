@@ -5,7 +5,9 @@ open Util
 let subtype_prov (loc : source_loc) (ell : loan_env)
     (prov1 : prov_var) (prov2 : prov_var) : loan_env tc =
   match (loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
-  | (Some rep1, Some rep2) -> Succ (loan_env_include ell prov2 (List.append rep1 rep2))
+  | (Some rep1, Some rep2) ->
+    let ellPrime = loan_env_exclude ell prov2
+    in Succ (loan_env_include ellPrime prov2 (List.append rep1 rep2))
   | (None, Some _) -> Fail (InvalidProv (loc, ProvVar prov1))
   | (Some _, None) -> Fail (InvalidProv (loc, ProvVar prov2))
   | (None, None) ->
@@ -44,7 +46,7 @@ let subtype (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env
         | Succ ellPrime -> sub ellPrime t1 t2 false
         | Fail err -> Fail err
       else Fail (UnificationFailed (loc, ty1, ty2))
-    | (Any, ty, _) -> Succ ell
+    | (Any, _, _) -> Succ ell
     | (ty1, ty2, false) -> sub ell ty2 ty1 true
     | (_, _, true) -> Fail (UnificationFailed (loc, ty1, ty2))
   in sub ell ty1 ty2 false
@@ -107,7 +109,7 @@ let rec valid_prov (loc : source_loc) (delta : tyvar_env) (ell : loan_env) (gamm
     | [] -> Succ ()
     | (omega, pi) :: _ -> Fail (InvalidLoan (loc, omega, pi))
 
-let valid_type (loc : source_loc) (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (ty : ty) : unit tc =
+let valid_type (loc : source_loc) (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (ty : ty) : unit tc =
   let rec valid (ty : ty) : unit tc =
     match ty with
     | Any -> Succ ()
@@ -115,7 +117,7 @@ let valid_type (loc : source_loc) (sigma : global_env) (delta : tyvar_env) (ell 
     | TyVar tyvar ->
       if List.mem tyvar (snd delta) then Succ ()
       else Fail (InvalidType (loc, ty))
-    | Ref (provar, omega, ty) ->
+    | Ref (provar, _, ty) ->
       (match valid_prov loc delta ell gamma (ProvVar provar) with
        | Succ () ->
          (match valid ty with
@@ -151,8 +153,15 @@ let omega_safe (ell : loan_env) (gamma : place_env) (omega : owned)
   match eval_place_expr (fst pi) ell gamma omega (snd pi) with
   | Succ loans ->
     let safe_then_ty (loan : loan) : ty option * loan =
-      if is_safe ell gamma omega (snd loan) then (Some (place_env_lookup gamma (snd loan)), loan)
-      else (None, loan)
+      match is_safe ell gamma omega (snd loan) with
+      | None -> (Some (place_env_lookup gamma (snd loan)), loan)
+      | Some pos_conflicts ->
+        match List.find_opt (fun loan -> not (List.mem loan loans)) pos_conflicts with
+        | Some loan -> (None, loan)
+        | None ->
+          let hd = List.hd pos_conflicts
+          in if is_at_least omega (fst hd) then (Some (place_env_lookup gamma (snd hd)), loan)
+          else (None, loan)
     in let opt_tys = List.map safe_then_ty loans
     in (match List.assoc_opt None opt_tys with
         | Some (o, place) -> Fail (SafetyErr (fst pi, (omega, snd pi), (o, place)))
@@ -309,9 +318,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
             in let fn_ty : ty = Fun (provs, tyvars, List.map sndsnd params, gamma_c, ret_ty)
             in Succ (fn_ty, ellPrime, gammaPrime)
           | Fail err -> Fail err)
-    | App (fn, provs, tys, args) ->
+    | App (fn, _, _, args) ->
       (match tc delta ell gamma fn with
-       | Succ (Fun (provars, tyvars, params, _, ret_ty), ellF, gammaF) ->
+       | Succ (Fun (_, _, params, _, ret_ty), ellF, gammaF) ->
          (match tc_many delta ellF gammaF args with
           | Succ (arg_tys, ellN, gammaN) ->
             let ty_pairs = List.combine params arg_tys (* TODO: substitution on params *)
