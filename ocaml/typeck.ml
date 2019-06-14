@@ -155,11 +155,12 @@ let omega_safe (ell : loan_env) (gamma : place_env) (omega : owned)
     let safe_then_ty (loan : loan) : ty option * loan =
       match is_safe ell gamma omega (snd loan) with
       | None -> (Some (place_env_lookup gamma (snd loan)), loan)
-      | Some pos_conflicts ->
-        match List.find_opt (fun loan -> not (List.mem loan loans)) pos_conflicts with
-        | Some loan -> (None, loan)
-        | None ->
-          let hd = List.hd pos_conflicts
+      | Some possible_conflicts ->
+        (* the reason these are only _possible_ conflicts is essentially reborrows *)
+        match List.find_opt (fun loan -> not (List.mem loan loans)) possible_conflicts with
+        | Some loan -> (None, loan) (* in this case, we've found a _real_ conflict *)
+        | None -> (* but here, the only conflict are precisely loans being reborrowed *)
+          let hd = List.hd possible_conflicts
           in if is_at_least omega (fst hd) then (Some (place_env_lookup gamma (snd hd)), loan)
           else (None, loan)
     in let opt_tys = List.map safe_then_ty loans
