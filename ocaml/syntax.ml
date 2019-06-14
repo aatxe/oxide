@@ -69,7 +69,7 @@ type preexpr =
   | Seq of expr * expr
   | Fn of fn_var
   | Fun of prov_var list * ty_var list * (var * ann_ty) list * expr
-  | App of expr * prov list * ann_ty list * expr list
+  | App of expr * prov_var list * ann_ty list * expr list
   | Idx of place_expr * expr
   | Abort of string
   | Branch of expr * expr * expr

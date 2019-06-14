@@ -2,6 +2,47 @@ open Syntax
 open Meta
 open Util
 
+(* substitutes this for that in ty *)
+let subst_prov (ty : ty) (this : prov_var) (that : prov_var) : ty =
+  let rec sub (ty : ty) =
+    match ty with
+    | Any -> Any
+    | BaseTy bt -> BaseTy bt
+    | TyVar tv -> TyVar tv
+    | Ref (pv, omega, ty) ->
+      let prov = if pv = that then this else pv
+      in Ref (prov, omega, sub ty)
+    | Fun (pvs, tvs, tys, gamma, ret_ty) ->
+      if not (List.mem that pvs) then Fun (pvs, tvs, sub_many tys, gamma, sub ret_ty)
+      else ty
+    | Array (ty, n) -> Array (sub ty, n)
+    | Slice ty -> Slice (sub ty)
+    | Tup tys -> Tup (sub_many tys)
+  and sub_many (tys : ty list) : ty list = List.map sub tys
+  in sub ty
+
+let subst_many_prov (ty : ty) (pairs : (prov_var * prov_var) list) : ty =
+  List.fold_right (fun pair ty -> subst_prov ty (fst pair) (snd pair)) pairs ty
+
+let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
+  let rec sub (ty : ty) =
+    match ty with
+    | Any -> Any
+    | BaseTy bt -> BaseTy bt
+    | TyVar tv -> if tv = that then this else ty
+    | Ref (pv, omega, ty) -> Ref (pv, omega, sub ty)
+    | Fun (pvs, tvs, tys, gamma, ret_ty) ->
+      if not (List.mem that tvs) then Fun (pvs, tvs, sub_many tys, gamma, sub ret_ty)
+      else ty
+    | Array (ty, n) -> Array (sub ty, n)
+    | Slice ty -> Slice (sub ty)
+    | Tup tys -> Tup (sub_many tys)
+  and sub_many (tys : ty list) : ty list = List.map sub tys
+  in sub ty
+
+let subst_many (ty : ty) (pairs : (ty * ty_var) list) : ty =
+  List.fold_right (fun pair ty -> subst ty (fst pair) (snd pair)) pairs ty
+
 let subtype_prov (loc : source_loc) (ell : loan_env)
     (prov1 : prov_var) (prov2 : prov_var) : loan_env tc =
   match (loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
@@ -319,17 +360,21 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
             in let fn_ty : ty = Fun (provs, tyvars, List.map sndsnd params, gamma_c, ret_ty)
             in Succ (fn_ty, ellPrime, gammaPrime)
           | Fail err -> Fail err)
-    | App (fn, _, _, args) ->
+    | App (fn, new_provs, new_tys, args) ->
       (match tc delta ell gamma fn with
-       | Succ (Fun (_, _, params, _, ret_ty), ellF, gammaF) ->
+       | Succ (Fun (provs, tyvars, params, _, ret_ty), ellF, gammaF) ->
          (match tc_many delta ellF gammaF args with
           | Succ (arg_tys, ellN, gammaN) ->
-            let ty_pairs = List.combine params arg_tys (* TODO: substitution on params *)
+            let (prov_sub, ty_sub) = (List.combine new_provs provs,
+                                      List.combine (List.map snd new_tys) tyvars)
+            in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
+            in let new_params = List.map do_sub params
+            in let ty_pairs = List.combine new_params arg_tys
             in let types_match (tys : ty * ty) : bool =
                  let (expected, found) = tys
-                 in expected = found
+                 in expected == found (* FIXME: why the heck is this ==? it works this way... *)
             in (match List.find_opt types_match ty_pairs with
-                | None -> Succ (ret_ty, ellN, gammaN) (* TODO: substitution on ret_ty *)
+                | None -> Succ (do_sub ret_ty, ellN, gammaN)
                 | Some (expected, found) -> Fail (TypeMismatch (fst expr, expected, found)))
           | Fail err -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatchFunction (fst fn, found))
