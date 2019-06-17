@@ -180,3 +180,9 @@ type tc_error =
 type 'a tc =
   | Succ of 'a
   | Fail of tc_error
+[@@deriving show]
+
+let (let*) (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc =
+  match tc with
+  | Succ x -> f x
+  | Fail err -> Fail err
