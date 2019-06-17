@@ -28,6 +28,7 @@ let main =
   print_tc_closed borrowck_access_permissions_4b;
   print_tc_closed borrowck_access_permissions_4b_variant;
   print_tc borrowed_local_error_sigma borrowed_local_error;
+  print_tc_closed unnecessary_error;
   (* let (x, y, _) : place * place * place = (Var 1, Var 2, Var 3)
    * in let tick_a = 1
    * in let u32 = BaseTy U32

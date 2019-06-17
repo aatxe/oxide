@@ -35,6 +35,10 @@ let shrd : owned = Shared
 let uniq : owned = Unique
 let (~&) (prov : prov_var) (omega : owned) (ty : ty) : ty = Ref (prov, omega, ty)
 
+let unit : expr = (("static", 0, 0), Prim Unit)
+let tru : expr = (("static", 0, 0), Prim True)
+let fls : expr = (("static", 0, 0), Prim False)
+
 let borrow (prov : prov_var) (omega : owned) (pi : place_expr) : expr =
   (loc(), Borrow (prov, omega, pi))
 let move (pi : place_expr) : expr = (loc(), Move pi)
@@ -45,7 +49,9 @@ let ($.) (pi : place_expr) (idx : int) : place_expr = IndexProj (pi, idx)
 let ($.$) (pi : place_expr) (field : string) : place_expr = FieldProj (pi, field)
 let num (n : int) : expr = (loc(), Prim (Num n))
 let tup (exprs : expr list) : expr = (loc(), Tup exprs)
-let unit : expr = (loc(), Prim Unit)
 let app (fn : expr) (provs : prov_var list) (tys : ann_ty list) (args : expr list) : expr =
   (loc(), App (fn, provs, tys, args))
 let (~@) (fn : fn_var) : expr = (loc(), Fn fn)
+let cond (e1 : expr) (e2 : expr) (e3 : expr) : expr = (loc(), Branch (e1, e2, e3))
+let (<==) (pi : place_expr) (e : expr) : expr = (loc(), Assign (pi, e))
+let (>>) (e1 : expr) (e2 : expr) : expr = (loc(), Seq (e1, e2))
