@@ -156,7 +156,6 @@ let place_env_lookup_opt (gamma : place_env) (x : place) = List.assoc_opt x gamm
 let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x, typ) gamma
 let place_env_append (gamma1 : place_env) (gamma2 : place_env) = List.append gamma1 gamma2
 let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
-
 type tc_error =
   | TypeMismatch of source_loc * ty * ty (* source_loc * expected * found *)
   | TypeMismatchIterable of source_loc * ty (* source_loc * found *)

@@ -27,11 +27,12 @@ let (borrowed_local_error_sigma, borrowed_local_error) : global_env * expr =
 
 (* from https://paper.dropbox.com/doc/Polonius-and-subset-propagation-2uMIPkQSbqpPjqrJ9L9DM *)
 let unnecessary_error : expr =
+  reset "unnecessary_error.rs";
   (letexp a ~:u32 (*=*) (num 0)
   (letexp b ~:u32 (*=*) (num 1)
   (letexp x ~:(Tup [~&p1 shrd u32]) (*=*) (tup [borrow p1 shrd (Var a)])
   (letexp y ~:(Tup [~&p2 shrd u32]) (*=*) (tup [borrow p2 shrd (Var b)])
-  (letexp z ~:u32 (*=*) (num 2)
+  (letexp z ~:u32 (*=*) (num 2) (
   (cond (tru)
      (((Var y) $. 0) <== (move ((Var x) $. 0)))
      (unit)
@@ -42,4 +43,4 @@ let unnecessary_error : expr =
       unit)
      (unit)
   ) >>
-  ((Var z) <== (num 3))))))) (* Polonius errors here, hopefully we don't *)
+  ((Var z) <== (num 3)))))))) (* Polonius errors here, hopefully we don't *)

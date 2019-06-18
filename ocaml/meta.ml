@@ -137,6 +137,39 @@ let place_env_subtract (gamma : place_env) (pi : place) : place_env =
   in let ids = List.map (fun (pi, _) -> pi) gammaSub
   in List.fold_left place_env_exclude gamma ids
 
+let rec contains_prov (gamma : place_env) (prov : prov_var) =
+  let rec ty_contains (ty : ty) : bool =
+    match ty with
+    | Any | BaseTy _ | TyVar _ -> false
+    | Ref (pv, _, ty) -> pv = prov || ty_contains ty
+    | Fun (pvs, _, tys, gam, ret_ty) ->
+      if not (List.mem prov pvs) then
+        ty_contains ret_ty || tys_contains tys || contains_prov gam prov
+      else false
+    | Array (ty, _) | Slice ty -> ty_contains ty
+    | Tup tys -> tys_contains tys
+  and tys_contains (tys : ty list) : bool =
+    List.exists ty_contains tys
+  in List.exists (fun pair -> ty_contains (snd pair)) gamma
+
+let envs_minus (ell : loan_env) (gamma : place_env) (pi : place) : loan_env * place_env =
+  let rec loop (ty : ty option) (pair : loan_env * place_env) =
+    match ty with
+    | Some (Ref (prov, _, ty)) ->
+      let (ell, gamma) = loop (Some ty) pair
+      in let new_gamma = place_env_subtract gamma pi
+      in Format.printf "%a %a@." pp_loan_env ell pp_place_env gamma;
+      if not (contains_prov new_gamma prov) then (loan_env_exclude ell prov, new_gamma)
+      else (ell, new_gamma)
+    | Some Any | Some (BaseTy _) | Some (TyVar _) | Some (Fun _) -> pair
+    | Some (Array (ty, _)) | Some (Slice ty) -> loop (Some ty) pair
+    | Some (Tup tys) -> loops tys pair
+    | None -> (ell, gamma)
+  and loops (tys : ty list) (pair : loan_env * place_env) =
+    List.fold_right loop (List.map (fun x -> Some x) tys) pair
+  in loop (place_env_lookup_opt gamma pi) (ell, gamma)
+
+
 let rec prefixed_by (target : place) (in_pi : place) : bool =
   if target = in_pi then true
   else match in_pi with

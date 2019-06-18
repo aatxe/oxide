@@ -48,7 +48,7 @@ let subtype_prov (loc : source_loc) (ell : loan_env)
   match (loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
   | (Some rep1, Some rep2) ->
     let ellPrime = loan_env_exclude ell prov2
-    in Succ (loan_env_include ellPrime prov2 (List.append rep1 rep2))
+    in Succ (loan_env_include ellPrime prov2 (list_union rep1 rep2))
   | (None, Some _) -> Fail (InvalidProv (loc, ProvVar prov1))
   | (Some _, None) -> Fail (InvalidProv (loc, ProvVar prov2))
   | (None, None) ->
@@ -116,10 +116,10 @@ let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
     let (prov, loans) = pair
     in match loan_env_lookup_opt acc prov with
     | Some curr_loans ->
-      loan_env_include (loan_env_exclude acc prov) prov (List.append loans curr_loans)
+      loan_env_include (loan_env_exclude acc prov) prov (list_union loans curr_loans)
     | None -> loan_env_include acc prov loans
   in let (prt1, (prt2, prt3)) = List.fold_left work ell1 (fst ell2)
-  in (prt1, (List.append prt2 (sndfst ell2), List.append prt3 (sndsnd ell2)))
+  in (prt1, (list_union prt2 (sndfst ell2), list_union prt3 (sndsnd ell2)))
 
 let intersect (envs1 : loan_env * place_env) (envs2 : loan_env * place_env) : loan_env * place_env =
   let (ell1, gamma1) = envs1
@@ -128,7 +128,7 @@ let intersect (envs1 : loan_env * place_env) (envs2 : loan_env * place_env) : lo
   in let also_in_gamma2 (pair : place * ty) =
        let (pi, ty) = pair
        in match place_env_lookup_opt gamma2 pi with
-       | Some ty2 -> ty = ty2 (* TODO: maybe unify, but then were changing ell *)
+       | Some ty2 -> ty == ty2 (* TODO: maybe unify, but then were changing ell *)
        | None -> false
   in (ell, List.find_all also_in_gamma2 gamma1)
 
@@ -195,7 +195,8 @@ let omega_safe (ell : loan_env) (gamma : place_env) (omega : owned)
   | Succ loans ->
     let safe_then_ty (loan : loan) : ty option * loan =
       match is_safe ell gamma omega (snd loan) with
-      | None -> (Some (place_env_lookup gamma (snd loan)), loan)
+      | None ->
+        (Some (place_env_lookup gamma (snd loan)), loan)
       | Some possible_conflicts ->
         (* the reason these are only _possible_ conflicts is essentially reborrows *)
         match List.find_opt (fun loan -> not (List.mem loan loans)) possible_conflicts with
@@ -206,7 +207,9 @@ let omega_safe (ell : loan_env) (gamma : place_env) (omega : owned)
           else (None, loan)
     in let opt_tys = List.map safe_then_ty loans
     in (match List.assoc_opt None opt_tys with
-        | Some (o, place) -> Fail (SafetyErr (fst pi, (omega, snd pi), (o, place)))
+        | Some (o, place) ->
+          Format.printf "%a %a@." pp_loan_env ell pp_place_env gamma;
+          Fail (SafetyErr (fst pi, (omega, snd pi), (o, place)))
         | None ->
           let unwrap (opt : 'a option) : 'a =
             match opt with
@@ -228,7 +231,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Prim prim -> Succ (type_of prim, ell, gamma)
     | Move pi ->
       (match omega_safe ell gamma Unique (fst expr, pi) with
-       | Succ (ty, [(Unique, pi)]) -> Succ (ty, ell, if noncopyable ty then place_env_subtract gamma pi else gamma)
+       | Succ (ty, [(Unique, pi)]) ->
+         let (ellPrime, gammaPrime) =
+           if noncopyable ty then envs_minus ell gamma pi
+           else (ell, gamma)
+         in Succ (ty, ellPrime, gammaPrime)
        | Succ _ -> failwith "unreachable"
        | Fail err -> Fail err)
     | Borrow (prov, omega, pi) ->
@@ -288,7 +295,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | LetProv (new_provars, e) ->
       let (provars, tyvars) = delta
       in let to_loan_entry (var : prov_var) : prov_var * loans = (var, [])
-      in let deltaPrime = (List.append new_provars provars, tyvars)
+      in let deltaPrime = (list_union new_provars provars, tyvars)
       in let ellPrime = loan_env_append (List.map to_loan_entry provars, ([], [])) ell
       in tc deltaPrime ellPrime gamma e
     | Let (var, ann_ty, e1, e2) ->
@@ -351,8 +358,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | None -> Fail (UnknownFunction (fst expr, fn)))
     | Fun (provs, tyvars, params, body) ->
       let places_typ_u (pair : var * ann_ty) = places_typ (Var (fst pair)) (sndsnd pair)
-      in let gam_ext = List.fold_right List.append (List.map places_typ_u params) []
-      in let deltaPrime = (List.append provs (fst delta), List.append tyvars (snd delta))
+      in let gam_ext = List.fold_right list_union (List.map places_typ_u params) []
+      in let deltaPrime = (list_union provs (fst delta), list_union tyvars (snd delta))
       in let ellPrime = loan_env_bindall ell provs
       in (match tc deltaPrime ellPrime (place_env_append gam_ext gamma) body with
           | Succ (ret_ty, ellPrime, gammaPrime) ->
