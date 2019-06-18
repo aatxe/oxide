@@ -68,9 +68,9 @@ let is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place_exp
     (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
     let (_, pi_prime) = loan
         (* either pi is an ancestor of pi_prime *)
-    in List.exists (fun x -> x = pi) (all_subplaces pi_prime)
+    in List.exists (fun x -> root_of x = root_of pi) (all_subplaces pi_prime)
         (* or pi_prime is a subplace of pi *)
-        || List.exists (fun x -> x = pi_prime) subplaces_of_pi
+        || List.mem pi_prime subplaces_of_pi
   in match omega with
   | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
     (match List.filter relevant (find_loans Shared ell gamma pi) with

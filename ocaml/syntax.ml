@@ -17,7 +17,7 @@ type place_expr =
   | Var of var
   | Deref of place_expr
   | FieldProj of place_expr * string
-  | IxProj of place_expr * int
+  | IndexProj of place_expr * int
 [@@deriving show]
 
 let rec place_to_place_expr (pi : place) : place_expr =

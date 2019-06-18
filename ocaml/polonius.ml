@@ -3,7 +3,7 @@ open Syntax
 
 (* this variant of 4b tries to re-use the reborrowed ref, and should error *)
 let borrowck_access_permissions_4b_variant : expr =
-  reset "borrowck_access_permissions_4b.rs";
+  reset "borrowck_access_permissions_4b_variant.rs";
   (letexp x ~:u32 (*=*) (num 1)
   (letexp x_mut ~:u32 (*=*) (num 2)
   (letexp ref_x ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd (Var x))
