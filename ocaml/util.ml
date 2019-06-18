@@ -3,7 +3,13 @@ let fstsnd (p : ('a * 'b) * 'c) : 'b = snd (fst p)
 let sndfst (p : 'a * ('b * 'c)) : 'b = fst (snd p)
 let sndsnd (p : 'a * ('b * 'c)) : 'c = snd (snd p)
 
-let list_union (xs : 'a list) (ys : 'a list) =
-  let uniq_cons (x : 'a) (xs : 'a list) =
-    if List.mem x xs then xs else List.cons x xs
-  in List.fold_right uniq_cons xs ys
+let uniq_cons (x : 'a) (xs : 'a list) : 'a list =
+  if List.mem x xs then xs else List.cons x xs
+
+let list_union (xs : 'a list) (ys : 'a list) : 'a list =
+  List.fold_right uniq_cons xs ys
+
+let unwrap (opt : 'a option) : 'a =
+  match opt with
+  | Some x -> x
+  | None -> failwith "attempted to unwrap an empty option"

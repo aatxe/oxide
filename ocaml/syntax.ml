@@ -17,11 +17,30 @@ type place_expr =
   | Var of var
   | Deref of place_expr
   | FieldProj of place_expr * string
-  | IndexProj of place_expr * int
+  | IxProj of place_expr * int
 [@@deriving show]
 
-type loan = owned * place [@@deriving show]
-type loans = (owned * place) list [@@deriving show]
+let rec place_to_place_expr (pi : place) : place_expr =
+  match pi with
+  | Var var -> Var var
+  | FieldProj (pi_prime, field) -> FieldProj (place_to_place_expr pi_prime, field)
+  | IndexProj (pi_prime, idx) -> IndexProj (place_to_place_expr pi_prime, idx)
+
+let rec place_expr_to_place (pi : place_expr) : place option =
+  match pi with
+  | Var var -> Some (Var var)
+  | Deref _ -> None
+  | FieldProj (pi_prime, field) ->
+    (match place_expr_to_place pi_prime with
+     | Some pi_prime -> Some (FieldProj (pi_prime, field))
+     | None -> None)
+  | IndexProj (pi_prime, idx) ->
+    (match place_expr_to_place pi_prime with
+    | Some pi_prime -> Some (IndexProj (pi_prime, idx))
+    | None -> None)
+
+type loan = owned * place_expr [@@deriving show]
+type loans = loan list [@@deriving show]
 type prov =
   | ProvVar of prov_var
   | ProvSet of loans
@@ -153,9 +172,20 @@ let empty_gamma : place_env = []
 
 let place_env_lookup (gamma : place_env) (x : place) = List.assoc x gamma
 let place_env_lookup_opt (gamma : place_env) (x : place) = List.assoc_opt x gamma
+let place_env_lookup_speco (gamma : place_env) (x : place_expr) =
+  match place_expr_to_place x with
+  | Some pi -> place_env_lookup_opt gamma pi
+  | None -> None
+let place_env_lookup_spec (gamma : place_env) (x : place_expr) =
+  unwrap (place_env_lookup_speco gamma x)
+let place_env_contains_spec (gamma : place_env) (x : place_expr) =
+  match place_env_lookup_speco gamma x with
+  | Some _ -> true
+  | None -> false
 let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x, typ) gamma
 let place_env_append (gamma1 : place_env) (gamma2 : place_env) = List.append gamma1 gamma2
 let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
+
 type tc_error =
   | TypeMismatch of source_loc * ty * ty (* source_loc * expected * found *)
   | TypeMismatchIterable of source_loc * ty (* source_loc * found *)
@@ -163,16 +193,17 @@ type tc_error =
   | TypeMismatchRef of source_loc * ty (* source_loc * found *)
   | PlaceEnvMismatch of source_loc * place_env * place_env (* source_loc * expected * found *)
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
-  | SafetyErr of source_loc * (owned * place_expr) * (owned * place)
+  | SafetyErr of source_loc * (owned * place_expr) * (owned * place_expr)
                 (* source_loc * attempted access * conflicting loan *)
   | CannotMove of source_loc * place_expr
   | UnificationFailed of source_loc * ty * ty
   | UnknownFunction of source_loc * fn_var
   | InvalidType of source_loc * ty
   | InvalidProv of source_loc * prov
-  | InvalidLoan of source_loc * owned * place
+  | InvalidLoan of source_loc * owned * place_expr
   | InvalidArrayLen of source_loc * ty * int
   | UnboundPlace of source_loc * place
+  | UnboundPlaceExpr of source_loc * place_expr
   | AbsProvsNotSubtype of source_loc * prov_var * prov_var
 [@@deriving show]
 

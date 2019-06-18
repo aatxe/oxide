@@ -43,4 +43,4 @@ let unnecessary_error : expr =
       unit)
      (unit)
   ) >>
-  ((Var z) <== (num 3)))))))) (* Polonius errors here, hopefully we don't *)
+  ((Var z) <== (num 3)))))))) (* Polonius errors here, and so do we *)

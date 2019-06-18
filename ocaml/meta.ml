@@ -33,38 +33,40 @@ let all_loans (omega : owned) (ell : loan_env) (gamma : place_env) : loans =
   in List.fold_right (fun entry -> work (snd entry)) gamma []
 
 (*  compute all subplaces from a given place *)
-let all_subplaces (pi : place) : place list =
-  let rec work (pi : place) (places : place list) : place list =
+let all_subplaces (pi : place_expr) : place_expr list =
+  let rec work (pi : place_expr) (places : place_expr list) : place_expr list =
     match pi with
     | Var _ -> List.cons pi places
+    | Deref _ -> List.cons pi places
     | FieldProj (pi_prime, _) -> work pi_prime (List.cons pi places)
     | IndexProj (pi_prime, _) -> work pi_prime (List.cons pi places)
   in work pi []
 
 (* find the root of a given place *)
-let rec root_of (pi : place) : var =
+let rec root_of (pi : place_expr) : var =
   match pi with
   | Var root -> root
+  | Deref pi_prime -> root_of pi_prime
   | FieldProj (pi_prime, _) -> root_of pi_prime
   | IndexProj (pi_prime, _) -> root_of pi_prime
 
 (* find all at-least-omega loans in gamma that have to do with pi *)
-let find_loans (omega : owned) (ell : loan_env) (gamma : place_env) (pi : place) : loans =
+let find_loans (omega : owned) (ell : loan_env) (gamma : place_env) (pi : place_expr) : loans =
   (* n.b. this is actually too permissive because of reborrowing and deref *)
   let root_of_pi = root_of pi
-  in let relevant (pair : owned * place) : bool =
+  in let relevant (loan : loan) : bool =
     (* a loan is relevant if it is a descendant of any subplace of pi *)
-    let (_, pi_prime) = pair
+    let (_, pi_prime) = loan
        (* the easiest way to check is to check if their roots are the same *)
     in root_of_pi = root_of pi_prime
   in List.filter relevant (all_loans omega ell gamma)
 
 (* given a gamma, determines whether it is safe to use pi according to omega *)
-let is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place) : loans option =
+let is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place_expr) : loans option =
   let subplaces_of_pi = all_subplaces pi
-  in let relevant (pair : owned * place) : bool =
+  in let relevant (loan : loan) : bool =
     (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
-    let (_, pi_prime) = pair
+    let (_, pi_prime) = loan
         (* either pi is an ancestor of pi_prime *)
     in List.exists (fun x -> x = pi) (all_subplaces pi_prime)
         (* or pi_prime is a subplace of pi *)
@@ -91,13 +93,13 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
         match acc with
         | Fail err -> Fail err
         | Succ loans ->
-          match List.assoc_opt (snd loan) gamma with
+          match place_env_lookup_speco gamma (snd loan) with
           | Some (Ref (prov, _, _)) ->
             (match loan_env_lookup_opt ell prov with
              | Some new_loans -> Succ (List.append loans new_loans)
              | None -> Fail (InvalidProv (loc, ProvVar prov)))
           | Some found -> Fail (TypeMismatchRef (loc, found))
-          | None -> Fail (UnboundPlace (loc, snd loan))
+          | None -> Fail (UnboundPlaceExpr (loc, snd loan))
       in List.fold_left work (Succ []) loans
     | Fail err -> Fail err)
   | FieldProj (pi, field) ->
@@ -158,8 +160,7 @@ let envs_minus (ell : loan_env) (gamma : place_env) (pi : place) : loan_env * pl
     | Some (Ref (prov, _, ty)) ->
       let (ell, gamma) = loop (Some ty) pair
       in let new_gamma = place_env_subtract gamma pi
-      in Format.printf "%a %a@." pp_loan_env ell pp_place_env gamma;
-      if not (contains_prov new_gamma prov) then (loan_env_exclude ell prov, new_gamma)
+      in if not (contains_prov new_gamma prov) then (loan_env_exclude ell prov, new_gamma)
       else (ell, new_gamma)
     | Some Any | Some (BaseTy _) | Some (TyVar _) | Some (Fun _) -> pair
     | Some (Array (ty, _)) | Some (Slice ty) -> loop (Some ty) pair
