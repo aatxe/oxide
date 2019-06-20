@@ -74,9 +74,7 @@ fn main() {
                                                 .append(Doc::space())
                                                 .append(Doc::text("@:"))
                                                 .append(Doc::space())
-                                                .append(Doc::text("("))
-                                                .append(cap.ty.to_doc())
-                                                .append(Doc::text(")"))
+                                                .append(parenthesize(cap.ty.to_doc()))
                                                 .group()
                                         } else {
                                             Doc::nil()
@@ -134,9 +132,7 @@ trait PrettyPrint {
 impl PrettyPrint for Block {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         Doc::intersperse(
-            self.stmts.into_iter().map(|stmt| {
-                parenthesize(stmt.to_doc())
-            }),
+            self.stmts.into_iter().map(|stmt| parenthesize(stmt.to_doc())),
             Doc::space().append(Doc::text(">>")).append(Doc::space())
         )
     }
@@ -147,19 +143,9 @@ impl PrettyPrint for Type {
         if let Type::Reference(rf) = self {
             let lifetime = format!("{}", rf.lifetime.as_ref().unwrap().ident);
             return Doc::text("~&")
-                .append(
-                    Doc::text("\"")
-                        .append(Doc::text(lifetime))
-                        .append("\"")
-                        .group()
-                )
+                .append(quote(Doc::text(lifetime)))
                 .append(Doc::space())
-                .append(
-                    match rf.mutability {
-                        Some(_) => Doc::text("uniq"),
-                        None => Doc::text("shrd")
-                    }
-                )
+                .append(rf.mutability.to_doc())
                 .append(Doc::space())
                 .append(rf.elem.to_doc())
                 .group()
@@ -193,7 +179,6 @@ impl PrettyPrint for Type {
 
 impl PrettyPrint for Stmt {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
-
         if let Stmt::Expr(expr) = self {
             return expr.to_doc()
         }
@@ -262,9 +247,8 @@ impl PrettyPrint for Expr {
 impl PrettyPrint for Path {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         Doc::intersperse(
-            self.segments.into_iter().map(|seg| {
-                Doc::text(format!("{}", seg.ident))
-            }), Doc::text("::")
+            self.segments.into_iter().map(|seg| Doc::text(format!("{}", seg.ident))),
+            Doc::text("::")
         )
     }
 }
