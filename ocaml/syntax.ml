@@ -1,10 +1,10 @@
 open Util
 
 type source_loc = string * int * int [@@deriving show]
-type var = int [@@deriving show]
-type ty_var = int [@@deriving show]
-type fn_var = int [@@deriving show]
-type prov_var = int [@@deriving show]
+type var = string [@@deriving show]
+type ty_var = string [@@deriving show]
+type fn_var = string [@@deriving show]
+type prov_var = string [@@deriving show]
 
 type owned = Shared | Unique [@@deriving show]
 type place =

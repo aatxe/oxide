@@ -14,13 +14,13 @@ let reset (file : string) : unit =
   gloc := (file, 0, 0)
 
 (* variables for use in programs *)
-let (x, y, z, w, a, b, r, v) = (1, 2, 3, 4, 5, 6, 7, 8)
-let (x_mut, ref_x, ref_x_mut) = (9, 10, 11)
+let (x, y, z, w, a, b, r, v) = ("x", "y", "z", "w", "a", "b", "r", "v")
+let (x_mut, ref_x, ref_x_mut) = ("x_mut", "ref_x", "ref_x_mut")
 (* provenance variables for use in programs *)
-let (p1, p2, p3, p4, p5, p6, p7) = (101, 102, 103, 104, 105, 106, 107)
+let (p1, p2, p3, p4, p5, p6) = ("'a", "'b", "'c", "'d", "'e", "'f")
 
 (* function names for use in prograrms *)
-let (gimmie) = (201)
+let (gimmie) = ("gimmie")
 
 (* short-hand for use in programs *)
 let fn (name : fn_var) (provs : prov_var list) (tyvars : ty_var list) (params : (var * ty) list)
