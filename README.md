@@ -32,8 +32,9 @@ This repository is split into five parts:
       and stopped writing actual prose in the models. Afterward, I switched to LaTeX.
 3. [`history/examples/`](history/examples/) — a collection of old examples (and counter-examples) at each level
     - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form at the time.
-5. [`ocaml/`](ocaml/) — an implementation of Oxide in OCaml
-    - Currently, it's just some small parts of Oxide for experimentation.
+4. [`oxide/`](oxide/) — an implementation of Oxide in OCaml
+    - Currently, it's just the type checker, but we will eventually have an interpreter too.
+5. [`reducer/`](reducer/) — a desugarer (simple compiler) from (a subset of) Rust to Oxide
 
 
 ## Related Works
