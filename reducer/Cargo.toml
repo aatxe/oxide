@@ -1,0 +1,9 @@
+[package]
+name = "reducer"
+version = "0.1.0"
+authors = ["Aaron Weiss <awe@pdgn.co>", "Daniel Patterson <dbp@dbpmail.net>"]
+edition = "2018"
+
+[dependencies]
+pretty = "0.5"
+syn = { version = "0.15", features = ["full", "extra-traits"] }
