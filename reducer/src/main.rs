@@ -129,8 +129,97 @@ fn main() {
         .nest(2)
         .group();
 
+    let driver : PP =
+        Doc::text("let")
+        .append(Doc::space())
+        .append(Doc::text("main"))
+        .append(Doc::space())
+        .append(Doc::text("="))
+        .append(Doc::space())
+        .append(Doc::text("match"))
+        .append(Doc::space())
+        .append(Doc::text("wf_global_env"))
+        .append(Doc::space())
+        .append(Doc::text("prog"))
+        .append(Doc::space())
+        .append(Doc::text("with"))
+        .nest(2)
+        .group()
+        .append(Doc::newline())
+        .append(
+            Doc::text("|")
+                .append(Doc::space())
+                .append(Doc::text("Succ"))
+                .append(Doc::space())
+                .append(Doc::text("()"))
+                .append(Doc::space())
+                .append(Doc::text("->"))
+                .append(Doc::space())
+                .append(Doc::text("Format.printf"))
+                .append(Doc::space())
+                .append(Doc::text("\"valid global environment:@. %a@.\""))
+                .append(Doc::space())
+                .append(Doc::text("pp_global_env"))
+                .append(Doc::space())
+                .append(Doc::text("prog"))
+                .group()
+        )
+        .append(Doc::newline())
+        .append(
+            Doc::text("|")
+                .append(Doc::space())
+                .append(Doc::text("Fail"))
+                .append(Doc::space())
+                .append(Doc::text("err"))
+                .append(Doc::space())
+                .append(Doc::text("->"))
+                .group()
+                .append(Doc::space())
+                .append(
+                    Doc::text("Format.printf")
+                        .append(Doc::space())
+                        .append(Doc::text("\"error: %a@. invalid global environment:@. %a@.\""))
+                        .group()
+                )
+                .append(
+                    Doc::space()
+                        .append(
+                            Doc::text("pp_tc_error")
+                                .append(Doc::space())
+                                .append(Doc::text("err"))
+                                .group()
+                        )
+                        .append(Doc::space())
+                        .append(
+                            Doc::text("pp_global_env")
+                                .append(Doc::space())
+                                .append(Doc::text("prog"))
+                                .group()
+                        )
+                        .nest(2)
+                        .group()
+                )
+                .nest(2)
+                .group()
+        )
+        .nest(2)
+        .group();
+
+    let whole_program =
+        Doc::text("open Oxide.Edsl")
+        .append(Doc::newline())
+        .append(Doc::text("open Oxide.Typeck"))
+        .append(Doc::newline())
+        .append(Doc::text("open Oxide.Syntax"))
+        .append(Doc::newline())
+        .append(Doc::newline())
+        .append(program)
+        .append(Doc::newline())
+        .append(Doc::newline())
+        .append(driver);
+
     let mut buf = Vec::new();
-    program.render(100, &mut buf).unwrap();
+    whole_program.render(100, &mut buf).unwrap();
     println!("{}", String::from_utf8(buf).unwrap());
 }
 

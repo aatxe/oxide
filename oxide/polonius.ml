@@ -1,5 +1,5 @@
-open Edsl
-open Syntax
+open Oxide.Edsl
+open Oxide.Syntax
 
 (* this variant of 4b tries to re-use the reborrowed ref, and should error *)
 let borrowck_access_permissions_4b_variant : expr =

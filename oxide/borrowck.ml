@@ -1,5 +1,5 @@
-open Edsl
-open Syntax
+open Oxide.Edsl
+open Oxide.Syntax
 
 (* rustc commit: e699ea096fcc2fc9ce8e8bcf884e11496a31cc9f *)
 

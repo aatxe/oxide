@@ -416,3 +416,18 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
         | Fail err -> Fail err
     in List.fold_left work (Succ ([], ell, gamma)) exprs
   in tc delta ell gamma expr
+
+let wf_global_env (sigma : global_env) : unit tc =
+  let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
+    match (acc, entry) with
+    | (Fail err, _) -> Fail err
+    | (_, FnDef (_, provs, tyvars, params, ret_ty, body)) ->
+      let delta = (provs, tyvars)
+      in let gamma = List.flatten
+             (List.map (fun pair -> places_typ (Var (fst pair)) (snd pair)) params)
+      in match type_check sigma delta empty_ell gamma body with
+      | Succ (output_ty, _, _) ->
+        if output_ty == ret_ty then Succ ()
+        else Fail (TypeMismatch (("dummy", 0, 0), ret_ty, output_ty))
+      | Fail err -> Fail err
+  in List.fold_left valid_global_entry (Succ ()) sigma

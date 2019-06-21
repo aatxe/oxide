@@ -1,6 +1,6 @@
-open Syntax
-open Meta
-open Typeck
+open Oxide.Syntax
+open Oxide.Meta
+open Oxide.Typeck
 open Borrowck (* examples from rust's borrowck tests *)
 open Polonius (* examples from me, Niko, or the nll tests *)
 

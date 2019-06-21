@@ -1,3 +1,9 @@
-(executables
-  (names oxide)
-  (preprocess (pps ppx_deriving.std)))
+(executable
+ (name oxexe)
+ (libraries oxide)
+ (modules Oxexe Borrowck Polonius)
+ (preprocess (pps ppx_deriving.std)))
+(library
+ (name oxide)
+ (modules Edsl Syntax Typeck Meta Util)
+ (preprocess (pps ppx_deriving.std)))
