@@ -93,8 +93,9 @@ fn main() {
                 )
                 // body
                 .append(Doc::space())
-                .append(inner.block.to_doc())
+                .append(inner.block.to_doc().nest(2))
                 .append(")")
+                .nest(2)
                 .group();
             let mut buf = Vec::new();
             doc.render(100, &mut buf).unwrap();
@@ -206,28 +207,31 @@ impl PrettyPrint for Stmt {
                         })
                         .group()
                 )
+                .group()
                 .append(Doc::space())
                 .append(match binding.init {
                     Some((_, expr)) =>
                         Doc::text("(*=*)")
                         .append(Doc::space())
-                        .append(parenthesize(expr.to_doc()))
-                        .group(),
+                        .append(parenthesize(expr.to_doc().nest(2))),
                     None => panic!("we don't support uninitialized bindings")
                 })
                 .group()
         }
 
         if let Stmt::Expr(expr) = self {
-            return parenthesize(expr.to_doc())
+            return parenthesize(expr.to_doc().nest(2))
         }
 
         if let Stmt::Semi(expr, _) = self {
-            return parenthesize(expr.to_doc()
-                .append(Doc::space())
-                .append(Doc::text(">>"))
-                .append(Doc::space())
-                .append("unit"))
+            return parenthesize(
+                expr.to_doc()
+                    .append(Doc::space())
+                    .append(Doc::text(">>"))
+                    .append(Doc::space())
+                    .append("unit")
+                    .nest(2)
+            )
         }
 
         println!("{:#?}", self);
