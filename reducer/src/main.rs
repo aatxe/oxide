@@ -8,6 +8,13 @@ use syn::{Block, Expr, FnArg, GenericParam, Item, Lit, Member, Pat, Path, Return
 
 type PP = Doc<'static, BoxDoc<'static, ()>>;
 
+static mut LAST_SYM: u64 = 0;
+
+fn gensym() -> PP {
+    unsafe { LAST_SYM += 1 };
+    Doc::text(format!("\"p{}\"", unsafe { LAST_SYM }))
+}
+
 fn main() {
     let mut args = env::args();
     let _ = args.next(); // executable name
@@ -27,41 +34,40 @@ fn main() {
 
     let syntax = syn::parse_file(&src).expect("Unable to parse file");
 
-    for item in syntax.items.into_iter() {
+    let docs = syntax.items.into_iter().map(|item| {
         if let Item::Fn(inner) = item {
-            let doc: Doc<BoxDoc<()>> =
-                Doc::text("(")
-                // fn keyword and name
+            Doc::text("(")
+            // fn keyword and name
                 .append(Doc::text("fn")
                         .append(Doc::space())
                         .append(Doc::text(format!("\"{}\"", inner.ident)))
                         .group()
                 )
-                // provenance variables
+            // provenance variables
                 .append(Doc::space())
                 .append(
                     Doc::text("[")
                         .append(
                             Doc::intersperse(
-                            inner.decl.generics.params.into_iter().flat_map(|param| match param {
-                                GenericParam::Lifetime(lft) => Some(
-                                    Doc::text(format!("\"{}\"", lft.lifetime.ident))
-                                ),
-                                _ => None
-                            }),
-                            Doc::text(";").append(Doc::space()))
+                                inner.decl.generics.params.into_iter().flat_map(|param| match param {
+                                    GenericParam::Lifetime(lft) => Some(
+                                        Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                    ),
+                                    _ => None
+                                }),
+                                Doc::text(";").append(Doc::space()))
                         )
                         .append(Doc::text("]"))
                         .group()
                 )
-                // type variables
+            // type variables
                 .append(Doc::space())
                 .append(
                     Doc::text("[")
                         .append(Doc::text("]"))
                         .group()
                 )
-                // parameters
+            // parameters
                 .append(Doc::space())
                 .append(
                     Doc::text("[")
@@ -70,11 +76,11 @@ fn main() {
                                 inner.decl.inputs.into_iter().map(|arg| match arg {
                                     FnArg::Captured(cap) =>
                                         cap.pat.to_doc()
-                                            .append(Doc::space())
-                                            .append(Doc::text("@:"))
-                                            .append(Doc::space())
-                                            .append(parenthesize(cap.ty.to_doc()))
-                                            .group(),
+                                        .append(Doc::space())
+                                        .append(Doc::text("@:"))
+                                        .append(Doc::space())
+                                        .append(parenthesize(cap.ty.to_doc()))
+                                        .group(),
                                     _ => Doc::nil(),
                                 }),
                                 Doc::text(";").append(Doc::space())
@@ -83,7 +89,7 @@ fn main() {
                         .append(Doc::text("]"))
                         .group()
                 )
-                // return type
+            // return type
                 .append(Doc::space())
                 .append(
                     parenthesize(match inner.decl.output {
@@ -91,19 +97,41 @@ fn main() {
                         ReturnType::Type(_, ty) => ty.to_doc(),
                     })
                 )
-                // body
+            // body
                 .append(Doc::space())
                 .append(inner.block.to_doc().nest(2))
                 .append(")")
                 .nest(2)
-                .group();
-            let mut buf = Vec::new();
-            doc.render(100, &mut buf).unwrap();
-            println!("{}", String::from_utf8(buf).unwrap());
+                .group()
+        } else {
+            Doc::nil()
         }
-    }
+    });
 
-    // println!("{:#?}", syntax);
+    let global_env = Doc::text("[")
+        .append(Doc::intersperse(docs, Doc::text(";").append(Doc::space())).nest(2))
+        .append(Doc::text("]"))
+        .group();
+
+    let program =
+        Doc::text("let")
+        .append(Doc::space())
+        .append(Doc::text("prog"))
+        .append(Doc::space())
+        .append(Doc::text(":"))
+        .append(Doc::space())
+        .append(Doc::text("global_env"))
+        .append(Doc::space())
+        .append(Doc::text("="))
+        .group()
+        .append(Doc::space())
+        .append(global_env)
+        .nest(2)
+        .group();
+
+    let mut buf = Vec::new();
+    program.render(100, &mut buf).unwrap();
+    println!("{}", String::from_utf8(buf).unwrap());
 }
 
 fn parenthesize(doc: PP) -> PP {
@@ -267,6 +295,8 @@ impl PrettyPrint for Expr {
 
         if let Expr::Reference(borrow) = self {
             return Doc::text("borrow")
+                .append(Doc::space())
+                .append(gensym())
                 .append(Doc::space())
                 .append(borrow.mutability.to_doc())
                 .append(Doc::space())
