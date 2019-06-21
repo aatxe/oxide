@@ -31,6 +31,7 @@ let (@:) (var : var) (ty : ty) : var * ty = (var, ty)
 let (~:) (ty : ty) : ann_ty = (loc(), ty)
 let u32 : ty = BaseTy U32
 let bool : ty = BaseTy Bool
+let unit_ty : ty = BaseTy Unit
 let shrd : owned = Shared
 let uniq : owned = Unique
 let (~&) (prov : prov_var) (omega : owned) (ty : ty) : ty = Ref (prov, omega, ty)
@@ -52,6 +53,10 @@ let tup (exprs : expr list) : expr = (loc(), Tup exprs)
 let app (fn : expr) (provs : prov_var list) (tys : ann_ty list) (args : expr list) : expr =
   (loc(), App (fn, provs, tys, args))
 let (~@) (fn : fn_var) : expr = (loc(), Fn fn)
+let (~@@) (mv : expr) : expr =
+  match mv with
+  | (loc, Move (Var var)) -> (loc, Fn var)
+  | _ -> failwith "bad codegen: found a non-variable function name"
 let cond (e1 : expr) (e2 : expr) (e3 : expr) : expr = (loc(), Branch (e1, e2, e3))
 let (<==) (pi : place_expr) (e : expr) : expr = (loc(), Assign (pi, e))
 let (>>) (e1 : expr) (e2 : expr) : expr = (loc(), Seq (e1, e2))
