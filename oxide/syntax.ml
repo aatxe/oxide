@@ -94,6 +94,7 @@ type preexpr =
   | Idx of place_expr * expr
   | Abort of string
   | Branch of expr * expr * expr
+  | While of expr * expr
   | For of var * expr * expr
   | Tup of expr list
   | Array of expr list

@@ -6,7 +6,7 @@ use std::process;
 use pretty::{BoxDoc, Doc};
 use proc_macro2::{LineColumn, Span};
 use syn::{Block, Expr, FnArg, GenericParam, Item, Lit, Member, Pat, Path, ReturnType, Stmt, Type};
-use syn::{ExprLit, UnOp};
+use syn::{BinOp, ExprAssign, ExprBinary, ExprLit, RangeLimits, UnOp};
 use syn::spanned::Spanned;
 
 type PP = Doc<'static, BoxDoc<'static, ()>>;
@@ -377,6 +377,10 @@ impl PrettyPrint for Expr {
             return parenthesize(expr.block.to_doc())
         }
 
+        if let Expr::Group(expr) = self {
+            return parenthesize(expr.expr.to_doc())
+        }
+
         if let Expr::Lit(expr) = self {
             return expr.lit.to_doc()
         }
@@ -464,23 +468,37 @@ impl PrettyPrint for Expr {
         }
 
         if let Expr::Tuple(expr) = self {
-            return parenthesize(
-                expr.span().to_doc()
-                    .append(Doc::text(","))
-                    .append(Doc::space())
-                    .append(Doc::text("Tup")
-                            .append(Doc::space())
-                            .append(
-                                Doc::text("[")
-                                    .append(Doc::intersperse(
-                                        expr.elems.into_iter().map(|expr| expr.to_doc()),
-                                        Doc::text(";").append(Doc::space())
-                                    ))
-                                    .append(Doc::text("]"))
-                                    .group()
-                            )
-                    )
-            )
+            if expr.elems.is_empty() {
+                return parenthesize(
+                    expr.span().to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(
+                            Doc::text("Prim")
+                                .append(Doc::space())
+                                .append(Doc::text("Unit"))
+                                .group()
+                        )
+                )
+            } else {
+                return parenthesize(
+                    expr.span().to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(Doc::text("Tup")
+                                .append(Doc::space())
+                                .append(
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            expr.elems.into_iter().map(|expr| expr.to_doc()),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]"))
+                                        .group()
+                                )
+                        )
+                )
+            }
         }
 
         if let Expr::If(expr) = self {
@@ -507,6 +525,28 @@ impl PrettyPrint for Expr {
                                     })
                             ))
                             .group()
+                    )
+            )
+        }
+
+        if let Expr::Array(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("Array")
+                            .append(Doc::space())
+                            .append(Doc::text("[")
+                                    .append({
+                                        Doc::intersperse(
+                                            expr.elems.into_iter().map(|expr| expr.to_doc()),
+                                            Doc::text(";").append(Doc::space())
+                                        )
+                                    })
+                                    .append(Doc::text("]"))
+                                    .group()
+                            )
                     )
             )
         }
@@ -541,6 +581,95 @@ impl PrettyPrint for Expr {
             )
         }
 
+        if let Expr::Assign(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("Assign")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                parenthesize(expr.left.to_doc())
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(parenthesize(expr.right.to_doc()))
+                            ))
+                            .group()
+                    )
+            )
+        }
+
+        if let Expr::AssignOp(expr) = self {
+            // We implement assign ops by desugaring them into assignment and the standard binop
+            return Expr::Assign(ExprAssign {
+                attrs: expr.attrs.clone(),
+                left: expr.left.clone(),
+                eq_token: syn::token::Eq { spans: [match expr.op {
+                    BinOp::AddEq(op) => op.spans[1],
+                    BinOp::SubEq(op) => op.spans[1],
+                    BinOp::MulEq(op) => op.spans[1],
+                    BinOp::DivEq(op) => op.spans[1],
+                    BinOp::RemEq(op) => op.spans[1],
+                    BinOp::BitXorEq(op) => op.spans[1],
+                    BinOp::BitAndEq(op) => op.spans[1],
+                    BinOp::BitOrEq(op) => op.spans[1],
+                    BinOp::ShlEq(op) => op.spans[2],
+                    BinOp::ShrEq(op) => op.spans[2],
+                    _ => unreachable!()
+                }] },
+                right: Box::new(Expr::Binary(ExprBinary {
+                    attrs: expr.attrs,
+                    left: expr.left,
+                    op: match expr.op {
+                        BinOp::AddEq(op) => BinOp::Add(syn::token::Add { spans: [op.spans[0]] }),
+                        BinOp::SubEq(op) => BinOp::Sub(syn::token::Sub { spans: [op.spans[0]] }),
+                        BinOp::MulEq(op) => BinOp::Mul(syn::token::Star { spans: [op.spans[0]] }),
+                        BinOp::DivEq(op) => BinOp::Div(syn::token::Div { spans: [op.spans[0]] }),
+                        BinOp::RemEq(op) => BinOp::Rem(syn::token::Rem { spans: [op.spans[0]] }),
+                        BinOp::BitXorEq(op) => BinOp::BitXor(syn::token::Caret {
+                            spans: [op.spans[0]]
+                        }),
+                        BinOp::BitAndEq(op) => BinOp::BitAnd(syn::token::And {
+                            spans: [op.spans[0]]
+                        }),
+                        BinOp::BitOrEq(op) => BinOp::BitOr(syn::token::Or {
+                            spans: [op.spans[0]]
+                        }),
+                        BinOp::ShlEq(op) => BinOp::Shl(syn::token::Shl {
+                            spans: [op.spans[0], op.spans[1]]
+                        }),
+                        BinOp::ShrEq(op) => BinOp::Shr(syn::token::Shr {
+                            spans: [op.spans[0], op.spans[1]]
+                        }),
+                        _ => unreachable!()
+                    },
+                    right: expr.right,
+                }))
+            }).to_doc()
+        }
+
+        if let Expr::While(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("While")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                expr.cond.to_doc()
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .group()
+                                    .nest(2)
+                                    .append(parenthesize(expr.body.to_doc()))
+                            ))
+                            .group()
+                    )
+            )
+        }
+
         if let Expr::ForLoop(expr) = self {
             return parenthesize(
                 expr.span().to_doc()
@@ -549,8 +678,7 @@ impl PrettyPrint for Expr {
                     .append(
                         Doc::text("For")
                             .append(Doc::space())
-                            .append(
-                                parenthesize(
+                            .append(parenthesize(
                                     expr.pat.to_doc()
                                         .append(Doc::text(","))
                                         .append(Doc::space())
@@ -560,11 +688,34 @@ impl PrettyPrint for Expr {
                                         .group()
                                         .nest(2)
                                         .append(parenthesize(expr.body.to_doc()))
-                                )
-                            )
+                            ))
                             .group()
                     )
             )
+        }
+
+        if let Expr::Range(expr) = self {
+            // we only support _finite_ ranges (by elaboration into an array)
+            if let Some(Expr::Lit(ExprLit { lit: Lit::Int(n1), .. })) = expr.from.map(|x| *x) {
+                if let Some(Expr::Lit(ExprLit { lit: Lit::Int(n2), .. })) = expr.to.map(|x| *x) {
+                    return match expr.limits {
+                        RangeLimits::HalfOpen(_) =>
+                            Doc::intersperse(
+                                (n1.value()..n2.value()).map(|n| Doc::text(format!("{}", n))),
+                                Doc::text(";").append(Doc::space())
+                            ),
+                        RangeLimits::Closed(_) =>
+                            Doc::intersperse(
+                                (n1.value()..=n2.value()).map(|n| Doc::text(format!("{}", n))),
+                                Doc::text(";").append(Doc::space())
+                            ),
+                    }
+                } else {
+                    panic!("we don't support non-literal or non-finite ranges")
+                }
+            } else {
+                panic!("we don't support non-literal or non-finite ranges")
+            }
         }
 
         if let Expr::Closure(expr) = self {
@@ -607,6 +758,34 @@ impl PrettyPrint for Expr {
                             ))
                     )
             )
+        }
+
+        if let Expr::Macro(expr) = self {
+            let macro_name = expr.mac.path.segments.iter().fold(
+                String::new(),
+                |mut acc, seg| {
+                    acc.push_str(&format!("{}", seg.ident));
+                    acc
+                }
+            );
+            if macro_name == "abort" || macro_name == "panic" {
+                return parenthesize(
+                    expr.span().to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(
+                            Doc::text("Abort")
+                                .append(Doc::space())
+                                .append(match syn::parse2::<Lit>(expr.mac.tts) {
+                                    Ok(lit) => lit.to_doc(),
+                                    Err(_) => panic!("we don't support panic or aborts with non-literal arguments")
+                                })
+                                .group()
+                        )
+                );
+            } else {
+                panic!("we don't support macros besides abort! and panic!");
+            }
         }
 
         if let Expr::Call(expr) = self {
@@ -728,6 +907,10 @@ impl PrettyPrint for Lit {
                             ))
                     )
             )
+        }
+
+        if let Lit::Str(str) = self {
+            return quote(Doc::text(str.value()))
         }
 
         println!("{:#?}", self);
