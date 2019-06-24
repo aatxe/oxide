@@ -87,7 +87,10 @@ fn main() {
                 .append(Doc::space())
                 .append(
                     parenthesize(match inner.decl.output {
-                        ReturnType::Default => Doc::text("unit_ty"),
+                        ReturnType::Default => Doc::text("BaseTy")
+                            .append(Doc::space())
+                            .append(Doc::text("Unit"))
+                            .group(),
                         ReturnType::Type(_, ty) => ty.to_doc(),
                     })
                 )
@@ -273,20 +276,27 @@ impl PrettyPrint for Type {
         }
 
         if let Type::Tuple(ty) = self {
-            return Doc::text("Tup")
-                .append(Doc::space())
-                .append(
-                    Doc::text("[")
-                        .append(
-                            Doc::intersperse(
-                                ty.elems.into_iter().map(|ty| ty.to_doc()),
-                                Doc::text(";").append(Doc::space())
+            if ty.elems.is_empty() {
+                return Doc::text("BaseTy")
+                    .append(Doc::space())
+                    .append(Doc::text("Unit"))
+                    .group()
+            } else {
+                return Doc::text("Tup")
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("[")
+                            .append(
+                                Doc::intersperse(
+                                    ty.elems.into_iter().map(|ty| ty.to_doc()),
+                                    Doc::text(";").append(Doc::space())
+                                )
                             )
-                        )
-                        .append(Doc::text("]"))
-                        .group()
-                )
-                .group()
+                            .append(Doc::text("]"))
+                            .group()
+                    )
+                    .group()
+            }
         }
 
         if let Type::Path(ty) = self {

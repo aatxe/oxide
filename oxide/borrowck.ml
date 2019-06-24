@@ -7,14 +7,14 @@ open Oxide.Syntax
 
 let borrow_tuple_fields_2 : expr =
   reset "borrow_tuple_fields_2.rs";
-  (letexp x ~:(Tup [u32; u32]) (*=*) (tup [num 1; num 2])
+  (letexp x ~:(prod [u32; u32]) (*=*) (tup [num 1; num 2])
   (letexp a ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd ((Var x) $. 0))
   (letexp b ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq ((Var x) $. 0))
   (move (Var a)))))
 
 let borrow_tuple_fields_3 : expr =
   reset "borrow_tuple_fields_3.rs";
-  (letexp x ~:(Tup [u32; u32]) (*=*) (tup [num 1; num 2])
+  (letexp x ~:(prod [u32; u32]) (*=*) (tup [num 1; num 2])
   (letexp a ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd ((Var x) $. 0))
   (letexp b ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq ((Var x) $. 0))
   (move (Var a)))))

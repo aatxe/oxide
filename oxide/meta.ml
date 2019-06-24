@@ -12,13 +12,11 @@ let is_at_least (omega : owned) (omega_prime : owned) : bool =
 
 (* extract all the specific loans from a given region *)
 let prov_to_loans (ell : loan_env) (prov : prov) : loans =
-  match prov with
-  | ProvVar var -> loan_env_lookup ell var
-  | ProvSet lns -> lns
+  loan_env_lookup ell prov
 
 (* given a root identier x, compute all the places based on tau *)
 let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
-  match tau with
+  match snd tau with
   | Any -> [(pi, tau)]
   | BaseTy _ -> [(pi, tau)]
   | TyVar _ -> [(pi, tau)]
@@ -64,12 +62,12 @@ let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamm
 (* compute all the at-least-omega loans in a given gamma *)
 let all_loans (omega : owned) (ell : loan_env) (gamma : place_env) : loans =
   let rec work (typ : ty) (loans : loans) : loans =
-    match typ with
+    match snd typ with
     | Any -> loans
     | BaseTy _ -> loans
     | TyVar _ -> loans
-    | Ref (var, omega_prime, typ) ->
-      if is_at_least omega omega_prime then List.append (prov_to_loans ell (ProvVar var)) (work typ loans)
+    | Ref (prov, omega_prime, typ) ->
+      if is_at_least omega omega_prime then List.append (prov_to_loans ell prov) (work typ loans)
       else work typ loans
     | Fun (_, _, _, _, _) -> loans
     | Array (typ, _) -> work typ loans
@@ -139,11 +137,11 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
         | Fail err -> Fail err
         | Succ loans ->
           match place_env_lookup_speco gamma (snd loan) with
-          | Some (Ref (prov, _, _)) ->
+          | Some (_, Ref (prov, _, _)) ->
             (match loan_env_lookup_opt ell prov with
              | Some new_loans -> Succ (List.append loans new_loans)
-             | None -> Fail (InvalidProv (loc, ProvVar prov)))
-          | Some found -> Fail (TypeMismatchRef (loc, found))
+             | None -> Fail (InvalidProv prov))
+          | Some found -> Fail (TypeMismatchRef found)
           | None -> Fail (UnboundPlaceExpr (loc, snd loan))
       in List.fold_left work (Succ []) loans
     | Fail err -> Fail err)
@@ -164,9 +162,9 @@ let place_env_subtract (gamma : place_env) (pi : place) : place_env =
   in let ids = List.map (fun (pi, _) -> pi) gammaSub
   in List.fold_left place_env_exclude gamma ids
 
-let rec contains_prov (gamma : place_env) (prov : prov_var) =
+let rec contains_prov (gamma : place_env) (prov : prov) =
   let rec ty_contains (ty : ty) : bool =
-    match ty with
+    match snd ty with
     | Any | BaseTy _ | TyVar _ -> false
     | Ref (pv, _, ty) -> pv = prov || ty_contains ty
     | Fun (pvs, _, tys, gam, ret_ty) ->
@@ -182,14 +180,14 @@ let rec contains_prov (gamma : place_env) (prov : prov_var) =
 let envs_minus (ell : loan_env) (gamma : place_env) (pi : place) : loan_env * place_env =
   let rec loop (ty : ty option) (pair : loan_env * place_env) =
     match ty with
-    | Some (Ref (prov, _, ty)) ->
+    | Some (_, Ref (prov, _, ty)) ->
       let (ell, gamma) = loop (Some ty) pair
       in let new_gamma = place_env_subtract gamma pi
       in if not (contains_prov new_gamma prov) then (loan_env_exclude ell prov, new_gamma)
       else (ell, new_gamma)
-    | Some Any | Some (BaseTy _) | Some (TyVar _) | Some (Fun _) -> pair
-    | Some (Array (ty, _)) | Some (Slice ty) -> loop (Some ty) pair
-    | Some (Tup tys) -> loops tys pair
+    | Some (_, Any) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _) -> pair
+    | Some (_, Array (ty, _)) | Some (_, Slice ty) -> loop (Some ty) pair
+    | Some (_, Tup tys) -> loops tys pair
     | None -> (ell, gamma)
   and loops (tys : ty list) (pair : loan_env * place_env) =
     List.fold_right loop (List.map (fun x -> Some x) tys) pair
@@ -240,7 +238,7 @@ let rec value (sigma : store) (pi : place) : value =
   | Array values -> Array values
 
 let rec noncopyable (typ : ty) : bool =
-  match typ with
+  match snd typ with
   | Any -> false
   | BaseTy _ -> false
   | TyVar _ -> true
