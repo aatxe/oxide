@@ -35,6 +35,7 @@ This repository is split into five parts:
 4. [`oxide/`](oxide/) — an implementation of Oxide in OCaml
     - Currently, it's just the type checker, but we will eventually have an interpreter too.
 5. [`reducer/`](reducer/) — a desugarer (simple compiler) from (a subset of) Rust to Oxide
+    - Run reducer with `RUSTFLAGS='--cfg procmacro2_semver_exempt'` for source filename tracking.
 
 
 ## Related Works

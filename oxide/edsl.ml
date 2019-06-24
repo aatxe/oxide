@@ -1,17 +1,17 @@
 open Syntax
 
 (* stores the last used location *)
-let gloc : source_loc ref = ref ("", 0, 0)
+let gloc : source_loc ref = ref ("", (0, 0), (0, 0))
 
 (* returns a fresh location every time *)
 let loc (_ : unit) : source_loc =
-  let (file, line, char) = !gloc
-  in gloc := (file, line + 1, 0);
-     (file, line, char)
+  let (file, (line, _), (_, _)) = !gloc
+  in gloc := (file, (line + 1, 0), (line + 1, 0));
+     (file, (line, 0), (line, 0))
 
 (* resets the source location info *)
 let reset (file : string) : unit =
-  gloc := (file, 0, 0)
+  gloc := (file, (0, 0), (0, 0))
 
 (* variables for use in programs *)
 let (x, y, z, w, a, b, r, v) = ("x", "y", "z", "w", "a", "b", "r", "v")
@@ -36,15 +36,18 @@ let shrd : owned = Shared
 let uniq : owned = Unique
 let (~&) (prov : prov_var) (omega : owned) (ty : ty) : ty = Ref (prov, omega, ty)
 
-let unit : expr = (("static", 0, 0), Prim Unit)
-let tru : expr = (("static", 0, 0), Prim True)
-let fls : expr = (("static", 0, 0), Prim False)
+let static : source_loc = ("static", (0, 0), (0, 0))
+let unit : expr = (static, Prim Unit)
+let tru : expr = (static, Prim True)
+let fls : expr = (static, Prim False)
 
 let borrow (prov : prov_var) (omega : owned) (pi : place_expr) : expr =
   (loc(), Borrow (prov, omega, pi))
 let move (pi : place_expr) : expr = (loc(), Move pi)
 let letexp (var : var) (ty : ann_ty) (e1 : expr) (e2 : expr) : expr =
   (loc(), Let (var, ty, e1, e2))
+let letbe (loc : source_loc) (var : var) (ty : ann_ty) (e1 : expr) (e2 : expr) : expr =
+  (loc, Let (var, ty, e1, e2))
 let (~*) (pi : place_expr) : place_expr = Deref pi
 let ($.) (pi : place_expr) (idx : int) : place_expr = IndexProj (pi, idx)
 let ($.$) (pi : place_expr) (field : string) : place_expr = FieldProj (pi, field)

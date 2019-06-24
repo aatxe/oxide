@@ -6,4 +6,5 @@ edition = "2018"
 
 [dependencies]
 pretty = "0.5"
+proc-macro2 = { version = "0.4", features = ["span-locations"] }
 syn = { version = "0.15", features = ["full", "extra-traits"] }

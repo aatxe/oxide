@@ -43,15 +43,27 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
 let subst_many (ty : ty) (pairs : (ty * ty_var) list) : ty =
   List.fold_right (fun pair ty -> subst ty (fst pair) (snd pair)) pairs ty
 
-let subtype_prov (loc : source_loc) (ell : loan_env)
+let subtype_prov (loc : source_loc) (mode : subtype_modality) (ell : loan_env)
     (prov1 : prov_var) (prov2 : prov_var) : loan_env tc =
-  match (loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
-  | (Some rep1, Some rep2) ->
+  match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
+  | (Combine, Some rep1, Some rep2) ->
+    (* U-CombineLocalProvenances*)
     let ellPrime = loan_env_exclude ell prov2
     in Succ (loan_env_include ellPrime prov2 (list_union rep1 rep2))
-  | (None, Some _) -> Fail (InvalidProv (loc, ProvVar prov1))
-  | (Some _, None) -> Fail (InvalidProv (loc, ProvVar prov2))
-  | (None, None) ->
+  | (Override, Some rep1, Some _) ->
+    (* U-OverrideLocalProvenances *)
+    let ellPrime = loan_env_exclude ell prov2
+    in Succ (loan_env_include ellPrime prov2 rep1)
+  | (_, None, Some _) ->
+    (* U-AbstractProvLocalProv *)
+    if loan_env_abs_sub ell prov1 prov2 then Succ ell
+    else Fail (InvalidProv (loc, ProvVar prov1))
+  | (_, Some _, None) ->
+    (* U-LocalProvAbstractProv *)
+    let ellPrime = loan_env_add_abs_sub ell prov1 prov2
+    in Succ ellPrime
+  | (_, None, None) ->
+    (* U-AbstractProvenances *)
     if not (loan_env_is_abs ell prov1) then
       Fail (InvalidProv (loc, ProvVar prov1))
     else if not (loan_env_is_abs ell prov2) then
@@ -60,7 +72,7 @@ let subtype_prov (loc : source_loc) (ell : loan_env)
       Fail (AbsProvsNotSubtype (loc, prov1, prov2))
     else Succ ell
 
-let subtype (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
+let subtype (loc : source_loc) (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
   let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) (swapped : bool) : loan_env tc =
     match (ty1, ty2, swapped) with
     | (BaseTy bt1, BaseTy bt2, _) ->
@@ -83,7 +95,7 @@ let subtype (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env
       in List.fold_left work (Succ ell) (List.combine tys1 tys2)
     | (Ref (v1, o1, t1), Ref (v2, o2, t2), _) ->
       if o1 = o2 then
-        match subtype_prov loc ell v1 v2 with
+        match subtype_prov loc mode ell v1 v2 with
         | Succ ellPrime -> sub ellPrime t1 t2 false
         | Fail err -> Fail err
       else Fail (UnificationFailed (loc, ty1, ty2))
@@ -93,7 +105,7 @@ let subtype (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env
   in sub ell ty1 ty2 false
 
 let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
-  match (subtype loc ell ty1 ty2, subtype loc ell ty2 ty1) with
+  match (subtype loc Combine ell ty1 ty2, subtype loc Combine ell ty2 ty1) with
   | (Fail err, _) -> Fail err
   | (_, Fail err) -> Fail err
   | (Succ ell1, Succ ell2) ->
@@ -139,10 +151,11 @@ let place_env_diff (gam1 : place_env) (gam2 : place_env) : place_env =
 let rec valid_prov (loc : source_loc) (delta : tyvar_env) (ell : loan_env) (gamma : place_env) (prov : prov) : unit tc =
   match prov with
   | ProvVar var ->
-    if List.mem var (fst delta) then
+    if loan_env_mem ell var then
       match loan_env_lookup_opt ell var with
       | Some loans -> valid_prov loc delta ell gamma (ProvSet loans)
       | None -> Fail (InvalidProv (loc, ProvVar var))
+    else if loan_env_is_abs ell var then Succ ()
     else Fail (InvalidProv (loc, ProvVar var))
   | ProvSet loans ->
     let invalid_loans = List.filter (fun p -> place_env_contains_spec gamma (snd p)) loans
@@ -300,7 +313,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Let (var, ann_ty, e1, e2) ->
       (match tc delta ell gamma e1 with
        | Succ (ty1, ell1, gamma1) ->
-         (match subtype (fst expr) ell1 ty1 (snd ann_ty) with
+         (match subtype (fst expr) Combine ell1 ty1 (snd ann_ty) with
           | Succ ell1Prime ->
             let ty = snd ann_ty
             in let gam_ext = places_typ (Var var) ty
@@ -316,7 +329,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ (ty_old, loans) ->
          (match tc delta ell gamma e with
           | Succ (ty_update, ell1, gamma1) ->
-            (match subtype (fst expr) ell1 ty_update ty_old with
+            (match subtype (fst expr) Override ell1 ty_update ty_old with
              | Succ ellPrime ->
                let place_opts = List.map (fun loan -> place_expr_to_place (snd loan)) loans
                in let places = List.map unwrap (List.filter (fun opt -> opt != None) place_opts)
@@ -423,11 +436,12 @@ let wf_global_env (sigma : global_env) : unit tc =
     | (Fail err, _) -> Fail err
     | (_, FnDef (_, provs, tyvars, params, ret_ty, body)) ->
       let delta = (provs, tyvars)
+      in let ell = ([], (provs, []))
       in let gamma = List.flatten
              (List.map (fun pair -> places_typ (Var (fst pair)) (snd pair)) params)
-      in match type_check sigma delta empty_ell gamma body with
+      in match type_check sigma delta ell gamma body with
       | Succ (output_ty, _, _) ->
         if output_ty == ret_ty then Succ ()
-        else Fail (TypeMismatch (("dummy", 0, 0), ret_ty, output_ty))
+        else Fail (TypeMismatch (("dummy", (0, 0), (0, 0)), ret_ty, output_ty))
       | Fail err -> Fail err
   in List.fold_left valid_global_entry (Succ ()) sigma

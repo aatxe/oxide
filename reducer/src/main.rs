@@ -4,7 +4,10 @@ use std::io::Read;
 use std::process;
 
 use pretty::{BoxDoc, Doc};
+use proc_macro2::{LineColumn, Span};
 use syn::{Block, Expr, FnArg, GenericParam, Item, Lit, Member, Pat, Path, ReturnType, Stmt, Type};
+use syn::{UnOp};
+use syn::spanned::Spanned;
 
 type PP = Doc<'static, BoxDoc<'static, ()>>;
 
@@ -256,8 +259,8 @@ impl PrettyPrint for Block {
 
 impl PrettyPrint for Pat {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
-        if let Pat::Ident(id) = self {
-            return Doc::text(format!("\"{}\"", id.ident))
+        if let Pat::Ident(pat) = self {
+            return Doc::text(format!("\"{}\"", pat.ident))
         }
 
         println!("{:#?}", self);
@@ -267,25 +270,25 @@ impl PrettyPrint for Pat {
 
 impl PrettyPrint for Type {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
-        if let Type::Reference(rf) = self {
-            let lifetime = format!("{}", rf.lifetime.as_ref().unwrap().ident);
+        if let Type::Reference(ty) = self {
+            let lifetime = format!("{}", ty.lifetime.as_ref().unwrap().ident);
             return Doc::text("~&")
                 .append(quote(Doc::text(lifetime)))
                 .append(Doc::space())
-                .append(rf.mutability.to_doc())
+                .append(ty.mutability.to_doc())
                 .append(Doc::space())
-                .append(parenthesize(rf.elem.to_doc()))
+                .append(parenthesize(ty.elem.to_doc()))
                 .group()
         }
 
-        if let Type::Tuple(tup) = self {
+        if let Type::Tuple(ty) = self {
             return Doc::text("Tup")
                 .append(Doc::space())
                 .append(
                     Doc::text("[")
                         .append(
                             Doc::intersperse(
-                                tup.elems.into_iter().map(|ty| ty.to_doc()),
+                                ty.elems.into_iter().map(|ty| ty.to_doc()),
                                 Doc::text(";").append(Doc::space())
                             )
                         )
@@ -295,8 +298,8 @@ impl PrettyPrint for Type {
                 .group()
         }
 
-        if let Type::Path(path) = self {
-            return path.path.to_doc()
+        if let Type::Path(ty) = self {
+            return ty.path.to_doc()
         }
 
         println!("{:#?}", self);
@@ -306,27 +309,29 @@ impl PrettyPrint for Type {
 
 impl PrettyPrint for Stmt {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
-        if let Stmt::Local(binding) = self {
-            let mut pats = binding.pats;
-            return Doc::text("letexp")
+        if let Stmt::Local(mut stmt) = self {
+            return Doc::text("letbe")
                 .append(Doc::space())
-                .append(if pats.len() == 1 {
-                    pats.pop().unwrap().into_value().to_doc()
+                .append(stmt.span().to_doc())
+                .append(Doc::space())
+                .append(if stmt.pats.len() == 1 {
+                    stmt.pats.pop().unwrap().into_value().to_doc()
                 } else {
                     panic!("we don't support multiple patterns in a binding")
                 })
                 .append(Doc::space())
                 .append(
-                    Doc::text("~:")
-                        .append(match binding.ty {
-                            Some((_, ty)) => parenthesize(ty.to_doc()),
-                            None => panic!("types must be fully-annotated")
-                        })
-                        .group()
+                    match stmt.ty {
+                        Some((_, ty)) => parenthesize(ty.span().to_doc()
+                                                      .append(Doc::text(","))
+                                                      .append(Doc::space())
+                                                      .append(ty.to_doc())),
+                        None => panic!("types must be fully-annotated")
+                    }
                 )
                 .group()
                 .append(Doc::space())
-                .append(match binding.init {
+                .append(match stmt.init {
                     Some((_, expr)) =>
                         Doc::text("(*=*)")
                         .append(Doc::space())
@@ -340,13 +345,20 @@ impl PrettyPrint for Stmt {
             return parenthesize(expr.to_doc().nest(2))
         }
 
-        if let Stmt::Semi(expr, _) = self {
+        if let Stmt::Semi(expr, semi) = self {
             return parenthesize(
                 expr.to_doc()
                     .append(Doc::space())
                     .append(Doc::text(">>"))
                     .append(Doc::space())
-                    .append("unit")
+                    .append(parenthesize(
+                        semi.spans[0].to_doc()
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            .append(Doc::text("Prim"))
+                            .append(Doc::space())
+                            .append(Doc::text("Unit"))
+                    ))
                     .nest(2)
             )
         }
@@ -358,10 +370,10 @@ impl PrettyPrint for Stmt {
 
 impl PrettyPrintPlaceExpr for Expr {
     fn to_place_expr_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
-        if let Expr::Path(path) = self {
+        if let Expr::Path(expr) = self {
             return Doc::text("Var")
                 .append(Doc::space())
-                .append(quote(path.path.to_doc()))
+                .append(quote(expr.path.to_doc()))
         }
 
         self.to_doc()
@@ -370,42 +382,66 @@ impl PrettyPrintPlaceExpr for Expr {
 
 impl PrettyPrint for Expr {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
-        if let Expr::Block(block) = self {
-            return parenthesize(block.block.to_doc())
+        if let Expr::Block(expr) = self {
+            return parenthesize(expr.block.to_doc())
         }
 
-        if let Expr::Lit(lit) = self {
-            return parenthesize(lit.lit.to_doc())
+        if let Expr::Lit(expr) = self {
+            return expr.lit.to_doc()
         }
 
-        if let Expr::Paren(paren) = self {
-            return parenthesize(paren.expr.to_doc())
+        if let Expr::Paren(expr) = self {
+            return parenthesize(expr.expr.to_doc())
         }
 
-        if let Expr::Reference(borrow) = self {
-            return Doc::text("borrow")
-                .append(Doc::space())
-                .append(gensym())
-                .append(Doc::space())
-                .append(borrow.mutability.to_doc())
-                .append(Doc::space())
-                .append(parenthesize(borrow.expr.to_place_expr_doc()))
-                .group()
+        if let Expr::Reference(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("Borrow")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                gensym()
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(expr.mutability.to_doc())
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(expr.expr.to_place_expr_doc())
+                            ))
+                            .group()
+                    )
+            )
+        }
+
+        if let Expr::Unary(expr) = self {
+            return parenthesize(
+                expr.op.to_doc()
+                    .append(Doc::space())
+                    .append(parenthesize(expr.expr.to_place_expr_doc()))
+            )
         }
 
         if let expr@Expr::Path(_) = self {
             return parenthesize(
-                Doc::text("move")
+                expr.span().to_doc()
+                    .append(Doc::text(","))
                     .append(Doc::space())
-                    .append(parenthesize(expr.to_place_expr_doc()))
+                    .append(
+                        Doc::text("Move")
+                            .append(Doc::space())
+                            .append(parenthesize(expr.to_place_expr_doc()))
+                            )
             )
         }
 
-        if let Expr::Field(field) = self {
+        if let Expr::Field(expr) = self {
             return parenthesize(
-                parenthesize(field.base.to_place_expr_doc())
+                parenthesize(expr.base.to_place_expr_doc())
                     .append(Doc::space())
-                    .append(match field.member {
+                    .append(match expr.member {
                         Member::Named(field) =>
                             Doc::text("$.$")
                             .append(Doc::space())
@@ -418,56 +454,76 @@ impl PrettyPrint for Expr {
             )
         }
 
-        if let Expr::Tuple(tup) = self {
+        if let Expr::Tuple(expr) = self {
             return parenthesize(
-                Doc::text("tup")
+                expr.span().to_doc()
+                    .append(Doc::text(","))
                     .append(Doc::space())
-                    .append(
-                        Doc::text("[")
-                            .append(Doc::intersperse(
-                                tup.elems.into_iter().map(|expr| expr.to_doc()),
-                                Doc::text(";").append(Doc::space())
-                            ))
-                            .append(Doc::text("]"))
-                            .group()
+                    .append(Doc::text("Tup")
+                            .append(Doc::space())
+                            .append(
+                                Doc::text("[")
+                                    .append(Doc::intersperse(
+                                        expr.elems.into_iter().map(|expr| expr.to_doc()),
+                                        Doc::text(";").append(Doc::space())
+                                    ))
+                                    .append(Doc::text("]"))
+                                    .group()
+                            )
                     )
             )
         }
 
-        if let Expr::Call(call) = self {
-            return Doc::text("app")
+        if let Expr::Call(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                .append(Doc::text(","))
                 .append(Doc::space())
-                .append(parenthesize(
-                    Doc::text("~@@")
+                .append(
+                    Doc::text("App")
                         .append(Doc::space())
-                        .append(parenthesize(call.func.to_doc()))
-                ))
-                .append(Doc::space())
-                // provenance variable arguments
-                .append(
-                    Doc::text("[")
-                        .append(Doc::text("]"))
+                        .append(
+                            parenthesize(
+                                Doc::text("~@@")
+                                    .append(Doc::space())
+                                    .append(parenthesize(expr.func.to_doc()))
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    // provenance variable arguments
+                                    .append(
+                                        Doc::text("[")
+                                            .append(Doc::text("]"))
+                                            .group()
+                                    )
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    // type variable arguments
+                                    .append(
+                                        Doc::text("[")
+                                            .append(Doc::text("]"))
+                                            .group()
+                                    )
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    // arguments
+                                    .append(
+                                        Doc::text("[")
+                                            .append(Doc::intersperse(
+                                                expr.args
+                                                    .into_iter()
+                                                    .map(|expr| {
+                                                        parenthesize(expr.to_doc())
+                                                    }),
+                                                Doc::text(";").append(Doc::space())
+                                            ))
+                                            .append(Doc::text("]"))
+                                            .group()
+                                    )
+                            )
+                        )
                         .group()
                 )
-                .append(Doc::space())
-                // type variable arguments
-                .append(
-                    Doc::text("[")
-                        .append(Doc::text("]"))
-                        .group()
-                )
-                .append(Doc::space())
-                // arguments
-                .append(
-                    Doc::text("[")
-                        .append(Doc::intersperse(
-                            call.args.into_iter().map(|expr| parenthesize(expr.to_doc())),
-                            Doc::text(";").append(Doc::space())
-                        ))
-                        .append(Doc::text("]"))
-                        .group()
-                )
-                .group()
+            )
         }
 
         println!("{:#?}", self);
@@ -484,11 +540,21 @@ impl PrettyPrint for Path {
     }
 }
 
+impl PrettyPrint for UnOp {
+    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        Doc::text(match self {
+            UnOp::Deref(_) => "Deref",
+            UnOp::Not(_) => "Not",
+            UnOp::Neg(_) => "Neg",
+        })
+    }
+}
+
 impl PrettyPrint for Option<syn::token::Mut> {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         match self {
-            Some(_) => Doc::text("uniq"),
-            None => Doc::text("shrd"),
+            Some(_) => Doc::text("Unique"),
+            None => Doc::text("Shared"),
         }
     }
 }
@@ -496,18 +562,85 @@ impl PrettyPrint for Option<syn::token::Mut> {
 impl PrettyPrint for Lit {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         if let Lit::Bool(bool) = self {
-            return if bool.value { Doc::text("tru") } else { Doc::text("fls") }
+            return parenthesize(
+                bool.span.to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        if bool.value {
+                            Doc::text("Prim")
+                                .append(Doc::space())
+                                .append(Doc::text("True"))
+                        } else {
+                            Doc::text("Prim")
+                                .append(Doc::space())
+                                .append(Doc::text("False"))
+                        }
+                    )
+            )
         }
 
         if let Lit::Int(int) = self {
             return parenthesize(
-                Doc::text("num")
+                int.span().to_doc()
+                    .append(Doc::text(","))
                     .append(Doc::space())
-                    .append(Doc::text(format!("{}", int.value())))
+                    .append(
+                        Doc::text("Prim")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                Doc::text("Num")
+                                    .append(Doc::space())
+                                    .append(Doc::text(format!("{}", int.value())))
+                            ))
+                    )
             )
         }
 
         println!("{:#?}", self);
         Doc::text("(failwith \"unimplemented\")")
+    }
+}
+
+impl PrettyPrint for LineColumn {
+    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        parenthesize(
+            Doc::text(format!("{}", self.line))
+                .append(Doc::text(","))
+                .append(Doc::space())
+                .append(Doc::text(format!("{}", self.column)))
+        )
+    }
+}
+
+// Not sure why, but source files are semver exempt in proc-macro2 API, so, here's a hack
+impl PrettyPrint for Span {
+    #[cfg(procmacro2_semver_exempt)]
+    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        parenthesize(
+            quote(Doc::text(match self.source_file().path().file_name() {
+                Some(name) => name.to_string_lossy().into_owned(),
+                None => "unknown_file".to_owned(),
+            }))
+                .append(Doc::text(","))
+                .append(Doc::space())
+                .append(self.start().to_doc())
+                .append(Doc::text(","))
+                .append(Doc::space())
+                .append(self.end().to_doc())
+        )
+    }
+
+    #[cfg(not(procmacro2_semver_exempt))]
+    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        parenthesize(
+            quote(Doc::text("unknown_file"))
+                .append(Doc::text(","))
+                .append(Doc::space())
+                .append(self.start().to_doc())
+                .append(Doc::text(","))
+                .append(Doc::space())
+                .append(self.end().to_doc())
+        )
     }
 }

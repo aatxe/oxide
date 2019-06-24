@@ -13,3 +13,6 @@ let unwrap (opt : 'a option) : 'a =
   match opt with
   | Some x -> x
   | None -> failwith "attempted to unwrap an empty option"
+
+(* checks if the given list is empty *)
+let is_empty (lst : 'a list) : bool = List.length lst = 0

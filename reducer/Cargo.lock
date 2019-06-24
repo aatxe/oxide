@@ -29,6 +29,7 @@ name = "reducer"
 version = "0.1.0"
 dependencies = [
  "pretty 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)",
  "syn 0.15.36 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

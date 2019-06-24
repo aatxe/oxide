@@ -16,6 +16,51 @@ let prov_to_loans (ell : loan_env) (prov : prov) : loans =
   | ProvVar var -> loan_env_lookup ell var
   | ProvSet lns -> lns
 
+(* given a root identier x, compute all the places based on tau *)
+let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
+  match tau with
+  | Any -> [(pi, tau)]
+  | BaseTy _ -> [(pi, tau)]
+  | TyVar _ -> [(pi, tau)]
+  | Ref (_, _, _) -> [(pi, tau)]
+  | Fun (_, _, _, _, _) -> [(pi, tau)]
+  | Array(_, _) -> [(pi, tau)]
+  | Slice(_)  -> [(pi, tau)]
+  | Tup(tys) ->
+    let work (acc : (place * ty) list) (pair : place * ty) =
+      let (pi, ty) = pair
+      in List.concat [acc; places_typ pi ty]
+    in let func (idx : int) (typ : ty) =
+         let piPrime : place = IndexProj  (pi, idx)
+         in (piPrime, typ)
+    in let projs = List.mapi func tys
+    in List.fold_left work [(pi, tau)] projs
+
+(* place env operations *)
+
+let place_env_lookup (gamma : place_env) (x : place) = List.assoc x gamma
+let place_env_lookup_opt (gamma : place_env) (x : place) = List.assoc_opt x gamma
+let place_env_lookup_speco (gamma : place_env) (x : place_expr) =
+  match place_expr_to_place x with
+  | Some pi -> place_env_lookup_opt gamma pi
+  | None -> None
+let place_env_lookup_spec (gamma : place_env) (x : place_expr) =
+  match (place_env_lookup_speco gamma x) with
+  | Some pi -> pi
+  | None ->
+    Format.fprintf Format.str_formatter "place %a was not bound in place_env %a"
+      pp_place_expr x pp_place_env gamma;
+    failwith (Format.flush_str_formatter())
+let place_env_contains_spec (gamma : place_env) (x : place_expr) =
+  match place_env_lookup_speco gamma x with
+  | Some _ -> true
+  | None -> false
+let place_env_include (gamma : place_env) (x : place) (typ : ty) =
+  let ext = places_typ x typ
+  in List.append ext gamma
+let place_env_append (gamma1 : place_env) (gamma2 : place_env) = List.append gamma1 gamma2
+let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
+
 (* compute all the at-least-omega loans in a given gamma *)
 let all_loans (omega : owned) (ell : loan_env) (gamma : place_env) : loans =
   let rec work (typ : ty) (loans : loans) : loans =
@@ -112,26 +157,6 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
     in (match eval_place_expr loc ell gamma omega pi with
         | Succ loans -> Succ (List.map to_proj loans)
         | Fail err -> Fail err)
-
-(* given a root identier x, compute all the places based on tau *)
-let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
-  match tau with
-  | Any -> [(pi, tau)]
-  | BaseTy _ -> [(pi, tau)]
-  | TyVar _ -> [(pi, tau)]
-  | Ref (_, _, _) -> [(pi, tau)]
-  | Fun (_, _, _, _, _) -> [(pi, tau)]
-  | Array(_, _) -> [(pi, tau)]
-  | Slice(_)  -> [(pi, tau)]
-  | Tup(tys) ->
-    let work (acc : (place * ty) list) (pair : place * ty) =
-      let (pi, ty) = pair
-      in List.concat [acc; places_typ pi ty]
-    in let func (idx : int) (typ : ty) =
-      let piPrime : place = IndexProj  (pi, idx)
-      in (piPrime, typ)
-    in let projs = List.mapi func tys
-    in List.fold_left work [(pi, tau)] projs
 
 (* remove the whole set of identifiers rooted at the place pi from gamma *)
 let place_env_subtract (gamma : place_env) (pi : place) : place_env =

@@ -1,11 +1,13 @@
 open Util
 
-type source_loc = string * int * int [@@deriving show]
+type linecol = int * int [@@deriving show]
+type source_loc = string * linecol * linecol [@@deriving show]
 type var = string [@@deriving show]
 type ty_var = string [@@deriving show]
 type fn_var = string [@@deriving show]
 type prov_var = string [@@deriving show]
 
+type subtype_modality = Combine | Override [@@deriving show]
 type owned = Shared | Unique [@@deriving show]
 type place =
   | Var of var
@@ -140,6 +142,7 @@ type subty = prov_var * prov_var [@@deriving show]
 type loan_env = (prov_var * loans) list * (prov_var list * subty list) [@@deriving show]
 let empty_ell : loan_env = ([], ([], []))
 
+let loan_env_mem (ell : loan_env) (var : prov_var) : bool = List.mem_assoc var (fst ell)
 let loan_env_lookup (ell : loan_env) (var : prov_var) : loans = List.assoc var (fst ell)
 
 let loan_env_lookup_opt (ell : loan_env) (var : prov_var) : loans option =
@@ -169,22 +172,6 @@ let loan_env_exclude (ell : loan_env) (var : prov_var) : loan_env =
 
 (* place_env is mutually recursive with ty and as such, is defined above *)
 let empty_gamma : place_env = []
-
-let place_env_lookup (gamma : place_env) (x : place) = List.assoc x gamma
-let place_env_lookup_opt (gamma : place_env) (x : place) = List.assoc_opt x gamma
-let place_env_lookup_speco (gamma : place_env) (x : place_expr) =
-  match place_expr_to_place x with
-  | Some pi -> place_env_lookup_opt gamma pi
-  | None -> None
-let place_env_lookup_spec (gamma : place_env) (x : place_expr) =
-  unwrap (place_env_lookup_speco gamma x)
-let place_env_contains_spec (gamma : place_env) (x : place_expr) =
-  match place_env_lookup_speco gamma x with
-  | Some _ -> true
-  | None -> false
-let place_env_include (gamma : place_env) (x : place) (typ : ty) = List.cons (x, typ) gamma
-let place_env_append (gamma1 : place_env) (gamma2 : place_env) = List.append gamma1 gamma2
-let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
 
 type tc_error =
   | TypeMismatch of source_loc * ty * ty (* source_loc * expected * found *)
