@@ -371,7 +371,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          let fn_ty : ty = Fun (provs, tyvars, List.map snd params, [], ret_ty)
          in Succ (fn_ty, ell, gamma)
        | None -> Fail (UnknownFunction (fst expr, fn)))
-    | Fun (provs, tyvars, params, body) ->
+    | Fun (provs, tyvars, params, opt_ret_ty, body) ->
       let places_typ_u (pair : var * ann_ty) = places_typ (Var (fst pair)) (sndsnd pair)
       in let gam_ext = List.fold_right list_union (List.map places_typ_u params) []
       in let deltaPrime = (list_union provs (fst delta), list_union tyvars (snd delta))
@@ -379,8 +379,14 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in (match tc deltaPrime ellPrime (place_env_append gam_ext gamma) body with
           | Succ (ret_ty, ellPrime, gammaPrime) ->
             let gamma_c = place_env_diff gamma gammaPrime
-            in let fn_ty : ty = Fun (provs, tyvars, List.map sndsnd params, gamma_c, ret_ty)
-            in Succ (fn_ty, ellPrime, gammaPrime)
+            in let fn_ty (ret_ty : ty) : ty =
+                 Fun (provs, tyvars, List.map sndsnd params, gamma_c, ret_ty)
+            in (match opt_ret_ty with
+                | Some ann_ret_ty ->
+                  (match subtype (fst ann_ret_ty) Combine ellPrime ret_ty (snd ann_ret_ty) with
+                   | Succ ellFinal -> Succ (fn_ty (snd ann_ret_ty), ellFinal, gammaPrime)
+                   | Fail err -> Fail err)
+                | None -> Succ (fn_ty ret_ty, ellPrime, gammaPrime))
           | Fail err -> Fail err)
     | App (fn, new_provs, new_tys, args) ->
       (match tc delta ell gamma fn with

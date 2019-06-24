@@ -89,7 +89,7 @@ type preexpr =
   | Assign of place_expr * expr
   | Seq of expr * expr
   | Fn of fn_var
-  | Fun of prov_var list * ty_var list * (var * ann_ty) list * expr
+  | Fun of prov_var list * ty_var list * (var * ann_ty) list * (ann_ty option) * expr
   | App of expr * prov_var list * ann_ty list * expr list
   | Idx of place_expr * expr
   | Abort of string

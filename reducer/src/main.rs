@@ -6,7 +6,7 @@ use std::process;
 use pretty::{BoxDoc, Doc};
 use proc_macro2::{LineColumn, Span};
 use syn::{Block, Expr, FnArg, GenericParam, Item, Lit, Member, Pat, Path, ReturnType, Stmt, Type};
-use syn::{UnOp};
+use syn::{ExprLit, UnOp};
 use syn::spanned::Spanned;
 
 type PP = Doc<'static, BoxDoc<'static, ()>>;
@@ -40,13 +40,13 @@ fn main() {
     let docs = syntax.items.into_iter().map(|item| {
         if let Item::Fn(inner) = item {
             Doc::text("(")
-            // fn keyword and name
+                // fn keyword and name
                 .append(Doc::text("fn")
                         .append(Doc::space())
                         .append(Doc::text(format!("\"{}\"", inner.ident)))
                         .group()
                 )
-            // provenance variables
+                // provenance variables
                 .append(Doc::space())
                 .append(
                     Doc::text("[")
@@ -63,36 +63,27 @@ fn main() {
                         .append(Doc::text("]"))
                         .group()
                 )
-            // type variables
+                // type variables
                 .append(Doc::space())
                 .append(
                     Doc::text("[")
                         .append(Doc::text("]"))
                         .group()
                 )
-            // parameters
+                // parameters
                 .append(Doc::space())
                 .append(
                     Doc::text("[")
                         .append(
                             Doc::intersperse(
-                                inner.decl.inputs.into_iter().map(|arg| match arg {
-                                    FnArg::Captured(cap) =>
-                                        cap.pat.to_doc()
-                                        .append(Doc::space())
-                                        .append(Doc::text("@:"))
-                                        .append(Doc::space())
-                                        .append(parenthesize(cap.ty.to_doc()))
-                                        .group(),
-                                    _ => Doc::nil(),
-                                }),
+                                inner.decl.inputs.into_iter().map(|arg| arg.to_doc()),
                                 Doc::text(";").append(Doc::space())
                             )
                         )
                         .append(Doc::text("]"))
                         .group()
                 )
-            // return type
+                // return type
                 .append(Doc::space())
                 .append(
                     parenthesize(match inner.decl.output {
@@ -100,7 +91,7 @@ fn main() {
                         ReturnType::Type(_, ty) => ty.to_doc(),
                     })
                 )
-            // body
+                // body
                 .append(Doc::space())
                 .append(inner.block.to_doc().nest(2))
                 .append(")")
@@ -454,6 +445,24 @@ impl PrettyPrint for Expr {
             )
         }
 
+        if let Expr::Index(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(Doc::text("Idx")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                expr.expr.to_doc()
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(expr.index.to_doc())
+                            ))
+                            .group()
+                    )
+            )
+        }
+
         if let Expr::Tuple(expr) = self {
             return parenthesize(
                 expr.span().to_doc()
@@ -474,55 +483,176 @@ impl PrettyPrint for Expr {
             )
         }
 
+        if let Expr::If(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("Branch")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                expr.cond.to_doc()
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(expr.then_branch.to_doc())
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(match expr.else_branch {
+                                        Some((_, els)) => els.to_doc(),
+                                        None => Doc::text("Prim")
+                                            .append(Doc::space())
+                                            .append(Doc::text("Unit"))
+                                            .group()
+                                    })
+                            ))
+                            .group()
+                    )
+            )
+        }
+
+        if let Expr::Repeat(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("Array")
+                            .append(Doc::space())
+                            .append(Doc::text("[")
+                                    .append({
+                                        if let Expr::Lit(ExprLit { lit: Lit::Int(int), .. }) =
+                                            *expr.len {
+                                            let doc = parenthesize(expr.expr.to_doc());
+                                            Doc::intersperse(
+                                                (0..int.value()).map(|_| {
+                                                    doc.clone()
+                                                }),
+                                                Doc::text(";").append(Doc::space())
+                                            )
+                                        } else {
+                                            panic!("we don't support non-literal length repeats")
+                                        }
+                                    })
+                                    .append(Doc::text("]"))
+                                    .group()
+                            )
+                    )
+            )
+        }
+
+        if let Expr::ForLoop(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("For")
+                            .append(Doc::space())
+                            .append(
+                                parenthesize(
+                                    expr.pat.to_doc()
+                                        .append(Doc::text(","))
+                                        .append(Doc::space())
+                                        .append(parenthesize(expr.expr.to_doc()))
+                                        .append(Doc::text(","))
+                                        .append(Doc::space())
+                                        .group()
+                                        .nest(2)
+                                        .append(parenthesize(expr.body.to_doc()))
+                                )
+                            )
+                            .group()
+                    )
+            )
+        }
+
+        if let Expr::Closure(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("Fun")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                Doc::text("[]")
+                                    .append(Doc::space())
+                                    .append(Doc::text("[]"))
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(
+                                        Doc::intersperse(
+                                            expr.inputs.into_iter().map(|arg| arg.to_doc()),
+                                            Doc::text(";").append(Doc::space())
+                                        )
+                                    )
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(match expr.output {
+                                        ReturnType::Default => Doc::text("None"),
+                                        ReturnType::Type(_, ty) => Doc::text("Some")
+                                            .append(Doc::space())
+                                            .append(parenthesize(
+                                                ty.span().to_doc()
+                                                    .append(Doc::text(","))
+                                                    .append(Doc::space())
+                                                    .append(ty.to_doc())
+                                            ))
+                                            .group()
+                                    })
+                            ))
+                    )
+            )
+        }
+
         if let Expr::Call(expr) = self {
             return parenthesize(
                 expr.span().to_doc()
-                .append(Doc::text(","))
-                .append(Doc::space())
-                .append(
-                    Doc::text("App")
-                        .append(Doc::space())
-                        .append(
-                            parenthesize(
-                                Doc::text("~@@")
-                                    .append(Doc::space())
-                                    .append(parenthesize(expr.func.to_doc()))
-                                    .append(Doc::text(","))
-                                    .append(Doc::space())
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("App")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                    Doc::text("~@@")
+                                        .append(Doc::space())
+                                        .append(parenthesize(expr.func.to_doc()))
+                                        .append(Doc::text(","))
+                                        .append(Doc::space())
                                     // provenance variable arguments
-                                    .append(
-                                        Doc::text("[")
-                                            .append(Doc::text("]"))
-                                            .group()
-                                    )
-                                    .append(Doc::text(","))
-                                    .append(Doc::space())
+                                        .append(
+                                            Doc::text("[")
+                                                .append(Doc::text("]"))
+                                                .group()
+                                        )
+                                        .append(Doc::text(","))
+                                        .append(Doc::space())
                                     // type variable arguments
-                                    .append(
-                                        Doc::text("[")
-                                            .append(Doc::text("]"))
-                                            .group()
-                                    )
-                                    .append(Doc::text(","))
-                                    .append(Doc::space())
+                                        .append(
+                                            Doc::text("[")
+                                                .append(Doc::text("]"))
+                                                .group()
+                                        )
+                                        .append(Doc::text(","))
+                                        .append(Doc::space())
                                     // arguments
-                                    .append(
-                                        Doc::text("[")
-                                            .append(Doc::intersperse(
-                                                expr.args
-                                                    .into_iter()
-                                                    .map(|expr| {
-                                                        parenthesize(expr.to_doc())
-                                                    }),
-                                                Doc::text(";").append(Doc::space())
-                                            ))
-                                            .append(Doc::text("]"))
-                                            .group()
-                                    )
-                            )
-                        )
-                        .group()
-                )
+                                        .append(
+                                            Doc::text("[")
+                                                .append(Doc::intersperse(
+                                                    expr.args
+                                                        .into_iter()
+                                                        .map(|expr| {
+                                                            parenthesize(expr.to_doc())
+                                                        }),
+                                                    Doc::text(";").append(Doc::space())
+                                                ))
+                                                .append(Doc::text("]"))
+                                                .group()
+                                        )
+                            ))
+                            .group()
+                    )
             )
         }
 
@@ -599,6 +729,21 @@ impl PrettyPrint for Lit {
 
         println!("{:#?}", self);
         Doc::text("(failwith \"unimplemented\")")
+    }
+}
+
+impl PrettyPrint for FnArg {
+    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        match self {
+            FnArg::Captured(cap) =>
+                cap.pat.to_doc()
+                .append(Doc::space())
+                .append(Doc::text("@:"))
+                .append(Doc::space())
+                .append(parenthesize(cap.ty.to_doc()))
+                .group(),
+            _ => Doc::nil(),
+        }
     }
 }
 
