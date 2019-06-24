@@ -341,6 +341,14 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
           | Fail err -> Fail err)
        | Fail err -> Fail err)
     | Abort _ -> failwith "unimplemented abort"
+    | While (e1, e2) ->
+      (match tc delta ell gamma e1 with
+       | Succ (BaseTy Bool, ell1, gamma1) ->
+         (match tc delta ell1 gamma1 e2 with
+          | Succ (_, ell2, gamma2) -> tc delta ell2 gamma2 e2
+          | Fail err -> Fail err)
+       | Succ (found, _, _) -> Fail (TypeMismatch (fst e1, BaseTy Bool, found))
+       | Fail err -> Fail err)
     | For (var, e1, e2) ->
       (match tc delta ell gamma e1 with
        | Succ (Array (elem_ty, _), ell1, gamma1) ->
