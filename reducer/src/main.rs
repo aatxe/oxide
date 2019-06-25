@@ -52,12 +52,13 @@ fn main() {
                     Doc::text("[")
                         .append(
                             Doc::intersperse(
-                                inner.decl.generics.params.into_iter().flat_map(|param| match param {
-                                    GenericParam::Lifetime(lft) => Some(
-                                        Doc::text(format!("\"{}\"", lft.lifetime.ident))
-                                    ),
-                                    _ => None
-                                }),
+                                inner.decl.generics.params
+                                    .into_iter().flat_map(|param| match param {
+                                        GenericParam::Lifetime(lft) => Some(
+                                            Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                        ),
+                                        _ => None
+                                    }),
                                 Doc::text(";").append(Doc::space()))
                         )
                         .append(Doc::text("]"))
@@ -85,15 +86,17 @@ fn main() {
                 )
                 // return type
                 .append(Doc::space())
-                .append(
-                    parenthesize(match inner.decl.output {
-                        ReturnType::Default => Doc::text("BaseTy")
-                            .append(Doc::space())
-                            .append(Doc::text("Unit"))
-                            .group(),
-                        ReturnType::Type(_, ty) => ty.to_doc(),
-                    })
-                )
+                .append(parenthesize(match inner.decl.output {
+                    ReturnType::Default => inner.decl.output.span().to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(Doc::text("BaseTy")
+                                .append(Doc::space())
+                                .append(Doc::text("Unit"))
+                        )
+                        .group(),
+                    ReturnType::Type(_, ty) => ty.to_doc(),
+                }))
                 // body
                 .append(Doc::space())
                 .append(inner.block.to_doc().nest(2))
@@ -265,42 +268,87 @@ impl PrettyPrint for Pat {
 impl PrettyPrint for Type {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         if let Type::Reference(ty) = self {
-            let lifetime = format!("{}", ty.lifetime.as_ref().unwrap().ident);
-            return Doc::text("~&")
-                .append(quote(Doc::text(lifetime)))
-                .append(Doc::space())
-                .append(ty.mutability.to_doc())
-                .append(Doc::space())
-                .append(parenthesize(ty.elem.to_doc()))
-                .group()
+            let lft = ty.lifetime.as_ref().unwrap();
+            return parenthesize(
+                ty.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("Ref")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                parenthesize(
+                                    lft.span().to_doc()
+                                        .append(Doc::text(","))
+                                        .append(Doc::space())
+                                        .append(quote(Doc::text(format!("{}", lft.ident)))))
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(ty.mutability.to_doc())
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(parenthesize(ty.elem.to_doc()))
+                            ))
+                    )
+            )
         }
 
         if let Type::Tuple(ty) = self {
-            if ty.elems.is_empty() {
-                return Doc::text("BaseTy")
+            return parenthesize(
+                ty.span().to_doc()
+                    .append(Doc::text(","))
                     .append(Doc::space())
-                    .append(Doc::text("Unit"))
-                    .group()
-            } else {
-                return Doc::text("Tup")
-                    .append(Doc::space())
-                    .append(
-                        Doc::text("[")
-                            .append(
-                                Doc::intersperse(
-                                    ty.elems.into_iter().map(|ty| ty.to_doc()),
-                                    Doc::text(";").append(Doc::space())
-                                )
-                            )
-                            .append(Doc::text("]"))
+                    .append(if ty.elems.is_empty() {
+                        Doc::text("BaseTy")
+                            .append(Doc::space())
+                            .append(Doc::text("Unit"))
                             .group()
-                    )
-                    .group()
-            }
+                    } else {
+                        Doc::text("Tup")
+                            .append(Doc::space())
+                            .append(
+                                Doc::text("[")
+                                    .append(
+                                        Doc::intersperse(
+                                            ty.elems.into_iter().map(|ty| ty.to_doc()),
+                                            Doc::text(";").append(Doc::space())
+                                        )
+                                    )
+                                    .append(Doc::text("]"))
+                                    .group()
+                            )
+                            .group()
+                    })
+            )
         }
 
         if let Type::Path(ty) = self {
-            return ty.path.to_doc()
+            let ty_name = ty.path.segments.iter().fold(
+                String::new(),
+                |mut acc, seg| {
+                    acc.push_str(&format!("{}", seg.ident));
+                    acc
+                }
+            );
+
+            return parenthesize(
+                ty.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(if ty_name == "u32" {
+                        Doc::text("BaseTy")
+                            .append(Doc::space())
+                            .append(Doc::text("U32"))
+                            .group()
+                    } else if ty_name == "bool" {
+                        Doc::text("BaseTy")
+                            .append(Doc::space())
+                            .append(Doc::text("Bool"))
+                            .group()
+                    } else {
+                        ty.path.to_doc()
+                    })
+            )
         }
 
         println!("{:#?}", self);
@@ -321,15 +369,10 @@ impl PrettyPrint for Stmt {
                     panic!("we don't support multiple patterns in a binding")
                 })
                 .append(Doc::space())
-                .append(
-                    match stmt.ty {
-                        Some((_, ty)) => parenthesize(ty.span().to_doc()
-                                                      .append(Doc::text(","))
-                                                      .append(Doc::space())
-                                                      .append(ty.to_doc())),
-                        None => panic!("types must be fully-annotated")
-                    }
-                )
+                .append(match stmt.ty {
+                    Some((_, ty)) => ty.to_doc(),
+                    None => panic!("types must be fully-annotated")
+                })
                 .group()
                 .append(Doc::space())
                 .append(match stmt.init {
@@ -408,7 +451,10 @@ impl PrettyPrint for Expr {
                         Doc::text("Borrow")
                             .append(Doc::space())
                             .append(parenthesize(
-                                gensym()
+                                parenthesize(expr.span().to_doc()
+                                             .append(Doc::text(","))
+                                             .append(Doc::space())
+                                             .append(gensym()))
                                     .append(Doc::text(","))
                                     .append(Doc::space())
                                     .append(expr.mutability.to_doc())
@@ -788,7 +834,8 @@ impl PrettyPrint for Expr {
                                 .append(Doc::space())
                                 .append(match syn::parse2::<Lit>(expr.mac.tts) {
                                     Ok(lit) => lit.to_doc(),
-                                    Err(_) => panic!("we don't support panic or aborts with non-literal arguments")
+                                    Err(_) => panic!("we don't support panic or \
+                                                      aborts with non-literal arguments")
                                 })
                                 .group()
                         )
@@ -812,7 +859,7 @@ impl PrettyPrint for Expr {
                                         .append(parenthesize(expr.func.to_doc()))
                                         .append(Doc::text(","))
                                         .append(Doc::space())
-                                    // provenance variable arguments
+                                        // provenance variable arguments
                                         .append(
                                             Doc::text("[")
                                                 .append(Doc::text("]"))
@@ -820,7 +867,7 @@ impl PrettyPrint for Expr {
                                         )
                                         .append(Doc::text(","))
                                         .append(Doc::space())
-                                    // type variable arguments
+                                        // type variable arguments
                                         .append(
                                             Doc::text("[")
                                                 .append(Doc::text("]"))
@@ -828,7 +875,7 @@ impl PrettyPrint for Expr {
                                         )
                                         .append(Doc::text(","))
                                         .append(Doc::space())
-                                    // arguments
+                                        // arguments
                                         .append(
                                             Doc::text("[")
                                                 .append(Doc::intersperse(

@@ -2,6 +2,7 @@ open Syntax
 
 (* stores the last used location *)
 let gloc : source_loc ref = ref ("", (0, 0), (0, 0))
+let static : source_loc = ("static", (-1, -1), (-1, -1))
 
 (* returns a fresh location every time *)
 let loc (_ : unit) : source_loc =
@@ -29,16 +30,15 @@ let fn (name : fn_var) (provs : prov_var list) (tyvars : ty_var list)
 let (@:) (var : var) (ty : ty) : var * ty = (var, ty)
 
 let (~:) (ty : ty) : ty = ty
-let u32 : ty = (loc(), BaseTy U32)
-let bool : ty = (loc(), BaseTy Bool)
-let unit_ty : ty = (loc(), BaseTy Unit)
+let u32 : ty = (static, BaseTy U32)
+let bool : ty = (static, BaseTy Bool)
+let unit_ty : ty = (static, BaseTy Unit)
 let shrd : owned = Shared
 let uniq : owned = Unique
 let prod (tys : ty list) : ty = (loc(), Tup tys)
 let (~&) (prov : prov_var) (omega : owned) (ty : ty) : ty =
   (loc(), Ref ((loc(), prov), omega, ty))
 
-let static : source_loc = ("static", (0, 0), (0, 0))
 let unit : expr = (static, Prim Unit)
 let tru : expr = (static, Prim True)
 let fls : expr = (static, Prim False)
