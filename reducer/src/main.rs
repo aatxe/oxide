@@ -478,6 +478,28 @@ impl PrettyPrint for Expr {
             )
         }
 
+        if let Expr::Binary(expr) = self {
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("BinOp")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                expr.op.to_doc()
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(expr.left.to_doc())
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(expr.right.to_doc())
+                            ))
+                            .group()
+                    )
+            )
+        }
+
         if let expr@Expr::Path(_) = self {
             return parenthesize(
                 expr.span().to_doc()
@@ -649,7 +671,7 @@ impl PrettyPrint for Expr {
                         Doc::text("Assign")
                             .append(Doc::space())
                             .append(parenthesize(
-                                parenthesize(expr.left.to_doc())
+                                parenthesize(expr.left.to_place_expr_doc())
                                     .append(Doc::text(","))
                                     .append(Doc::space())
                                     .append(parenthesize(expr.right.to_doc()))
@@ -977,6 +999,32 @@ impl PrettyPrint for UnOp {
             UnOp::Deref(_) => "Deref",
             UnOp::Not(_) => "Not",
             UnOp::Neg(_) => "Neg",
+        })
+    }
+}
+
+impl PrettyPrint for BinOp {
+    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        Doc::text(match self {
+            BinOp::Add(_) => "Add",
+            BinOp::Sub(_) => "Sub",
+            BinOp::Mul(_) => "Mul",
+            BinOp::Div(_) => "Div",
+            BinOp::Rem(_) => "Rem",
+            BinOp::And(_) => "And",
+            BinOp::Or(_) => "Or",
+            BinOp::BitXor(_) => "BitXor",
+            BinOp::BitAnd(_) => "BitAnd",
+            BinOp::BitOr(_) => "BitOr",
+            BinOp::Shl(_) => "Shl",
+            BinOp::Shr(_) => "Shr",
+            BinOp::Eq(_) => "Eq",
+            BinOp::Lt(_) => "Lt",
+            BinOp::Le(_) => "Le",
+            BinOp::Ne(_) => "Ne",
+            BinOp::Ge(_) => "Ge",
+            BinOp::Gt(_) => "Gt",
+            _ => unreachable!() /* should be handled by desugaring */
         })
     }
 }
