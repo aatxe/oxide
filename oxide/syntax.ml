@@ -162,8 +162,12 @@ let loan_env_bind (ell : loan_env) (var : prov) : loan_env =
 let loan_env_bindall (ell : loan_env) (vars : prov list) : loan_env =
   (fst ell, (List.append (List.map snd vars) (sndfst ell), sndsnd ell))
 let loan_env_add_abs_sub (ell : loan_env) (v1 : prov) (v2 : prov) : loan_env =
-  let trans_extend (_ : subty list) (_ : prov_var) (_ : prov_var) : subty list =
-    failwith "unimp"
+  let trans_extend (cs : subty list) (lhs : prov_var) (rhs : prov_var) : subty list =
+    let into_lhs = List.filter (fun cx -> (snd cx) = lhs) cs
+    in let from_rhs = List.filter (fun cx -> (fst cx) = rhs) cs
+    in let new_cs = List.append (List.map (fun cx -> (fst cx, rhs)) into_lhs)
+           (List.map (fun cx -> (lhs, snd cx)) from_rhs)
+    in List.append new_cs cs
   in (fst ell, (sndfst ell, trans_extend (sndsnd ell) (snd v1) (snd v2)))
 let loan_env_append (ell1 : loan_env) (ell2 : loan_env) : loan_env =
   (List.append (fst ell1) (fst ell2),

@@ -140,7 +140,8 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
           | Some (_, Ref (prov, _, _)) ->
             (match loan_env_lookup_opt ell prov with
              | Some new_loans -> Succ (List.append loans new_loans)
-             | None -> Fail (InvalidProv prov))
+             | None -> if loan_env_is_abs ell prov then Succ []
+               else Fail (InvalidProv prov))
           | Some found -> Fail (TypeMismatchRef found)
           | None -> Fail (UnboundPlaceExpr (loc, snd loan))
       in List.fold_left work (Succ []) loans

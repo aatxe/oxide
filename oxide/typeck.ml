@@ -9,7 +9,7 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
     in match snd ty with
     | Any | BaseTy _ | TyVar _ -> ty
     | Ref (pv, omega, ty) ->
-      let prov = if pv = that then this else pv
+      let prov = if (snd pv) = (snd that) then this else pv
       in (loc, Ref (prov, omega, sub ty))
     | Fun (pvs, tvs, tys, gamma, ret_ty) ->
       if not (List.mem that pvs) then (loc, Fun (pvs, tvs, sub_many tys, gamma, sub ret_ty))
@@ -454,8 +454,9 @@ let wf_global_env (sigma : global_env) : unit tc =
       in let gamma = List.flatten
              (List.map (fun pair -> places_typ (Var (fst pair)) (snd pair)) params)
       in match type_check sigma delta ell gamma body with
-      | Succ (output_ty, _, _) ->
-        if output_ty == ret_ty then Succ ()
-        else Fail (TypeMismatch (ret_ty, output_ty))
+      | Succ (output_ty, ellPrime, _) ->
+        (match subtype Combine ellPrime output_ty ret_ty with
+        | Succ _ -> Succ ()
+        | Fail err -> Fail err)
       | Fail err -> Fail err
   in List.fold_left valid_global_entry (Succ ()) sigma
