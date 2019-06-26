@@ -227,7 +227,6 @@ fn parenthesize(doc: PP) -> PP {
     Doc::text("(")
         .append(doc.group())
         .append(Doc::text(")"))
-        .group()
 }
 
 fn quote(doc: PP) -> PP {
@@ -247,10 +246,94 @@ trait PrettyPrintPlaceExpr {
 
 impl PrettyPrint for Block {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
-        parenthesize(Doc::intersperse(
-            self.stmts.into_iter().map(|stmt| stmt.to_doc()),
-            Doc::space()
-        ))
+        let mut stmts_backwards = self.stmts.clone().into_iter().rev().peekable();
+        let init_acc = if let Some(Stmt::Semi(_, semi)) = stmts_backwards.peek() {
+            parenthesize(
+                semi.spans[0].to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(Doc::text("Prim"))
+                    .append(Doc::space())
+                    .append(Doc::text("Unit"))
+                    .group()
+            )
+        } else if let Some(Stmt::Local(stmt)) = stmts_backwards.peek() {
+            parenthesize(
+                stmt.semi_token.spans[0].to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(Doc::text("Prim"))
+                    .append(Doc::space())
+                    .append(Doc::text("Unit"))
+                    .group()
+            )
+        } else if let None = stmts_backwards.peek() {
+            parenthesize(
+                self.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(Doc::text("Prim"))
+                    .append(Doc::space())
+                    .append(Doc::text("Unit"))
+                    .group()
+            )
+        } else {
+            Doc::nil()
+        };
+        stmts_backwards.fold(init_acc, |acc, stmt| {
+            match stmt {
+                Stmt::Local(mut stmt) => parenthesize(
+                    stmt.span().to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(Doc::text("Let"))
+                        .append(Doc::space())
+                        .append(parenthesize(
+                            (if stmt.pats.len() == 1 {
+                                stmt.pats.pop().unwrap().into_value().to_doc()
+                            } else {
+                                panic!("we don't support multiple patterns in a binding")
+                            }).append(Doc::text(","))
+                                .append(Doc::space())
+                                .append(match stmt.ty {
+                                    Some((_, ty)) => ty.to_doc(),
+                                    None => panic!("types mut be fully-annotated"),
+                                })
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                .append(match stmt.init {
+                                    Some((_, expr)) =>
+                                        Doc::text("(*=*)")
+                                        .append(Doc::space())
+                                        .append(parenthesize(expr.to_doc().nest(2))),
+                                    None => panic!("we don't support uninitialized bindings"),
+                                })
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                .append(acc)
+                        ))
+                ),
+                Stmt::Expr(expr) => {
+                    if acc == Doc::nil() {
+                        parenthesize(expr.to_doc().nest(2))
+                    } else {
+                        parenthesize(expr.to_doc().nest(2))
+                            .append(Doc::space())
+                            .append(Doc::text(">>"))
+                            .append(Doc::space())
+                            .append(acc)
+                    }
+                },
+                Stmt::Semi(expr, _) => parenthesize(
+                    expr.to_doc()
+                        .append(Doc::space())
+                        .append(Doc::text(">>"))
+                        .append(Doc::space())
+                        .append(acc)
+                ),
+                Stmt::Item(_) => panic!("no items in blocks"),
+            }
+        })
     }
 }
 
@@ -359,68 +442,29 @@ impl PrettyPrint for Type {
     }
 }
 
-impl PrettyPrint for Stmt {
-    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
-        if let Stmt::Local(mut stmt) = self {
-            return Doc::text("letbe")
-                .append(Doc::space())
-                .append(stmt.span().to_doc())
-                .append(Doc::space())
-                .append(if stmt.pats.len() == 1 {
-                    stmt.pats.pop().unwrap().into_value().to_doc()
-                } else {
-                    panic!("we don't support multiple patterns in a binding")
-                })
-                .append(Doc::space())
-                .append(match stmt.ty {
-                    Some((_, ty)) => ty.to_doc(),
-                    None => panic!("types must be fully-annotated")
-                })
-                .group()
-                .append(Doc::space())
-                .append(match stmt.init {
-                    Some((_, expr)) =>
-                        Doc::text("(*=*)")
-                        .append(Doc::space())
-                        .append(parenthesize(expr.to_doc().nest(2))),
-                    None => panic!("we don't support uninitialized bindings")
-                })
-                .group()
-        }
-
-        if let Stmt::Expr(expr) = self {
-            return parenthesize(expr.to_doc().nest(2))
-        }
-
-        if let Stmt::Semi(expr, semi) = self {
-            return parenthesize(
-                expr.to_doc()
-                    .append(Doc::space())
-                    .append(Doc::text(">>"))
-                    .append(Doc::space())
-                    .append(parenthesize(
-                        semi.spans[0].to_doc()
-                            .append(Doc::text(","))
-                            .append(Doc::space())
-                            .append(Doc::text("Prim"))
-                            .append(Doc::space())
-                            .append(Doc::text("Unit"))
-                    ))
-                    .nest(2)
-            )
-        }
-
-        println!("{:#?}", self);
-        Doc::text("(failwith \"unimplemented\")")
-    }
-}
-
 impl PrettyPrintPlaceExpr for Expr {
     fn to_place_expr_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         if let Expr::Path(expr) = self {
             return Doc::text("Var")
                 .append(Doc::space())
                 .append(quote(expr.path.to_doc()))
+        }
+
+        if let Expr::Field(expr) = self {
+            return parenthesize(
+                parenthesize(expr.base.to_place_expr_doc())
+                    .append(Doc::space())
+                    .append(match expr.member {
+                        Member::Named(field) =>
+                            Doc::text("$.$")
+                            .append(Doc::space())
+                            .append(Doc::text(format!("\"{}\"", field))),
+                        Member::Unnamed(idx) =>
+                            Doc::text("$.")
+                            .append(Doc::space())
+                            .append(Doc::text(format!("{}", idx.index))),
+                    })
+            )
         }
 
         self.to_doc()
@@ -500,7 +544,7 @@ impl PrettyPrint for Expr {
             )
         }
 
-        if let expr@Expr::Path(_) = self {
+        if let expr@Expr::Path(_) | expr@Expr::Field(_)  = self {
             return parenthesize(
                 expr.span().to_doc()
                     .append(Doc::text(","))
@@ -510,23 +554,6 @@ impl PrettyPrint for Expr {
                             .append(Doc::space())
                             .append(parenthesize(expr.to_place_expr_doc()))
                             )
-            )
-        }
-
-        if let Expr::Field(expr) = self {
-            return parenthesize(
-                parenthesize(expr.base.to_place_expr_doc())
-                    .append(Doc::space())
-                    .append(match expr.member {
-                        Member::Named(field) =>
-                            Doc::text("$.$")
-                            .append(Doc::space())
-                            .append(Doc::text(format!("\"{}\"", field))),
-                        Member::Unnamed(idx) =>
-                            Doc::text("$.")
-                            .append(Doc::space())
-                            .append(Doc::text(format!("{}", idx.index))),
-                    })
             )
         }
 
@@ -599,10 +626,17 @@ impl PrettyPrint for Expr {
                                     .append(Doc::space())
                                     .append(match expr.else_branch {
                                         Some((_, els)) => els.to_doc(),
-                                        None => Doc::text("Prim")
-                                            .append(Doc::space())
-                                            .append(Doc::text("Unit"))
-                                            .group()
+                                        None => parenthesize(
+                                            expr.if_token.span().to_doc()
+                                                .append(Doc::text(","))
+                                                .append(Doc::space())
+                                                .append(
+                                                    Doc::text("Prim")
+                                                        .append(Doc::space())
+                                                        .append(Doc::text("Unit"))
+                                                        .group()
+                                                )
+                                       ),
                                     })
                             ))
                             .group()

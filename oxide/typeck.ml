@@ -55,11 +55,13 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
     in Succ (loan_env_include ellPrime prov2 rep1)
   | (_, None, Some _) ->
     (* U-AbstractProvLocalProv *)
-    if loan_env_abs_sub ell prov1 prov2 then Succ ell
+    if not (loan_env_is_abs ell prov1) then Fail (InvalidProv prov1)
+    else if loan_env_abs_sub ell prov1 prov2 then Succ ell
     else Fail (InvalidProv prov1)
   | (_, Some _, None) ->
     (* U-LocalProvAbstractProv *)
-    let ellPrime = loan_env_add_abs_sub ell prov1 prov2
+    if not (loan_env_is_abs ell prov2) then Fail (InvalidProv prov2)
+    else let ellPrime = loan_env_add_abs_sub ell prov1 prov2
     in Succ ellPrime
   | (_, None, None) ->
     (* U-AbstractProvenances *)
@@ -72,36 +74,35 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
     else Succ ell
 
 let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
-  let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) (swapped : bool) : loan_env tc =
-    match (snd ty1, snd ty2, swapped) with
-    | (BaseTy bt1, BaseTy bt2, _) ->
+  let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
+    match (snd ty1, snd ty2) with
+    | (BaseTy bt1, BaseTy bt2) ->
       if bt1 = bt2 then Succ ell
       else Fail (UnificationFailed (ty1, ty2))
-    | (TyVar v1, TyVar v2, _) ->
+    | (TyVar v1, TyVar v2) ->
       if v1 = v2 then Succ ell
       else Fail (UnificationFailed (ty1, ty2))
-    | (Array (t1, m), Array (t2, n), _) ->
-      if m = n then sub ell t1 t2 false
+    | (Array (t1, m), Array (t2, n)) ->
+      if m = n then sub ell t1 t2
       else Fail (UnificationFailed (ty1, ty2))
-    | (Slice t1, Slice t2, _) -> sub ell t1 t2 false
-    | (Tup tys1, Tup tys2, _) ->
+    | (Slice t1, Slice t2) -> sub ell t1 t2
+    | (Tup tys1, Tup tys2) ->
       let work (acc : loan_env tc) (tys : ty * ty) =
         match acc with
         | Fail err -> Fail err
         | Succ ell ->
           let (ty1, ty2) = tys
-          in sub ell ty1 ty2 false
+          in sub ell ty1 ty2
       in List.fold_left work (Succ ell) (List.combine tys1 tys2)
-    | (Ref (v1, o1, t1), Ref (v2, o2, t2), _) ->
+    | (Ref (v1, o1, t1), Ref (v2, o2, t2)) ->
       if o1 = o2 then
         match subtype_prov mode ell v1 v2 with
-        | Succ ellPrime -> sub ellPrime t1 t2 false
+        | Succ ellPrime -> sub ellPrime t1 t2
         | Fail err -> Fail err
       else Fail (UnificationFailed (ty1, ty2))
-    | (Any, _, _) -> Succ ell
-    | (_, _, false) -> sub ell ty2 ty1 true
-    | (_, _, true) -> Fail (UnificationFailed (ty1, ty2))
-  in sub ell ty1 ty2 false
+    | (Any, _) -> Succ ell
+    | (_, _) -> Fail (UnificationFailed (ty1, ty2))
+  in sub ell ty1 ty2
 
 let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
   match (subtype Combine ell ty1 ty2, subtype Combine ell ty2 ty1) with
@@ -470,12 +471,45 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
   in tc delta ell gamma expr
 
 let wf_global_env (sigma : global_env) : unit tc =
-  let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
+  let rec free_provs_ty (ty : ty) : prov list =
+    match snd ty with
+    | Any | BaseTy _ | TyVar _ -> []
+    | Ref (prov, _, ty) -> List.cons prov (free_provs_ty ty)
+    | Fun _ -> [] (* FIXME: actually implement *)
+    | Array (ty, _) | Slice ty -> free_provs_ty ty
+    | Tup tys -> List.flatten (List.map free_provs_ty tys)
+  in let rec free_provs (expr : expr) : prov list =
+    match snd expr with
+    | Prim _ | Move _ | Fn _ | Abort _ | Ptr _ -> []
+    | BinOp (_, e1, e2) -> List.append (free_provs e1) (free_provs e2)
+    | Borrow (prov, _, _) -> [prov]
+    | BorrowIdx (prov, _, _, e) -> List.cons prov (free_provs e)
+    | BorrowSlice (prov, _, _, e1, e2) ->
+      List.cons prov (List.append (free_provs e1) (free_provs e2))
+    | LetProv (provs, e) ->
+      List.filter (fun prov -> not (List.mem prov provs)) (free_provs e)
+    | Let (_, ty, e1, e2) ->
+      List.append (free_provs_ty ty) (List.append (free_provs e1) (free_provs e2))
+    | Assign (_, e) -> free_provs e
+    | Seq (e1, e2) -> List.append (free_provs e1) (free_provs e2)
+    | Fun _ -> [] (* FIXME: actually implement *)
+    | App (e1, provs, tys, es) ->
+      List.concat [free_provs e1; provs;
+                   List.flatten (List.map free_provs_ty tys);
+                   List.flatten (List.map free_provs es)]
+    | Idx (_, e) -> free_provs e
+    | Branch (e1, e2, e3) ->
+      List.concat [free_provs e1; free_provs e2; free_provs e3]
+    | While (e1, e2) | For (_, e1, e2) ->
+      List.append (free_provs e1) (free_provs e2)
+    | Tup es | Array es -> List.flatten (List.map free_provs es)
+  in let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
     match (acc, entry) with
     | (Fail err, _) -> Fail err
     | (_, FnDef (_, provs, tyvars, params, ret_ty, body)) ->
-      let delta = (provs, tyvars)
-      in let ell = ([], (List.map snd provs, []))
+      let free_provs = free_provs body (* this lets us get away without letprov *)
+      in let delta = (free_provs, tyvars)
+      in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
       in let gamma = List.flatten
              (List.map (fun pair -> places_typ (Var (fst pair)) (snd pair)) params)
       in match type_check sigma delta ell gamma body with
