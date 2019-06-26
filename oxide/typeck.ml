@@ -507,8 +507,9 @@ let wf_global_env (sigma : global_env) : unit tc =
     match (acc, entry) with
     | (Fail err, _) -> Fail err
     | (_, FnDef (_, provs, tyvars, params, ret_ty, body)) ->
-      let free_provs = free_provs body (* this lets us get away without letprov *)
-      in let delta = (free_provs, tyvars)
+      let free_provs = (* this lets us get away without letprov *)
+        List.filter (fun prov -> List.mem prov provs) (free_provs body)
+      in let delta = (List.append provs free_provs, tyvars)
       in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
       in let gamma = List.flatten
              (List.map (fun pair -> places_typ (Var (fst pair)) (snd pair)) params)
