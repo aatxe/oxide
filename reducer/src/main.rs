@@ -6,7 +6,7 @@ use std::process;
 use pretty::{BoxDoc, Doc};
 use proc_macro2::{LineColumn, Span};
 use syn::{Block, Expr, FnArg, GenericParam, Item, Lit, Member, Pat, Path, ReturnType, Stmt, Type};
-use syn::{BinOp, ExprAssign, ExprBinary, ExprLit, RangeLimits, UnOp};
+use syn::{BinOp, ExprAssign, ExprBinary, ExprLit, GenericArgument, PathArguments, RangeLimits, UnOp};
 use syn::spanned::Spanned;
 
 type PP = Doc<'static, BoxDoc<'static, ()>>;
@@ -178,7 +178,7 @@ fn main() {
                 .append(
                     Doc::text("Format.printf")
                         .append(Doc::space())
-                        .append(Doc::text("\"error: %a@. invalid global environment:@. %a@.\""))
+                        .append(Doc::text("\"error: %a@.invalid global environment:@. %a@.\""))
                         .group()
                 )
                 .append(
@@ -846,17 +846,73 @@ impl PrettyPrint for Expr {
         }
 
         if let Expr::Call(expr) = self {
-            return parenthesize(
-                expr.span().to_doc()
-                    .append(Doc::text(","))
-                    .append(Doc::space())
-                    .append(
-                        Doc::text("App")
-                            .append(Doc::space())
-                            .append(parenthesize(
-                                    Doc::text("~@@")
+            if let Expr::Path(func) = &*expr.func {
+                let last_args1 = func.path.segments.last().unwrap().value().arguments.clone();
+                let last_args2 = last_args1.clone();
+                return parenthesize(
+                    expr.span().to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(
+                            Doc::text("App")
+                                .append(Doc::space())
+                                .append(parenthesize(
+                                    parenthesize(
+                                        func.path.span().to_doc()
+                                            .append(Doc::text(","))
+                                            .append(Doc::space())
+                                            .append(Doc::text("Fn"))
+                                            .append(Doc::space())
+                                            .append(quote(func.path.clone().to_doc()))
+                                    )
+                                        .append(Doc::text(","))
                                         .append(Doc::space())
-                                        .append(parenthesize(expr.func.to_doc()))
+                                        // provenance variable arguments
+                                        .append(
+                                            Doc::text("[")
+                                                .append(last_args1.to_lifetime_generics_doc())
+                                                .append(Doc::text("]"))
+                                                .group()
+                                        )
+                                        .append(Doc::text(","))
+                                        .append(Doc::space())
+                                        // type variable arguments
+                                        .append(
+                                            Doc::text("[")
+                                                .append(last_args2.to_type_generics_doc())
+                                                .append(Doc::text("]"))
+                                                .group()
+                                        )
+                                        .append(Doc::text(","))
+                                        .append(Doc::space())
+                                        // arguments
+                                        .append(
+                                            Doc::text("[")
+                                                .append(Doc::intersperse(
+                                                    expr.args
+                                                        .into_iter()
+                                                        .map(|expr| {
+                                                            parenthesize(expr.to_doc())
+                                                        }),
+                                                    Doc::text(";").append(Doc::space())
+                                                ))
+                                                .append(Doc::text("]"))
+                                                .group()
+                                        )
+                                ))
+                                .group()
+                        )
+                )
+            } else if let Expr::Closure(_) = *expr.func {
+                return parenthesize(
+                    expr.span().to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(
+                            Doc::text("App")
+                                .append(Doc::space())
+                                .append(parenthesize(
+                                    parenthesize(expr.func.to_doc())
                                         .append(Doc::text(","))
                                         .append(Doc::space())
                                         // provenance variable arguments
@@ -889,10 +945,13 @@ impl PrettyPrint for Expr {
                                                 .append(Doc::text("]"))
                                                 .group()
                                         )
-                            ))
-                            .group()
-                    )
-            )
+                                ))
+                                .group()
+                        )
+                )
+            } else {
+                panic!("can't apply something other than an identifier or a closure")
+            }
         }
 
         println!("{:#?}", self);
@@ -1030,5 +1089,54 @@ impl PrettyPrint for Span {
                 .append(Doc::space())
                 .append(self.end().to_doc())
         )
+    }
+}
+
+trait PrettyPrintLifetimeGenerics {
+    fn to_lifetime_generics_doc(self) -> Doc<'static, BoxDoc<'static, ()>>;
+}
+
+impl PrettyPrintLifetimeGenerics for PathArguments {
+    fn to_lifetime_generics_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        match self {
+            PathArguments::None => Doc::nil(),
+            PathArguments::Parenthesized(_) => Doc::text("(failwith \"unimplemented\")"),
+            PathArguments::AngleBracketed(bracketed) => Doc::intersperse(
+                bracketed.args.into_iter().filter(|arg| {
+                    if let GenericArgument::Lifetime(_) = arg { true } else { false }
+                }).map(|arg| match arg {
+                    GenericArgument::Lifetime(lft) => parenthesize(
+                        lft.span().to_doc()
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            .append(quote(Doc::text(format!("{}", lft.ident))))
+                    ),
+                    _ => unreachable!()
+                }),
+                Doc::text(";").append(Doc::space())
+            )
+        }
+    }
+}
+
+trait PrettyPrintTypeGenerics {
+    fn to_type_generics_doc(self) -> Doc<'static, BoxDoc<'static, ()>>;
+}
+
+impl PrettyPrintTypeGenerics for PathArguments {
+    fn to_type_generics_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        match self {
+            PathArguments::None => Doc::nil(),
+            PathArguments::Parenthesized(_) => Doc::text("(failwith \"unimplemented\")"),
+            PathArguments::AngleBracketed(bracketed) => Doc::intersperse(
+                bracketed.args.into_iter().filter(|arg| {
+                    if let GenericArgument::Type(_) = arg { true } else { false }
+                }).map(|arg| match arg {
+                    GenericArgument::Type(typ) => typ.to_doc(),
+                    _ => unreachable!()
+                }),
+                Doc::text(";").append(Doc::space())
+            )
+        }
     }
 }
