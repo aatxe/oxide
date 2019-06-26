@@ -76,8 +76,40 @@ type prim =
   | False
 [@@deriving show]
 
+type binop =
+  | Add (* addition *)
+  | Sub (* subtraction *)
+  | Mul (* multiplication *)
+  | Div (* division *)
+  | Rem (* remainder *)
+  | And (* boolean and *)
+  | Or (* boolean or *)
+  | BitXor (* bitwise xor *)
+  | BitAnd (* bitwise and *)
+  | BitOr (* bitwise or *)
+  | Shl (* shift left *)
+  | Shr (* shift right *)
+  | Eq (* equal *)
+  | Lt (* less than *)
+  | Le (* less than or equal to *)
+  | Ne (* not equal *)
+  | Ge (* greater than or equal to *)
+  | Gt (* greater than *)
+[@@deriving show]
+
+(* output: (lhs * rhs * result) *)
+let binop_to_types (op : binop) : ty option * ty option * ty =
+  let u32 = (dummy, BaseTy U32)
+  in let bool = (dummy, BaseTy Bool)
+  in match op with
+  | Add | Sub | Mul | Div | Rem
+  | BitXor | BitAnd | BitOr | Shl | Shr -> (Some u32, Some u32, u32)
+  | And | Or -> (Some bool, Some bool, bool)
+  | Eq | Lt | Le | Ne | Ge | Gt -> (None, None, bool)
+
 type preexpr =
   | Prim of prim
+  | BinOp of binop * expr * expr
   | Move of place_expr
   | Borrow of prov * owned * place_expr
   | BorrowIdx of prov * owned * place_expr * expr

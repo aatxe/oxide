@@ -234,6 +234,31 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
              (expr : expr) : (ty * loan_env * place_env) tc =
     match snd expr with
     | Prim prim -> Succ (type_of prim, ell, gamma)
+    | BinOp (op, e1, e2) ->
+      (match binop_to_types op with
+       | (Some lhs_ty, Some rhs_ty, out_ty) ->
+         (match tc delta ell gamma e1 with
+          | Succ (t1, ell1, gamma1) ->
+            if t1 = lhs_ty then match tc delta ell1 gamma1 e2 with
+             | Succ (t2, ell2, gamma2) ->
+               if t2 = rhs_ty then match unify (fst expr) ell2 t1 t2 with
+                | Succ (ellFinal, _) -> Succ (out_ty, ellFinal, gamma2)
+                | Fail err -> Fail err
+               else Fail (TypeMismatch (rhs_ty, t2))
+             | Fail err -> Fail err
+            else Fail (TypeMismatch (lhs_ty, t1))
+          | Fail err -> Fail err)
+       | (None, None, out_ty) ->
+         (match tc delta ell gamma e1 with
+          | Succ (t1, ell1, gamma1) ->
+            (match tc delta ell1 gamma1 e2 with
+             | Succ (t2, ell2, gamma2) ->
+               (match unify (fst expr) ell2 t1 t2 with
+                | Succ (ellFinal, _) -> Succ (out_ty, ellFinal, gamma2)
+                | Fail err -> Fail err)
+             | Fail err -> Fail err)
+          | Fail err -> Fail err)
+       | _ -> failwith "unreachable")
     | Move pi ->
       (match omega_safe ell gamma Unique (fst expr, pi) with
        | Succ (ty, [(Unique, pi)]) ->

@@ -268,7 +268,10 @@ impl PrettyPrint for Pat {
 impl PrettyPrint for Type {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         if let Type::Reference(ty) = self {
-            let lft = ty.lifetime.as_ref().unwrap();
+            let lft = match ty.lifetime.as_ref() {
+                Some(lft) => lft,
+                None => panic!("you need to include lifetime annotations in types!"),
+            };
             return parenthesize(
                 ty.span().to_doc()
                     .append(Doc::text(","))
