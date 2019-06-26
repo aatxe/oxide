@@ -52,7 +52,7 @@ fn main() {
                     Doc::text("[")
                         .append(
                             Doc::intersperse(
-                                inner.decl.generics.params
+                                inner.decl.generics.params.clone()
                                     .into_iter().flat_map(|param| match param {
                                         GenericParam::Lifetime(lft) => Some(
                                             Doc::text(format!("\"{}\"", lft.lifetime.ident))
@@ -68,6 +68,17 @@ fn main() {
                 .append(Doc::space())
                 .append(
                     Doc::text("[")
+                        .append(
+                            Doc::intersperse(
+                                inner.decl.generics.params
+                                    .into_iter().flat_map(|param| match param {
+                                        GenericParam::Type(tyvar) => Some(
+                                            Doc::text(format!("\"{}\"", tyvar.ident))
+                                        ),
+                                        _ => None
+                                    }),
+                                Doc::text(";").append(Doc::space()))
+                        )
                         .append(Doc::text("]"))
                         .group()
                 )
@@ -432,7 +443,10 @@ impl PrettyPrint for Type {
                             .append(Doc::text("Bool"))
                             .group()
                     } else {
-                        ty.path.to_doc()
+                        Doc::text("TyVar")
+                            .append(Doc::space())
+                            .append(quote(ty.path.to_doc()))
+                            .group()
                     })
             )
         }
