@@ -5,10 +5,13 @@ open Borrowck (* examples from rust's borrowck tests *)
 open Polonius (* examples from me, Niko, or the nll tests *)
 
 let print_is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place_expr) =
-  (match is_safe ell gamma omega pi with
-   | None -> Format.printf "%a is %a safe in@.  %a@."
-   | Some _ -> Format.printf "%a is not %a safe in@.  %a@.")
-    pp_place_expr pi pp_owned omega pp_place_env gamma
+  (match is_safe dummy ell gamma omega pi with
+   | Fail err ->
+     Format.printf "ERROR: %a@." pp_tc_error err
+   | Succ None ->
+     Format.printf "%a is %a safe in@.  %a@." pp_place_expr pi pp_owned omega pp_place_env gamma
+   | Succ (Some _) ->
+     Format.printf "%a is not %a safe in@.  %a@." pp_place_expr pi pp_owned omega pp_place_env gamma)
 
 let print_tc (sigma : global_env) (expr : expr) =
   match type_check sigma empty_delta empty_ell empty_gamma expr with

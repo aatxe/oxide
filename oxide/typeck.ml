@@ -205,28 +205,35 @@ let omega_safe (ell : loan_env) (gamma : place_env) (omega : owned)
     (pi : source_loc * place_expr) : (ty * loans) tc =
   match eval_place_expr (fst pi) ell gamma omega (snd pi) with
   | Succ loans ->
-    let safe_then_ty (loan : loan) : ty option * loan =
-      match is_safe ell gamma omega (snd loan) with
-      | None ->
-        (Some (place_env_lookup_spec gamma (snd loan)), loan)
-      | Some possible_conflicts ->
+    let safe_then_ty (loan : loan) : (ty option * loan) tc =
+      match is_safe (fst pi) ell gamma omega (snd loan) with
+      | Fail err -> Fail err
+      | Succ None ->
+        Succ (Some (place_env_lookup_spec gamma (snd loan)), loan)
+      | Succ (Some possible_conflicts) ->
         (* the reason these are only _possible_ conflicts is essentially reborrows *)
         match List.find_opt (fun loan -> not (List.mem loan loans)) possible_conflicts with
-        | Some loan -> (None, loan) (* in this case, we've found a _real_ conflict *)
+        | Some loan -> Succ (None, loan) (* in this case, we've found a _real_ conflict *)
         | None -> (* but here, the only conflict are precisely loans being reborrowed *)
           let hd = List.hd possible_conflicts
-          in if is_at_least omega (fst hd) then (Some (place_env_lookup_spec gamma (snd hd)), loan)
-          else (None, loan)
-    in let opt_tys = List.map safe_then_ty loans
-    in (match List.assoc_opt None opt_tys with
-        | Some (o, place) -> Fail (SafetyErr (fst pi, (omega, snd pi), (o, place)))
-        | None ->
-          let tys = List.map (fun pair -> unwrap (fst pair)) opt_tys
-          in match unify_many (fst pi) ell tys with
-          | Succ (ellPrime, ty) ->
-            if ellPrime = ell then Succ (ty, uniq_cons (omega, snd pi) loans)
-            else Fail (LoanEnvMismatch (fst pi, ell, ellPrime))
-          | Fail err -> Fail err)
+          in if is_at_least omega (fst hd) then
+            Succ (Some (place_env_lookup_spec gamma (snd hd)), loan)
+          else Succ (None, loan)
+    in let tmp = List.map safe_then_ty loans
+    in let opt_tys =
+         List.flatten (List.map (fun tc -> match tc with Succ x -> [x] | Fail _ -> []) tmp)
+    in (match List.find_opt (fun tc -> match tc with Succ _ -> false | Fail _ -> true) tmp with
+        | Some (Fail err) -> Fail err
+        | Some (Succ _) -> failwith "unreachable"
+        | None -> (match List.assoc_opt None opt_tys with
+            | Some (o, place) -> Fail (SafetyErr (fst pi, (omega, snd pi), (o, place)))
+            | None ->
+              let tys = List.map (fun pair -> unwrap (fst pair)) opt_tys
+              in match unify_many (fst pi) ell tys with
+              | Succ (ellPrime, ty) ->
+                if ellPrime = ell then Succ (ty, uniq_cons (omega, snd pi) loans)
+                else Fail (LoanEnvMismatch (fst pi, ell, ellPrime))
+              | Fail err -> Fail err))
   | Fail err -> Fail err
 
 let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
