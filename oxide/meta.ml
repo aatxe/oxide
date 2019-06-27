@@ -1,4 +1,5 @@
 open Syntax
+open Util
 
 (* checks if the given list is empty *)
 let is_empty (lst : 'a list) : bool = List.length lst = 0
@@ -104,26 +105,6 @@ let find_loans (omega : owned) (ell : loan_env) (gamma : place_env) (pi : place_
     in root_of_pi = root_of pi_prime
   in List.filter relevant (all_loans omega ell gamma)
 
-(* given a gamma, determines whether it is safe to use pi according to omega *)
-let is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place_expr) : loans option =
-  let subplaces_of_pi = all_subplaces pi
-  in let relevant (loan : loan) : bool =
-    (* a loan is relevant if it is for either a subplace or an ancestor of pi *)
-    let (_, pi_prime) = loan
-        (* either pi is an ancestor of pi_prime *)
-    in List.exists (fun x -> root_of x = root_of pi) (all_subplaces pi_prime)
-        (* or pi_prime is a subplace of pi *)
-        || List.mem pi_prime subplaces_of_pi
-  in match omega with
-  | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
-    (match List.filter relevant (find_loans Shared ell gamma pi) with
-    | [] -> None
-    | loans -> Some loans)
-  | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
-    (match List.filter relevant (find_loans Unique ell gamma pi) with
-    | [] -> None
-    | loans -> Some loans)
-
 (* evaluates the place expression down to a collection of possible places *)
 let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
     (omega : owned) (pi : place_expr) : loans tc =
@@ -156,6 +137,51 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
     in (match eval_place_expr loc ell gamma omega pi with
         | Succ loans -> Succ (List.map to_proj loans)
         | Fail err -> Fail err)
+
+let norm_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
+    (phi : place_expr) : places tc =
+  let rec norm (phi : place_expr) : places tc =
+    match eval_place_expr loc ell gamma Unique phi with
+    | Succ loans ->
+      let progress = List.map (fun loan -> (place_expr_to_place (snd loan), snd loan)) loans
+      in let still_to_norm =
+           List.map (fun pair -> snd pair) (List.filter (fun pair -> fst pair = None) progress)
+      in let complete =
+           List.map (fun pair -> unwrap (fst pair)) (List.filter (fun pair -> fst pair != None) progress)
+      in let continue (acc : places tc) (phi : place_expr) : places tc =
+           match (acc, norm phi) with
+           | (Succ completed, Succ newly_completed) -> Succ (List.append completed newly_completed)
+           | (Fail err, _) | (Succ _, Fail err) -> Fail err
+      in List.fold_left continue (Succ complete) still_to_norm
+    | Fail err -> Fail err
+  in norm phi
+
+(* this definition of disjoint essentially only works on places *)
+let not_disjoint (pi : place_expr * place_expr) : bool =
+  List.mem (fst pi) (all_subplaces (snd pi)) || List.mem (snd pi) (all_subplaces (fst pi))
+
+(* given a gamma, determines whether it is safe to use pi according to omega *)
+let is_safe (loc : source_loc) (ell : loan_env) (gamma : place_env)
+    (omega : owned) (phi : place_expr) : loans option tc =
+  let relevant (acc : loans tc) (loan : loan) : loans tc =
+    let (_, phi_prime) = loan
+    in match (acc, norm_place_expr loc ell gamma phi_prime) with
+    | (Succ acc, Succ pis) ->
+      if List.for_all not_disjoint (List.map (fun pi -> (phi, place_to_place_expr pi)) pis) then
+        Succ (List.cons loan acc)
+      else Succ acc
+    | (Fail err, _) | (Succ _, Fail err) -> Fail err
+  in match omega with
+  | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
+    (match List.fold_left relevant (Succ []) (find_loans Shared ell gamma phi) with
+     | Fail err -> Fail err
+     | Succ [] -> Succ None
+     | Succ loans -> Succ (Some loans))
+  | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
+    (match List.fold_left relevant (Succ []) (find_loans Unique ell gamma phi) with
+     | Fail err -> Fail err
+     | Succ [] -> Succ None
+     | Succ loans -> Succ (Some loans))
 
 (* remove the whole set of identifiers rooted at the place pi from gamma *)
 let place_env_subtract (gamma : place_env) (pi : place) : place_env =
