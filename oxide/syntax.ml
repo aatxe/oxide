@@ -46,6 +46,7 @@ let rec place_expr_to_place (pi : place_expr) : place option =
 type loan = owned * place_expr [@@deriving show]
 type loans = loan list [@@deriving show]
 type prov = source_loc * prov_var [@@deriving show]
+type provs = prov list [@@deriving show]
 
 type kind = Star | Prov [@@deriving show]
 type base_ty = Bool | U32 | Unit [@@deriving show]
