@@ -111,49 +111,41 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
   match pi with
   | Var var -> Succ [(omega, Var var)]
   | Deref pi ->
-    (match eval_place_expr loc ell gamma omega pi with
-    | Succ loans ->
-      let work (acc : loans tc) (loan : loan) : loans tc =
-        match acc with
-        | Fail err -> Fail err
-        | Succ loans ->
-          match place_env_lookup_speco gamma (snd loan) with
-          | Some (_, Ref (prov, _, _)) ->
-            (match loan_env_lookup_opt ell prov with
-             | Some new_loans -> Succ (List.append loans new_loans)
-             | None -> if loan_env_is_abs ell prov then Succ []
-               else Fail (InvalidProv prov))
-          | Some found -> Fail (TypeMismatchRef found)
-          | None -> Fail (UnboundPlaceExpr (loc, snd loan))
-      in List.fold_left work (Succ []) loans
-    | Fail err -> Fail err)
+    let* loans = eval_place_expr loc ell gamma omega pi
+    in let work (acc : loans tc) (loan : loan) : loans tc =
+         let* loans = acc
+         in match place_env_lookup_speco gamma (snd loan) with
+         | Some (_, Ref (prov, _, _)) ->
+           (match loan_env_lookup_opt ell prov with
+            | Some new_loans -> Succ (List.append loans new_loans)
+            | None -> if loan_env_is_abs ell prov then Succ []
+              else Fail (InvalidProv prov))
+         | Some found -> Fail (TypeMismatchRef found)
+         | None -> Fail (UnboundPlaceExpr (loc, snd loan))
+    in List.fold_left work (Succ []) loans
   | FieldProj (pi, field) ->
     let to_proj (loan : loan) : loan = (fst loan, FieldProj (snd loan, field))
-    in (match eval_place_expr loc ell gamma omega pi with
-     | Succ loans -> Succ (List.map to_proj loans)
-     | Fail err -> Fail err)
+    in let* loans = eval_place_expr loc ell gamma omega pi
+    in Succ (List.map to_proj loans)
   | IndexProj (pi, idx) ->
     let to_proj (loan : loan) : loan = (fst loan, IndexProj (snd loan, idx))
-    in (match eval_place_expr loc ell gamma omega pi with
-        | Succ loans -> Succ (List.map to_proj loans)
-        | Fail err -> Fail err)
+    in let* loans = eval_place_expr loc ell gamma omega pi
+    in Succ (List.map to_proj loans)
 
 let norm_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
     (phi : place_expr) : places tc =
   let rec norm (phi : place_expr) : places tc =
-    match eval_place_expr loc ell gamma Unique phi with
-    | Succ loans ->
-      let progress = List.map (fun loan -> (place_expr_to_place (snd loan), snd loan)) loans
-      in let still_to_norm =
-           List.map (fun pair -> snd pair) (List.filter (fun pair -> fst pair = None) progress)
-      in let complete =
-           List.map (fun pair -> unwrap (fst pair)) (List.filter (fun pair -> fst pair != None) progress)
-      in let continue (acc : places tc) (phi : place_expr) : places tc =
-           match (acc, norm phi) with
-           | (Succ completed, Succ newly_completed) -> Succ (List.append completed newly_completed)
-           | (Fail err, _) | (Succ _, Fail err) -> Fail err
-      in List.fold_left continue (Succ complete) still_to_norm
-    | Fail err -> Fail err
+    let* loans = eval_place_expr loc ell gamma Unique phi
+    in let progress = List.map (fun loan -> (place_expr_to_place (snd loan), snd loan)) loans
+    in let still_to_norm =
+         List.map (fun pair -> snd pair) (List.filter (fun pair -> fst pair = None) progress)
+    in let complete =
+         List.map (fun pair -> unwrap (fst pair)) (List.filter (fun pair -> fst pair != None) progress)
+    in let continue (acc : places tc) (phi : place_expr) : places tc =
+         let* completed = acc
+         in let* newly_completed = norm phi
+         in Succ (List.append completed newly_completed)
+    in List.fold_left continue (Succ complete) still_to_norm
   in norm phi
 
 (* this definition of disjoint essentially only works on places *)
@@ -165,23 +157,22 @@ let is_safe (loc : source_loc) (ell : loan_env) (gamma : place_env)
     (omega : owned) (phi : place_expr) : loans option tc =
   let relevant (acc : loans tc) (loan : loan) : loans tc =
     let (_, phi_prime) = loan
-    in match (acc, norm_place_expr loc ell gamma phi_prime) with
-    | (Succ acc, Succ pis) ->
-      if List.for_all not_disjoint (List.map (fun pi -> (phi, place_to_place_expr pi)) pis) then
-        Succ (List.cons loan acc)
-      else Succ acc
-    | (Fail err, _) | (Succ _, Fail err) -> Fail err
+    in let* acc = acc
+    in let* pis = norm_place_expr loc ell gamma phi_prime
+    in if List.for_all not_disjoint (List.map (fun pi -> (phi, place_to_place_expr pi)) pis) then
+      Succ (List.cons loan acc)
+    else Succ acc
   in match omega with
   | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
-    (match List.fold_left relevant (Succ []) (find_loans Shared ell gamma phi) with
-     | Fail err -> Fail err
-     | Succ [] -> Succ None
-     | Succ loans -> Succ (Some loans))
+    let* res = List.fold_left relevant (Succ []) (find_loans Shared ell gamma phi)
+    in (match res with
+        | [] -> Succ None
+        | loans -> Succ (Some loans))
   | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
-    (match List.fold_left relevant (Succ []) (find_loans Unique ell gamma phi) with
-     | Fail err -> Fail err
-     | Succ [] -> Succ None
-     | Succ loans -> Succ (Some loans))
+    let* res = List.fold_left relevant (Succ []) (find_loans Unique ell gamma phi)
+    in (match res with
+        | [] -> Succ None
+        | loans -> Succ (Some loans))
 
 (* remove the whole set of identifiers rooted at the place pi from gamma *)
 let place_env_subtract (gamma : place_env) (pi : place) : place_env =

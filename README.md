@@ -34,6 +34,9 @@ This repository is split into five parts:
     - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form at the time.
 4. [`oxide/`](oxide/) — an implementation of Oxide in OCaml
     - Currently, it's just the type checker, but we will eventually have an interpreter too.
+    - We require OCaml 4.08 and for now need to use two pins for ppx from @gasche.
+      - `opam pin add ppx_tools https://github.com/gasche/ppx_tools.git#use-stdlib`
+      - `opam pin add ppx_deriving https://github.com/gasche/ppx_deriving.git#4.08-support`
 5. [`reducer/`](reducer/) — a desugarer (simple compiler) from (a subset of) Rust to Oxide
     - Run reducer with `RUSTFLAGS='--cfg procmacro2_semver_exempt'` for source filename tracking.
 
