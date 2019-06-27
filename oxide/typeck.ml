@@ -522,10 +522,11 @@ let wf_global_env (sigma : global_env) : unit tc =
       in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
       in let gamma = List.flatten
              (List.map (fun pair -> places_typ (Var (fst pair)) (snd pair)) params)
-      in match type_check sigma delta ell gamma body with
+      in (match type_check sigma delta ell gamma body with
       | Succ (output_ty, ellPrime, _) ->
         (match subtype Combine ellPrime output_ty ret_ty with
         | Succ _ -> Succ ()
         | Fail err -> Fail err)
-      | Fail err -> Fail err
+      | Fail err -> Fail err)
+    | (_, _) -> failwith "unimplemented"
   in List.fold_left valid_global_entry (Succ ()) sigma

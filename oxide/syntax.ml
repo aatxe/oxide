@@ -8,12 +8,14 @@ type var = string [@@deriving show]
 type ty_var = string [@@deriving show]
 type fn_var = string [@@deriving show]
 type prov_var = string [@@deriving show]
+type struct_var = string [@@deriving show]
+type field = string [@@deriving show]
 
 type subtype_modality = Combine | Override [@@deriving show]
 type owned = Shared | Unique [@@deriving show]
 type place =
   | Var of var
-  | FieldProj of place * string
+  | FieldProj of place * field
   | IndexProj of place * int
 [@@deriving show]
 type places = place list [@@deriving show]
@@ -154,8 +156,14 @@ type store = (place * shape) list [@@deriving show]
 
 type fn_def = fn_var * prov list * ty_var list * (var * ty) list * ty * expr
 [@@deriving show]
+type rec_struct_def = struct_var * prov list * ty_var list * (field * ty) list
+[@@deriving show]
+type tup_struct_def = struct_var * prov list * ty_var list * ty list
+[@@deriving show]
 type global_entry =
   | FnDef of fn_def
+  | RecStructDef of rec_struct_def
+  | TupStructDef of tup_struct_def
 [@@deriving show]
 
 type global_env = global_entry list [@@deriving show]
@@ -165,6 +173,7 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
   let is_right_fn (entry : global_entry) : bool =
     match entry with
     | FnDef (fn_here, _, _, _, _, _) -> fn_here = fn
+    | _ -> false
   in match List.find_opt is_right_fn sigma with
   | Some (FnDef defn) -> Some defn
   | _ -> None
