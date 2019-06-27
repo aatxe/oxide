@@ -451,7 +451,7 @@ and free_provs (expr : expr) : provs =
 
 let wf_global_env (sigma : global_env) : unit tc =
   let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
-    let* _ = acc
+    let* () = acc
     in match entry with
     | FnDef (_, provs, tyvars, params, ret_ty, body) ->
       let free_provs = (* this lets us get away without letprov *)
