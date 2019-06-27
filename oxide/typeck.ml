@@ -470,45 +470,47 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     in List.fold_left work (Succ ([], ell, gamma)) exprs
   in tc delta ell gamma expr
 
+
+let rec free_provs_ty (ty : ty) : provs =
+  match snd ty with
+  | Any | BaseTy _ | TyVar _ -> []
+  | Ref (prov, _, ty) -> List.cons prov (free_provs_ty ty)
+  | Fun _ -> [] (* FIXME: actually implement *)
+  | Array (ty, _) | Slice ty -> free_provs_ty ty
+  | Tup tys -> List.flatten (List.map free_provs_ty tys)
+and free_provs (expr : expr) : provs =
+  match snd expr with
+  | Prim _ | Move _ | Fn _ | Abort _ | Ptr _ -> []
+  | BinOp (_, e1, e2) -> List.append (free_provs e1) (free_provs e2)
+  | Borrow (prov, _, _) -> [prov]
+  | BorrowIdx (prov, _, _, e) -> List.cons prov (free_provs e)
+  | BorrowSlice (prov, _, _, e1, e2) ->
+    List.cons prov (List.append (free_provs e1) (free_provs e2))
+  | LetProv (provs, e) ->
+    List.filter (fun prov -> not (List.mem prov provs)) (free_provs e)
+  | Let (_, ty, e1, e2) ->
+    List.append (free_provs_ty ty) (List.append (free_provs e1) (free_provs e2))
+  | Assign (_, e) -> free_provs e
+  | Seq (e1, e2) -> List.append (free_provs e1) (free_provs e2)
+  | Fun _ -> [] (* FIXME: actually implement *)
+  | App (e1, provs, tys, es) ->
+    List.concat [free_provs e1; provs;
+                 List.flatten (List.map free_provs_ty tys);
+                 List.flatten (List.map free_provs es)]
+  | Idx (_, e) -> free_provs e
+  | Branch (e1, e2, e3) ->
+    List.concat [free_provs e1; free_provs e2; free_provs e3]
+  | While (e1, e2) | For (_, e1, e2) ->
+    List.append (free_provs e1) (free_provs e2)
+  | Tup es | Array es -> List.flatten (List.map free_provs es)
+
 let wf_global_env (sigma : global_env) : unit tc =
-  let rec free_provs_ty (ty : ty) : prov list =
-    match snd ty with
-    | Any | BaseTy _ | TyVar _ -> []
-    | Ref (prov, _, ty) -> List.cons prov (free_provs_ty ty)
-    | Fun _ -> [] (* FIXME: actually implement *)
-    | Array (ty, _) | Slice ty -> free_provs_ty ty
-    | Tup tys -> List.flatten (List.map free_provs_ty tys)
-  in let rec free_provs (expr : expr) : prov list =
-    match snd expr with
-    | Prim _ | Move _ | Fn _ | Abort _ | Ptr _ -> []
-    | BinOp (_, e1, e2) -> List.append (free_provs e1) (free_provs e2)
-    | Borrow (prov, _, _) -> [prov]
-    | BorrowIdx (prov, _, _, e) -> List.cons prov (free_provs e)
-    | BorrowSlice (prov, _, _, e1, e2) ->
-      List.cons prov (List.append (free_provs e1) (free_provs e2))
-    | LetProv (provs, e) ->
-      List.filter (fun prov -> not (List.mem prov provs)) (free_provs e)
-    | Let (_, ty, e1, e2) ->
-      List.append (free_provs_ty ty) (List.append (free_provs e1) (free_provs e2))
-    | Assign (_, e) -> free_provs e
-    | Seq (e1, e2) -> List.append (free_provs e1) (free_provs e2)
-    | Fun _ -> [] (* FIXME: actually implement *)
-    | App (e1, provs, tys, es) ->
-      List.concat [free_provs e1; provs;
-                   List.flatten (List.map free_provs_ty tys);
-                   List.flatten (List.map free_provs es)]
-    | Idx (_, e) -> free_provs e
-    | Branch (e1, e2, e3) ->
-      List.concat [free_provs e1; free_provs e2; free_provs e3]
-    | While (e1, e2) | For (_, e1, e2) ->
-      List.append (free_provs e1) (free_provs e2)
-    | Tup es | Array es -> List.flatten (List.map free_provs es)
-  in let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
+  let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
     match (acc, entry) with
     | (Fail err, _) -> Fail err
     | (_, FnDef (_, provs, tyvars, params, ret_ty, body)) ->
       let free_provs = (* this lets us get away without letprov *)
-        List.filter (fun prov -> List.mem prov provs) (free_provs body)
+        List.filter (fun prov -> not (List.mem prov provs)) (free_provs body)
       in let delta = (List.append provs free_provs, tyvars)
       in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
       in let gamma = List.flatten
