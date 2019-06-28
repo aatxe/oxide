@@ -23,7 +23,7 @@ similarities to our approach, and may aid in its understanding.
 
 ## Navigating this repository
 
-This repository is split into five parts:
+This repository is split into six parts:
 
 1. [`notes/`](notes/) — an assorted selection of my notes, some about the language levels of Rust
 2. [`history/`](history/) — largely-iterative prior attempts at building & designing Oxide
@@ -39,6 +39,7 @@ This repository is split into five parts:
       - `opam pin add ppx_deriving https://github.com/gasche/ppx_deriving.git#4.08-support`
 5. [`reducer/`](reducer/) — a desugarer (simple compiler) from (a subset of) Rust to Oxide
     - Run reducer with `RUSTFLAGS='--cfg procmacro2_semver_exempt'` for source filename tracking.
+6. [`runner/`](runner/) — a test harness for driving the reducer/typechecker. 
 
 
 ## Related Works
