@@ -61,6 +61,7 @@ type prety =
   | Array of ty * int
   | Slice of ty
   | Tup of ty list
+  | Struct of struct_var * prov list * ty list
 [@@deriving show]
 and ty = source_loc * prety [@@deriving show]
 and place_env = (place * ty) list [@@deriving show]
@@ -131,6 +132,7 @@ type preexpr =
   | For of var * expr * expr
   | Tup of expr list
   | Array of expr list
+  | Struct of struct_var * prov list * ty list
   | Ptr of owned * place
 and expr = source_loc * preexpr
 [@@deriving show]
@@ -160,6 +162,10 @@ type rec_struct_def = struct_var * prov list * ty_var list * (field * ty) list
 [@@deriving show]
 type tup_struct_def = struct_var * prov list * ty_var list * ty list
 [@@deriving show]
+type struct_def =
+  | Rec of rec_struct_def
+  | Tup of tup_struct_def
+[@@deriving show]
 type global_entry =
   | FnDef of fn_def
   | RecStructDef of rec_struct_def
@@ -173,9 +179,29 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
   let is_right_fn (entry : global_entry) : bool =
     match entry with
     | FnDef (fn_here, _, _, _, _, _) -> fn_here = fn
+    (* we treat tuple structs as having defined a function to construct them *)
+    | TupStructDef (fn_here, _, _, _) -> fn_here = fn
     | _ -> false
   in match List.find_opt is_right_fn sigma with
   | Some (FnDef defn) -> Some defn
+  | Some (TupStructDef (name, provs, tyvars, tys)) ->
+    let params = List.mapi (fun i ty -> (string_of_int i, ty)) tys
+    in let tys = List.map (fun var -> (inferred, TyVar var)) tyvars
+    in let body =
+      (inferred, (App ((inferred, Struct (name, provs, tys)), provs, tys,
+                     List.map (fun pair -> (inferred, Move (Var (fst pair)))) params)))
+    in Some (name, provs, tyvars, params, (inferred, Struct (name, provs, tys)), body)
+  | _ -> None
+
+let global_env_find_struct (sigma : global_env) (name : struct_var) : struct_def option =
+  let is_right_struct (entry : global_entry) : bool =
+    match entry with
+    | RecStructDef (name_here, _, _, _) -> name_here = name
+    | TupStructDef (name_here, _, _, _) -> name_here = name
+    | _ -> false
+  in match List.find_opt is_right_struct sigma with
+  | Some (RecStructDef defn) -> Some (Rec defn)
+  | Some (TupStructDef defn) -> Some (Tup defn)
   | _ -> None
 
 type tyvar_env = prov list * ty_var list [@@deriving show]
@@ -235,6 +261,7 @@ type tc_error =
   | CannotMove of source_loc * place_expr
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var
+  | UnknownStruct of source_loc * struct_var
   | InvalidType of ty
   | InvalidProv of prov
   | InvalidLoan of source_loc * owned * place_expr
@@ -249,7 +276,9 @@ type 'a tc =
   | Fail of tc_error
 [@@deriving show]
 
-let (let*) (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc =
+let bind (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc =
   match tc with
   | Succ x -> f x
   | Fail err -> Fail err
+
+let (let*) (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc = bind tc f

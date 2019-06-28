@@ -15,25 +15,93 @@ let is_at_least (omega : owned) (omega_prime : owned) : bool =
 let prov_to_loans (ell : loan_env) (prov : prov) : loans =
   loan_env_lookup ell prov
 
+(* substitutes this for that in ty *)
+let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
+  let rec sub (ty : ty) : ty =
+    let loc = fst ty
+    in match snd ty with
+    | Any | BaseTy _ | TyVar _ -> ty
+    | Ref (pv, omega, ty) ->
+      let prov = if (snd pv) = (snd that) then this else pv
+      in (loc, Ref (prov, omega, sub ty))
+    | Fun (pvs, tvs, tys, gamma, ret_ty) ->
+      if not (List.mem that pvs) then (loc, Fun (pvs, tvs, sub_many tys, gamma, sub ret_ty))
+      else ty
+    | Array (ty, n) -> (loc, Array (sub ty, n))
+    | Slice ty -> (loc, Slice (sub ty))
+    | Tup tys -> (loc, Tup (sub_many tys))
+    | Struct (name, provs, tys) ->
+      let work (pv : prov) (provs : provs) =
+        List.cons (if (snd pv) = (snd that) then this else pv) provs
+      in let new_provs = List.fold_right work provs []
+      in (loc, Struct (name, new_provs, sub_many tys))
+  and sub_many (tys : ty list) : ty list = List.map sub tys
+  in sub ty
+
+let subst_many_prov (ty : ty) (pairs : (prov * prov) list) : ty =
+  List.fold_right (fun pair ty -> subst_prov ty (fst pair) (snd pair)) pairs ty
+
+let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
+  let rec sub (ty : ty) : ty =
+    let loc = fst ty
+    in match snd ty with
+    | Any | BaseTy _ -> ty
+    | TyVar tv -> if tv = that then this else ty
+    | Ref (pv, omega, ty) -> (loc, Ref (pv, omega, sub ty))
+    | Fun (pvs, tvs, tys, gamma, ret_ty) ->
+      if not (List.mem that tvs) then (loc, Fun (pvs, tvs, sub_many tys, gamma, sub ret_ty))
+      else ty
+    | Array (ty, n) -> (loc, Array (sub ty, n))
+    | Slice ty -> (loc, Slice (sub ty))
+    | Tup tys -> (loc, Tup (sub_many tys))
+    | Struct (name, provs, tys) -> (loc, Struct (name, provs, sub_many tys))
+  and sub_many (tys : ty list) : ty list = List.map sub tys
+  in sub ty
+
+let subst_many (ty : ty) (pairs : (ty * ty_var) list) : ty =
+  List.fold_right (fun pair ty -> subst ty (fst pair) (snd pair)) pairs ty
+
 (* given a root identier x, compute all the places based on tau *)
-let rec places_typ (pi : place) (tau : ty) : (place * ty) list =
-  match snd tau with
-  | Any -> [(pi, tau)]
-  | BaseTy _ -> [(pi, tau)]
-  | TyVar _ -> [(pi, tau)]
-  | Ref (_, _, _) -> [(pi, tau)]
-  | Fun (_, _, _, _, _) -> [(pi, tau)]
-  | Array(_, _) -> [(pi, tau)]
-  | Slice(_)  -> [(pi, tau)]
-  | Tup(tys) ->
-    let work (acc : (place * ty) list) (pair : place * ty) =
-      let (pi, ty) = pair
-      in List.concat [acc; places_typ pi ty]
-    in let func (idx : int) (typ : ty) =
-         let piPrime : place = IndexProj  (pi, idx)
-         in (piPrime, typ)
-    in let projs = List.mapi func tys
-    in List.fold_left work [(pi, tau)] projs
+let rec places_typ (sigma : global_env) (pi : place) (tau : ty) : place_env tc =
+  let work (acc : place_env tc) (pair : place * ty) =
+    let* acc = acc
+    in let (pi, ty) = pair
+    in let* gam_ext = places_typ sigma pi ty
+    in Succ (List.append acc gam_ext)
+  in let idx_func (idx : int) (typ : ty) =
+    let piPrime : place = IndexProj  (pi, idx)
+    in (piPrime, typ)
+  in let field_func (pair : field * ty) =
+    let piPrime : place = FieldProj (pi, fst pair)
+    in (piPrime, snd pair)
+  in match snd tau with
+  | Any -> Succ [(pi, tau)]
+  | BaseTy _ -> Succ [(pi, tau)]
+  | TyVar _ -> Succ [(pi, tau)]
+  | Ref (_, _, _) -> Succ [(pi, tau)]
+  | Fun (_, _, _, _, _) -> Succ [(pi, tau)]
+  | Array (_, _) -> Succ [(pi, tau)]
+  | Slice (_)  -> Succ [(pi, tau)]
+  | Tup (tys) ->
+    let projs = List.mapi idx_func tys
+    in List.fold_left work (Succ [(pi, tau)]) projs
+  | Struct (name, provs, tys) ->
+    (match global_env_find_struct sigma name with
+     | Some (Rec (_, dfn_provs, tyvs, fields)) ->
+        let sub (pair : field * ty) : field * ty =
+          let (field, ty) = pair
+          in (field, subst_many (subst_many_prov ty (List.combine provs dfn_provs))
+                                (List.combine tys tyvs))
+        in let new_fields = List.map sub fields
+        in let projs = List.map field_func new_fields
+        in List.fold_left work (Succ [(pi, tau)]) projs
+     | Some (Tup (_, dfn_provs, tyvs, fields)) ->
+        let sub (ty : ty) : ty =
+          subst_many (subst_many_prov ty (List.combine provs dfn_provs)) (List.combine tys tyvs)
+        in let new_fields = List.map sub fields
+        in let projs = List.mapi idx_func new_fields
+        in List.fold_left work (Succ [(pi, tau)]) projs
+     | None -> Fail (UnknownStruct (fst tau, name)))
 
 (* place env operations *)
 
@@ -54,9 +122,9 @@ let place_env_contains_spec (gamma : place_env) (x : place_expr) =
   match place_env_lookup_speco gamma x with
   | Some _ -> true
   | None -> false
-let place_env_include (gamma : place_env) (x : place) (typ : ty) =
-  let ext = places_typ x typ
-  in List.append ext gamma
+let place_env_include (sigma : global_env) (gamma : place_env) (x : place) (typ : ty) =
+  let* ext = places_typ sigma x typ
+  in Succ (List.append ext gamma)
 let place_env_append (gamma1 : place_env) (gamma2 : place_env) = List.append gamma1 gamma2
 let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
 
@@ -74,6 +142,7 @@ let all_loans (omega : owned) (ell : loan_env) (gamma : place_env) : loans =
     | Array (typ, _) -> work typ loans
     | Slice typ -> work typ loans
     | Tup typs -> List.fold_right List.append (List.map (fun typ -> work typ []) typs) loans
+    | Struct (_, _, _) -> loans (* FIXME: need sigma to figure out loans in struct *)
   in List.fold_right (fun entry -> work (snd entry)) gamma []
 
 (*  compute all subplaces from a given place *)
@@ -175,10 +244,10 @@ let is_safe (loc : source_loc) (ell : loan_env) (gamma : place_env)
         | loans -> Succ (Some loans))
 
 (* remove the whole set of identifiers rooted at the place pi from gamma *)
-let place_env_subtract (gamma : place_env) (pi : place) : place_env =
-  let gammaSub = places_typ pi (place_env_lookup gamma pi)
+let place_env_subtract (sigma : global_env) (gamma : place_env) (pi : place) : place_env tc =
+  let* gammaSub = places_typ sigma pi (place_env_lookup gamma pi)
   in let ids = List.map (fun (pi, _) -> pi) gammaSub
-  in List.fold_left place_env_exclude gamma ids
+  in Succ (List.fold_left place_env_exclude gamma ids)
 
 let rec contains_prov (gamma : place_env) (prov : prov) =
   let rec ty_contains (ty : ty) : bool =
@@ -191,25 +260,28 @@ let rec contains_prov (gamma : place_env) (prov : prov) =
       else false
     | Array (ty, _) | Slice ty -> ty_contains ty
     | Tup tys -> tys_contains tys
+    | Struct (_, pvs, _) -> List.mem prov pvs
   and tys_contains (tys : ty list) : bool =
     List.exists ty_contains tys
   in List.exists (fun pair -> ty_contains (snd pair)) gamma
 
-let envs_minus (ell : loan_env) (gamma : place_env) (pi : place) : loan_env * place_env =
-  let rec loop (ty : ty option) (pair : loan_env * place_env) =
+let envs_minus (sigma : global_env) (ell : loan_env) (gamma : place_env)
+  (pi : place) : (loan_env * place_env) tc =
+  let rec loop (ty : ty option) (pair : (loan_env * place_env) tc) : (loan_env * place_env) tc =
     match ty with
     | Some (_, Ref (prov, _, ty)) ->
-      let (ell, gamma) = loop (Some ty) pair
-      in let new_gamma = place_env_subtract gamma pi
-      in if not (contains_prov new_gamma prov) then (loan_env_exclude ell prov, new_gamma)
-      else (ell, new_gamma)
-    | Some (_, Any) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _) -> pair
+      let* (ell, gamma) = loop (Some ty) pair
+      in let* new_gamma = place_env_subtract sigma gamma pi
+      in if not (contains_prov new_gamma prov) then Succ (loan_env_exclude ell prov, new_gamma)
+      else Succ (ell, new_gamma)
+    | Some (_, Any) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
+    | Some (_, Struct _) -> pair
     | Some (_, Array (ty, _)) | Some (_, Slice ty) -> loop (Some ty) pair
     | Some (_, Tup tys) -> loops tys pair
-    | None -> (ell, gamma)
-  and loops (tys : ty list) (pair : loan_env * place_env) =
+    | None -> Succ (ell, gamma)
+  and loops (tys : ty list) (pair : (loan_env * place_env) tc) =
     List.fold_right loop (List.map (fun x -> Some x) tys) pair
-  in loop (place_env_lookup_opt gamma pi) (ell, gamma)
+  in loop (place_env_lookup_opt gamma pi) (Succ (ell, gamma))
 
 
 let rec prefixed_by (target : place) (in_pi : place) : bool =
@@ -266,5 +338,6 @@ let rec noncopyable (typ : ty) : bool =
   | Array (typPrime, _) -> noncopyable typPrime
   | Slice typPrime -> noncopyable typPrime
   | Tup typs -> List.for_all noncopyable typs
+  | Struct _ -> false (* currently, we'll treat structs as noncopyable *)
 
 let copyable (typ : ty) : bool = not (noncopyable typ)
