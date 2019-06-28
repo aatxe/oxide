@@ -266,6 +266,7 @@ type tc_error =
   | InvalidProv of prov
   | InvalidLoan of source_loc * owned * place_expr
   | InvalidArrayLen of ty * int
+  | DuplicateFieldsInStructDef of struct_var * (field * ty) * (field * ty)
   | UnboundPlace of source_loc * place
   | UnboundPlaceExpr of source_loc * place_expr
   | AbsProvsNotSubtype of prov * prov

@@ -464,10 +464,22 @@ let wf_global_env (sigma : global_env) : unit tc =
       in let* (output_ty, ellPrime, _) = type_check sigma delta ell gamma body
       in let* _ = subtype Combine ellPrime output_ty ret_ty
       in Succ ()
+    | RecStructDef (name, provs, tyvars, fields) ->
+      let delta = (provs, tyvars)
+      in let ell = ([], (List.map snd provs, []))
+      in let* () = valid_types sigma delta ell empty_gamma (List.map snd fields)
+      in let find_dup (pair : field * ty)
+                      (acc : (field * ty) list * ((field * ty) * (field * ty)) option) =
+        let (acc_lst, acc_opt) = acc
+        in if List.mem_assoc (fst pair) acc_lst then
+          (acc_lst, Some (pair, (fst pair, List.assoc (fst pair) acc_lst)))
+        else (List.cons pair acc_lst, acc_opt)
+      in (match List.fold_right find_dup fields ([], None) with
+          | (_, None) -> Succ ()
+          | (_, Some (p1, p2)) -> Fail (DuplicateFieldsInStructDef (name, p1, p2)))
     | TupStructDef (_, provs, tyvars, tys) ->
       let delta = (provs, tyvars)
       in let ell = ([], (List.map snd provs, []))
       in let* () = valid_types sigma delta ell empty_gamma tys
       in Succ ()
-    | _ -> failwith "unimplemented"
   in List.fold_left valid_global_entry (Succ ()) (List.cons drop sigma)
