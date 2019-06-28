@@ -1,6 +1,4 @@
 // this particular example is adapted from pseudocode from Niko
-fn drop<T>(x : T) {}
-
 fn main() {
     let m: u32 = 0;
     let q: &'q mut u32 = &mut m;

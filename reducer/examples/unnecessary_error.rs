@@ -1,4 +1,3 @@
-fn drop<T>(x : T) {}
 fn random_bool() -> bool { true }
 
 fn unnecessary_error() {

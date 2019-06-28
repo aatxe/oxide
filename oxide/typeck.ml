@@ -1,4 +1,5 @@
 open Syntax
+open Edsl
 open Meta
 open Util
 
@@ -464,4 +465,4 @@ let wf_global_env (sigma : global_env) : unit tc =
       in let* _ = subtype Combine ellPrime output_ty ret_ty
       in Succ ()
     | _ -> failwith "unimplemented"
-  in List.fold_left valid_global_entry (Succ ()) sigma
+  in List.fold_left valid_global_entry (Succ ()) (List.cons drop sigma)

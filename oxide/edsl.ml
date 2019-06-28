@@ -65,3 +65,7 @@ let (~@@) (mv : expr) : expr =
 let cond (e1 : expr) (e2 : expr) (e3 : expr) : expr = (loc(), Branch (e1, e2, e3))
 let (<==) (pi : place_expr) (e : expr) : expr = (loc(), Assign (pi, e))
 let (>>) (e1 : expr) (e2 : expr) : expr = (loc(), Seq (e1, e2))
+
+let drop : global_entry =
+  (fn "drop" [] ["T"] ["x" @: (static, TyVar "T")] (static, BaseTy Unit)
+     (static, Prim Unit))

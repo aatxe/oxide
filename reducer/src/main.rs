@@ -37,7 +37,7 @@ fn main() {
 
     let syntax = syn::parse_file(&src).expect("Unable to parse file");
 
-    let docs = syntax.items.into_iter().map(|item| item.to_doc());
+    let docs = syntax.items.into_iter().map(|item| parenthesize(item.to_doc()));
 
     let global_env = Doc::text("[")
         .append(Doc::intersperse(docs, Doc::text(";").append(Doc::space())).nest(2))
@@ -178,13 +178,10 @@ trait PrettyPrintPlaceExpr {
 impl PrettyPrint for Item {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         if let Item::Fn(item) = self {
-            return Doc::text("(")
-                // fn keyword and name
-                .append(Doc::text("fn")
-                        .append(Doc::space())
-                        .append(Doc::text(format!("\"{}\"", item.ident)))
-                        .group()
-                )
+            return Doc::text("fn")
+                .append(Doc::space())
+                .append(Doc::text(format!("\"{}\"", item.ident)))
+                .group()
                 // provenance variables
                 .append(Doc::space())
                 .append(
@@ -244,9 +241,7 @@ impl PrettyPrint for Item {
                 // body
                 .append(Doc::space())
                 .append(item.block.to_doc().nest(2))
-                .append(")")
                 .nest(2)
-                .group()
         }
 
         if let Item::Struct(item) = self {
