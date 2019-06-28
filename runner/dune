@@ -1,0 +1,5 @@
+(executable
+ (name runner)
+ (libraries stdio yojson shexp.process)
+ (modules Runner)
+ (preprocess (pps ppx_deriving.std)))
