@@ -167,6 +167,54 @@ fn quote(doc: PP) -> PP {
         .group()
 }
 
+// This is a bit of a hack, we're handling name resolution with the following heuristics:
+//   (1) a lowercase path is a function name
+//   (2) an uppercase path is a type variable if the is_type flag is true and the length is 1
+//   (3) an uppercase path is otherwise a struct name
+fn resolve_name(path: Path, is_type: bool) -> PP {
+    let last_args1 = path.segments.last().unwrap().value().arguments.clone();
+    let last_args2 = last_args1.clone();
+    let name = path.segments.iter().fold(String::new(), |mut acc, seg| {
+        acc.push_str(&format!("{}", seg.ident));
+        acc
+    });
+
+    if name == name.to_lowercase() {
+        Doc::text("Fn")
+            .append(Doc::space())
+            .append(quote(Doc::text(name)))
+            .group()
+    } else if is_type && name.len() == 1 {
+        Doc::text("TyVar")
+            .append(Doc::space())
+            .append(quote(Doc::text(name)))
+            .group()
+    } else {
+        Doc::text("Struct")
+            .append(Doc::space())
+            .append(parenthesize(
+                quote(Doc::text(name))
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("[")
+                            .append(last_args1.to_lifetime_generics_doc())
+                            .append(Doc::text("]"))
+                            .group()
+                    )
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("[")
+                            .append(last_args2.to_type_generics_doc())
+                            .append(Doc::text("]"))
+                            .group()
+                    )
+            ))
+            .group()
+    }
+}
+
 trait PrettyPrint {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>>;
 }
@@ -576,7 +624,7 @@ impl PrettyPrint for Type {
                 ty.span().to_doc()
                     .append(Doc::text(","))
                     .append(Doc::space())
-                    .append(if ty_name == "u32" {
+                    .append(if ty_name == "u32" || ty_name == "usize" || ty_name == "isize" {
                         Doc::text("BaseTy")
                             .append(Doc::space())
                             .append(Doc::text("U32"))
@@ -587,10 +635,7 @@ impl PrettyPrint for Type {
                             .append(Doc::text("Bool"))
                             .group()
                     } else {
-                        Doc::text("TyVar")
-                            .append(Doc::space())
-                            .append(quote(ty.path.to_doc()))
-                            .group()
+                        resolve_name(ty.path, true)
                     })
             )
         }
@@ -1078,9 +1123,7 @@ impl PrettyPrint for Expr {
                                         func.path.span().to_doc()
                                             .append(Doc::text(","))
                                             .append(Doc::space())
-                                            .append(Doc::text("Fn"))
-                                            .append(Doc::space())
-                                            .append(quote(func.path.clone().to_doc()))
+                                            .append(resolve_name(func.path.clone(), false))
                                     )
                                         .append(Doc::text(","))
                                         .append(Doc::space())
