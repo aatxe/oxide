@@ -5,8 +5,8 @@ use std::process;
 
 use pretty::{BoxDoc, Doc};
 use proc_macro2::{LineColumn, Span};
-use syn::{Block, Expr, FnArg, GenericParam, Item, Lit, Member, Pat, Path, ReturnType, Stmt, Type};
-use syn::{BinOp, ExprAssign, ExprBinary, ExprLit, GenericArgument, PathArguments, RangeLimits, UnOp};
+use syn::{Block, Expr, Fields, FnArg, Item, Lit, Member, Pat, Path, ReturnType, Stmt, Type, UnOp};
+use syn::{BinOp, ExprAssign, ExprBinary, ExprLit, GenericArgument, PathArguments, RangeLimits};
 use syn::spanned::Spanned;
 
 type PP = Doc<'static, BoxDoc<'static, ()>>;
@@ -37,87 +37,7 @@ fn main() {
 
     let syntax = syn::parse_file(&src).expect("Unable to parse file");
 
-    let docs = syntax.items.into_iter().map(|item| {
-        if let Item::Fn(inner) = item {
-            Doc::text("(")
-                // fn keyword and name
-                .append(Doc::text("fn")
-                        .append(Doc::space())
-                        .append(Doc::text(format!("\"{}\"", inner.ident)))
-                        .group()
-                )
-                // provenance variables
-                .append(Doc::space())
-                .append(
-                    Doc::text("[")
-                        .append(
-                            Doc::intersperse(
-                                inner.decl.generics.params.clone()
-                                    .into_iter().flat_map(|param| match param {
-                                        GenericParam::Lifetime(lft) => Some(
-                                            Doc::text(format!("\"{}\"", lft.lifetime.ident))
-                                        ),
-                                        _ => None
-                                    }),
-                                Doc::text(";").append(Doc::space()))
-                        )
-                        .append(Doc::text("]"))
-                        .group()
-                )
-                // type variables
-                .append(Doc::space())
-                .append(
-                    Doc::text("[")
-                        .append(
-                            Doc::intersperse(
-                                inner.decl.generics.params
-                                    .into_iter().flat_map(|param| match param {
-                                        GenericParam::Type(tyvar) => Some(
-                                            Doc::text(format!("\"{}\"", tyvar.ident))
-                                        ),
-                                        _ => None
-                                    }),
-                                Doc::text(";").append(Doc::space()))
-                        )
-                        .append(Doc::text("]"))
-                        .group()
-                )
-                // parameters
-                .append(Doc::space())
-                .append(
-                    Doc::text("[")
-                        .append(
-                            Doc::intersperse(
-                                inner.decl.inputs.into_iter().map(|arg| arg.to_doc()),
-                                Doc::text(";").append(Doc::space())
-                            )
-                        )
-                        .append(Doc::text("]"))
-                        .group()
-                )
-                // return type
-                .append(Doc::space())
-                .append(parenthesize(match inner.decl.output {
-                    ReturnType::Default => inner.decl.output.span().to_doc()
-                        .append(Doc::text(","))
-                        .append(Doc::space())
-                        .append(Doc::text("BaseTy")
-                                .append(Doc::space())
-                                .append(Doc::text("Unit"))
-                        )
-                        .group(),
-                    ReturnType::Type(_, ty) => ty.to_doc(),
-                }))
-                // body
-                .append(Doc::space())
-                .append(inner.block.to_doc().nest(2))
-                .append(")")
-                .nest(2)
-                .group()
-        } else {
-            Doc::nil()
-        }
-    });
+    let docs = syntax.items.into_iter().map(|item| item.to_doc());
 
     let global_env = Doc::text("[")
         .append(Doc::intersperse(docs, Doc::text(";").append(Doc::space())).nest(2))
@@ -253,6 +173,235 @@ trait PrettyPrint {
 
 trait PrettyPrintPlaceExpr {
     fn to_place_expr_doc(self) -> Doc<'static, BoxDoc<'static, ()>>;
+}
+
+impl PrettyPrint for Item {
+    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        if let Item::Fn(item) = self {
+            return Doc::text("(")
+                // fn keyword and name
+                .append(Doc::text("fn")
+                        .append(Doc::space())
+                        .append(Doc::text(format!("\"{}\"", item.ident)))
+                        .group()
+                )
+                // provenance variables
+                .append(Doc::space())
+                .append(
+                    Doc::text("[")
+                        .append(
+                            Doc::intersperse(
+                                item.decl.generics.lifetimes().map(|lft| {
+                                    Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                }),
+                                Doc::text(";").append(Doc::space())
+                            )
+                        )
+                        .append(Doc::text("]"))
+                        .group()
+                )
+                // type variables
+                .append(Doc::space())
+                .append(
+                    Doc::text("[")
+                        .append(
+                            Doc::intersperse(
+                                item.decl.generics.type_params().map(|tyvar| {
+                                    Doc::text(format!("\"{}\"", tyvar.ident))
+                                }),
+                                Doc::text(";").append(Doc::space())
+                            )
+                        )
+                        .append(Doc::text("]"))
+                        .group()
+                )
+                // parameters
+                .append(Doc::space())
+                .append(
+                    Doc::text("[")
+                        .append(
+                            Doc::intersperse(
+                                item.decl.inputs.into_iter().map(|arg| arg.to_doc()),
+                                Doc::text(";").append(Doc::space())
+                            )
+                        )
+                        .append(Doc::text("]"))
+                        .group()
+                )
+                // return type
+                .append(Doc::space())
+                .append(parenthesize(match item.decl.output {
+                    ReturnType::Default => item.decl.output.span().to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(Doc::text("BaseTy")
+                                .append(Doc::space())
+                                .append(Doc::text("Unit"))
+                        )
+                        .group(),
+                    ReturnType::Type(_, ty) => ty.to_doc(),
+                }))
+                // body
+                .append(Doc::space())
+                .append(item.block.to_doc().nest(2))
+                .append(")")
+                .nest(2)
+                .group()
+        }
+
+        if let Item::Struct(item) = self {
+            return match item.fields {
+                Fields::Named(fields) => {
+                    Doc::text("RecStructDef")
+                        .append(parenthesize(
+                            quote(Doc::text(format!("{}", item.ident)))
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                // provenance variables
+                                .append(
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            item.generics.lifetimes().map(|lft| {
+                                                Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                            }),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]"))
+                                        .group()
+                                )
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                // type variables
+                                .append(
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            item.generics.type_params().map(|tyvar| {
+                                                Doc::text(format!("\"{}\"", tyvar.ident))
+                                            }),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]"))
+                                        .group()
+                                )
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                // fields
+                                .append(
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            fields.named.into_iter()
+                                                .flat_map(|field| match field.ident {
+                                                    Some(ident) => Some(parenthesize(
+                                                        quote(Doc::text(format!("{}", ident)))
+                                                            .append(Doc::text(","))
+                                                            .append(Doc::space())
+                                                            .append(field.ty.to_doc())
+                                                    )),
+                                                    None => None,
+                                                }),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]"))
+                                        .group()
+                                )
+                        ))
+                },
+
+                Fields::Unnamed(fields) => {
+                    Doc::text("TupStructDef")
+                        .append(parenthesize(
+                            quote(Doc::text(format!("{}", item.ident)))
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                // provenance variables
+                                .append(
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            item.generics.lifetimes().map(|lft| {
+                                                Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                            }),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]"))
+                                        .group()
+                                )
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                // type variables
+                                .append(
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            item.generics.type_params().map(|tyvar| {
+                                                Doc::text(format!("\"{}\"", tyvar.ident))
+                                            }),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]"))
+                                        .group()
+                                )
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                // fields
+                                .append(
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            fields.unnamed.into_iter()
+                                                .flat_map(|field| match field.ident {
+                                                    Some(_) => None,
+                                                    None => Some(field.ty.to_doc()),
+                                                }),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]"))
+                                        .group()
+                                )
+                        ))
+                },
+
+                Fields::Unit => {
+                    Doc::text("TupStructDef")
+                        .append(parenthesize(
+                            quote(Doc::text(format!("{}", item.ident)))
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                // provenance variables
+                                .append(
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            item.generics.lifetimes().map(|lft| {
+                                                Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                            }),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]"))
+                                        .group()
+                                )
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                // type variables
+                                .append(
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            item.generics.type_params().map(|tyvar| {
+                                                Doc::text(format!("\"{}\"", tyvar.ident))
+                                            }),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]"))
+                                        .group()
+                                )
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                // fields
+                                .append(Doc::text("[]"))
+                        ))
+                },
+            }
+        }
+
+        println!("{:#?}", self);
+        Doc::nil()
+    }
 }
 
 impl PrettyPrint for Block {
