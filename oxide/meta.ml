@@ -184,11 +184,14 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
     in let work (acc : loans tc) (loan : loan) : loans tc =
          let* loans = acc
          in match place_env_lookup_speco gamma (snd loan) with
-         | Some (_, Ref (prov, _, _)) ->
-           (match loan_env_lookup_opt ell prov with
-            | Some new_loans -> Succ (List.append loans new_loans)
-            | None -> if loan_env_is_abs ell prov then Succ []
-              else Fail (InvalidProv prov))
+         | Some (ref_loc, Ref (prov, rfomega, ty)) ->
+           if is_at_least omega rfomega then
+              match loan_env_lookup_opt ell prov with
+              | Some new_loans -> Succ (List.append loans new_loans)
+              | None ->
+                if loan_env_is_abs ell prov then Succ []
+                else Fail (InvalidProv prov)
+          else Fail (PermissionErr (loc, (omega, Deref pi), (ref_loc, Ref (prov, rfomega, ty))))
          | Some found -> Fail (TypeMismatchRef found)
          | None -> Fail (UnboundPlaceExpr (loc, snd loan))
     in List.fold_left work (Succ []) loans

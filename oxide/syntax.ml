@@ -215,13 +215,13 @@ type loan_env = (prov_var * loans) list * (prov_var list * subty list) [@@derivi
 let empty_ell : loan_env = ([], ([], []))
 
 let loan_env_mem (ell : loan_env) (var : prov) : bool = List.mem_assoc (snd var) (fst ell)
-let loan_env_lookup (ell : loan_env) (var : prov) : loans = List.assoc (snd var) (fst ell)
-
 let loan_env_lookup_opt (ell : loan_env) (var : prov) : loans option =
   List.assoc_opt (snd var) (fst ell)
 let loan_env_is_abs (ell : loan_env) (var : prov) : bool = List.mem (snd var) (sndfst ell)
 let loan_env_abs_sub (ell : loan_env) (v1 : prov) (v2 : prov) : bool =
   List.mem (snd v1, snd v2) (sndsnd ell)
+let loan_env_lookup (ell : loan_env) (var : prov) : loans =
+  if loan_env_is_abs ell var then [] else List.assoc (snd var) (fst ell)
 
 let loan_env_include (ell : loan_env) (var : prov) (loans : loans) : loan_env =
   (List.cons (snd var, loans) (fst ell), snd ell)
@@ -258,6 +258,8 @@ type tc_error =
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
   | SafetyErr of source_loc * (owned * place_expr) * (owned * place_expr)
                 (* source_loc * attempted access * conflicting loan *)
+  | PermissionErr of source_loc * (owned * place_expr) * ty
+                     (* source_loc * attempted access * ty that doesn't permit this access *)
   | CannotMove of source_loc * place_expr
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var
@@ -266,6 +268,7 @@ type tc_error =
   | InvalidProv of prov
   | InvalidLoan of source_loc * owned * place_expr
   | InvalidArrayLen of ty * int
+  | InvalidPlaceExprFromType of place_expr * ty
   | DuplicateFieldsInStructDef of struct_var * (field * ty) * (field * ty)
   | UnboundPlace of source_loc * place
   | UnboundPlaceExpr of source_loc * place_expr

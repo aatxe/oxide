@@ -24,9 +24,9 @@ let (p1, p2, p3, p4, p5, p6) = ("'a", "'b", "'c", "'d", "'e", "'f")
 let (gimmie) = ("gimmie")
 
 (* short-hand for use in programs *)
-let fn (name : fn_var) (provs : prov_var list) (tyvars : ty_var list)
+let fn (name : fn_var) (provs : prov list) (tyvars : ty_var list)
     (params : (var * ty) list) (ret_ty : ty) (body : expr) : global_entry =
-  FnDef (name, List.map (fun v -> (loc(), v)) provs, tyvars, params, ret_ty, body)
+  FnDef (name, provs, tyvars, params, ret_ty, body)
 let (@:) (var : var) (ty : ty) : var * ty = (var, ty)
 
 let (~:) (ty : ty) : ty = ty

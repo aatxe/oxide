@@ -237,7 +237,14 @@ impl PrettyPrint for Item {
                         .append(
                             Doc::intersperse(
                                 item.decl.generics.lifetimes().map(|lft| {
-                                    Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                    parenthesize(
+                                        lft.lifetime.span().to_doc()
+                                            .append(Doc::text(","))
+                                            .append(Doc::space())
+                                            .append(Doc::text(
+                                                format!("\"{}\"", lft.lifetime.ident)
+                                            ))
+                                    )
                                 }),
                                 Doc::text(";").append(Doc::space())
                             )
@@ -266,7 +273,7 @@ impl PrettyPrint for Item {
                     Doc::text("[")
                         .append(
                             Doc::intersperse(
-                                item.decl.inputs.into_iter().map(|arg| arg.to_doc()),
+                                item.decl.inputs.clone().into_iter().map(|arg| arg.to_doc()),
                                 Doc::text(";").append(Doc::space())
                             )
                         )
@@ -276,7 +283,7 @@ impl PrettyPrint for Item {
                 // return type
                 .append(Doc::space())
                 .append(parenthesize(match item.decl.output {
-                    ReturnType::Default => item.decl.output.span().to_doc()
+                    ReturnType::Default => item.span().to_doc()
                         .append(Doc::text(","))
                         .append(Doc::space())
                         .append(Doc::text("BaseTy")
@@ -305,7 +312,12 @@ impl PrettyPrint for Item {
                                     Doc::text("[")
                                         .append(Doc::intersperse(
                                             item.generics.lifetimes().map(|lft| {
-                                                Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                                lft.lifetime.span().to_doc()
+                                                    .append(Doc::text(","))
+                                                    .append(Doc::space())
+                                                    .append(Doc::text(
+                                                        format!("\"{}\"", lft.lifetime.ident)
+                                                    ))
                                             }),
                                             Doc::text(";").append(Doc::space())
                                         ))
@@ -647,10 +659,22 @@ impl PrettyPrint for Type {
 
 impl PrettyPrintPlaceExpr for Expr {
     fn to_place_expr_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        if let Expr::Paren(expr) = self {
+            return parenthesize(expr.expr.to_place_expr_doc())
+        }
+
         if let Expr::Path(expr) = self {
             return Doc::text("Var")
                 .append(Doc::space())
                 .append(quote(expr.path.to_doc()))
+        }
+
+        if let Expr::Unary(expr) = self {
+            return parenthesize(
+                expr.op.to_doc()
+                    .append(Doc::space())
+                    .append(parenthesize(expr.expr.to_place_expr_doc()))
+            )
         }
 
         if let Expr::Field(expr) = self {
@@ -718,11 +742,18 @@ impl PrettyPrint for Expr {
         }
 
         if let Expr::Unary(expr) = self {
-            return parenthesize(
-                expr.op.to_doc()
-                    .append(Doc::space())
-                    .append(parenthesize(expr.expr.to_place_expr_doc()))
-            )
+            return expr.span().to_doc()
+                .append(Doc::text(","))
+                .append(Doc::space())
+                .append(
+                    Doc::text("Move")
+                        .append(Doc::space())
+                        .append(parenthesize(
+                            expr.op.to_doc()
+                                .append(Doc::space())
+                                .append(parenthesize(expr.expr.to_place_expr_doc()))
+                        ))
+                )
         }
 
         if let Expr::Binary(expr) = self {
@@ -737,10 +768,10 @@ impl PrettyPrint for Expr {
                                 expr.op.to_doc()
                                     .append(Doc::text(","))
                                     .append(Doc::space())
-                                    .append(expr.left.to_doc())
+                                    .append(parenthesize(expr.left.to_doc()))
                                     .append(Doc::text(","))
                                     .append(Doc::space())
-                                    .append(expr.right.to_doc())
+                                    .append(parenthesize(expr.right.to_doc()))
                             ))
                             .group()
                     )
