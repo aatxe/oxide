@@ -1,3 +1,0 @@
-[submodule "tests"]
-	path = tests
-	url = git@github.ccs.neu.edu:weiss/oxide-tests.git
