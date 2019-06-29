@@ -23,14 +23,16 @@ let rec mapM ~f xs =
     let* res = mapM ~f xs in
     return (r::res)
 
-let with_output file k =
+let identity x = x
+
+let with_output ?(silent=true) file k =
   with_temp_file ~prefix:"garbage" ~suffix:"err" (fun err ->
       with_temp_file ~prefix:"test" ~suffix:"ml" (fun f ->
-          let* exit_ = chdir "reducer" (stderr_to err (stdout_to f (run_exit_code "cargo" ["run"; file]))) in
+          let* exit_ = chdir "reducer" ((if silent then stderr_to err else identity) (stdout_to f (run_exit_code "cargo" ["run"; file]))) in
           if not (Int.equal exit_ 0) then
             return (file, ReducerFailed)
           else
-            let* (exit_, output) = (pipe_both (stderr_to err (run_exit_code "dune" ["utop"; "oxide"; "--"; f])) read_all) in
+            let* (exit_, output) = (pipe_both ((if silent then stderr_to err else identity) (run_exit_code "dune" ["utop"; "oxide"; "--"; f])) read_all) in
             if not (Int.equal exit_ 0) then
               return (file, TypeCheckerFailed)
             else
@@ -79,7 +81,7 @@ let rec run dir =
 
 
 let check file =
-  with_output file (fun output ->
+  with_output ~silent:false file (fun output ->
       let* _ = print output in
       return (file, OutputMissing))
 
