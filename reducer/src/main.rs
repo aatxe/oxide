@@ -175,9 +175,10 @@ fn resolve_name(path: Path, is_type: bool) -> PP {
     let last_args1 = path.segments.last().unwrap().value().arguments.clone();
     let last_args2 = last_args1.clone();
     let name = path.segments.iter().fold(String::new(), |mut acc, seg| {
+        acc.push_str("::");
         acc.push_str(&format!("{}", seg.ident));
         acc
-    });
+    }).split_off(2);
 
     if name == name.to_lowercase() {
         Doc::text("Fn")
@@ -627,10 +628,11 @@ impl PrettyPrint for Type {
             let ty_name = ty.path.segments.iter().fold(
                 String::new(),
                 |mut acc, seg| {
+                    acc.push_str("::");
                     acc.push_str(&format!("{}", seg.ident));
                     acc
                 }
-            );
+            ).split_off(2);
 
             return parenthesize(
                 ty.span().to_doc()
@@ -1113,10 +1115,11 @@ impl PrettyPrint for Expr {
             let macro_name = expr.mac.path.segments.iter().fold(
                 String::new(),
                 |mut acc, seg| {
+                    acc.push_str("::");
                     acc.push_str(&format!("{}", seg.ident));
                     acc
                 }
-            );
+            ).split_off(2);
             if macro_name == "abort" || macro_name == "panic" {
                 return parenthesize(
                     expr.span().to_doc()
