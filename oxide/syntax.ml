@@ -22,9 +22,19 @@ type places = place list [@@deriving show]
 type place_expr =
   | Var of var
   | Deref of place_expr
-  | FieldProj of place_expr * string
+  | FieldProj of place_expr * field
   | IndexProj of place_expr * int
 [@@deriving show]
+
+type place_expr_part = Deref | FieldProj of field | IndexProj of int [@@deriving show]
+type place_expr_parts = place_expr_part list [@@deriving show]
+
+let rec to_parts (phi : place_expr) : place_expr_parts =
+  match phi with
+  | Var _ -> []
+  | Deref inner -> List.append (to_parts inner) [Deref]
+  | FieldProj (inner, field) -> List.append (to_parts inner) [FieldProj field]
+  | IndexProj (inner, idx) -> List.append (to_parts inner) [IndexProj idx]
 
 let rec place_to_place_expr (pi : place) : place_expr =
   match pi with
@@ -279,7 +289,7 @@ type tc_error =
   | InvalidProv of prov
   | InvalidLoan of source_loc * owned * place_expr
   | InvalidArrayLen of ty * int
-  | InvalidPlaceExprFromType of place_expr * ty
+  | InvalidOperationOnType of place_expr_part * ty
   | DuplicateFieldsInStructDef of struct_var * (field * ty) * (field * ty)
   | UnboundPlace of source_loc * place
   | UnboundPlaceExpr of source_loc * place_expr

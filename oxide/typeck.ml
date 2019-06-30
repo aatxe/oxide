@@ -176,11 +176,11 @@ let type_of (prim : prim) : ty =
 
 (* decompose the type by peforming the operations in phi on it to compute the type of phi *)
 (* invariant: ty must be the type of root_of phi on use *)
-let rec compute_ty (sigma : global_env) (phi : place_expr) (ty : ty) : ty tc =
+let rec compute_ty (sigma : global_env) (phi : place_expr_parts) (ty : ty) : ty tc =
   match (phi, snd ty) with
-  | (Var _, _) -> Succ ty
-  | (Deref phi_prime, Ref (_, _, ty)) -> compute_ty sigma phi_prime ty
-  | (FieldProj (phi_prime, field), Struct (name, provs, tys)) ->
+  | ([], _) -> Succ ty
+  | (Deref :: phi_prime, Ref (_, _, ty)) -> compute_ty sigma phi_prime ty
+  | (FieldProj field :: phi_prime, Struct (name, provs, tys)) ->
     (match global_env_find_struct sigma name with
      | Some (Rec (_, dfn_provs, tyvars, dfn_tys)) ->
        (match List.assoc_opt field dfn_tys with
@@ -188,10 +188,10 @@ let rec compute_ty (sigma : global_env) (phi : place_expr) (ty : ty) : ty tc =
           let new_ty = subst_many (subst_many_prov ty (List.combine provs dfn_provs))
                                   (List.combine tys tyvars)
           in compute_ty sigma phi_prime new_ty
-        | None -> Fail (InvalidPlaceExprFromType (phi, ty)))
-     | Some (Tup _) -> Fail (InvalidPlaceExprFromType (phi, ty))
+        | None -> Fail (InvalidOperationOnType (List.hd phi, ty)))
+     | Some (Tup _) -> Fail (InvalidOperationOnType (List.hd phi, ty))
      | None -> Fail (UnknownStruct (fst ty, name)))
-  | (IndexProj (phi_prime, idx), Struct (name, provs, tys)) ->
+  | (IndexProj idx :: phi_prime, Struct (name, provs, tys)) ->
     (match global_env_find_struct sigma name with
      | Some (Tup (_, dfn_provs, tyvars, dfn_tys)) ->
        (match List.nth_opt dfn_tys idx with
@@ -199,14 +199,14 @@ let rec compute_ty (sigma : global_env) (phi : place_expr) (ty : ty) : ty tc =
           let new_ty = subst_many (subst_many_prov ty (List.combine provs dfn_provs))
                                   (List.combine tys tyvars)
           in compute_ty sigma phi_prime new_ty
-        | None -> Fail (InvalidPlaceExprFromType (phi, ty)))
-     | Some (Rec _) -> Fail (InvalidPlaceExprFromType (phi, ty))
+        | None -> Fail (InvalidOperationOnType (List.hd phi, ty)))
+     | Some (Rec _) -> Fail (InvalidOperationOnType (List.hd phi, ty))
      | None -> Fail (UnknownStruct (fst ty, name)))
-  | (IndexProj (phi_prime, idx), Tup tys) ->
+  | (IndexProj idx :: phi_prime, Tup tys) ->
     (match List.nth_opt tys idx with
      | Some ty -> compute_ty sigma phi_prime ty
-     | None -> Fail (InvalidPlaceExprFromType (phi, ty)))
-  | (_, _) -> Fail (InvalidPlaceExprFromType (phi, ty))
+     | None -> Fail (InvalidOperationOnType (List.hd phi, ty)))
+  | (_, _) -> Fail (InvalidOperationOnType (List.hd phi, ty))
 
 let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega : owned)
     (pi : source_loc * place_expr) : (ty * loans) tc =
@@ -240,7 +240,7 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega 
       in if ellPrime = ell then
         if (snd ty) = Any then
           let init_ty = place_env_lookup_spec gamma (Var (root_of (snd pi)))
-          in let* computed_ty = compute_ty sigma (snd pi) init_ty
+          in let* computed_ty = compute_ty sigma (to_parts (snd pi)) init_ty
           in Succ (computed_ty, uniq_cons (omega, snd pi) loans)
         else Succ (ty, uniq_cons (omega, snd pi) loans)
       else Fail (LoanEnvMismatch (fst pi, ell, ellPrime))
@@ -356,7 +356,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
           in Succ (place_env_append gam_ext acc)
       in let* gammaPrime = List.fold_left work (Succ gamma1) places
       in Succ ((inferred, BaseTy Unit), ellPrime, gammaPrime)
-    | Abort _ -> failwith "unimplemented abort"
+    | Abort _ -> Succ ((inferred, Any), ell, gamma)
     | While (e1, e2) ->
       (match tc delta ell gamma e1 with
        | Succ ((_, BaseTy Bool), ell1, gamma1) ->
