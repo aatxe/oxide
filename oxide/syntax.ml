@@ -45,6 +45,13 @@ let rec place_expr_to_place (pi : place_expr) : place option =
     | Some pi_prime -> Some (IndexProj (pi_prime, idx))
     | None -> None)
 
+(* returns true if the place expression doesn't contain any dereferencing *)
+let rec place_expr_is_place (pi : place_expr) : bool =
+  match pi with
+  | Var _ -> true
+  | Deref _ -> false
+  | FieldProj (pi_prime, _) | IndexProj (pi_prime, _) -> place_expr_is_place pi_prime
+
 type loan = owned * place_expr [@@deriving show]
 type loans = loan list [@@deriving show]
 type prov = source_loc * prov_var [@@deriving show]
@@ -132,7 +139,8 @@ type preexpr =
   | For of var * expr * expr
   | Tup of expr list
   | Array of expr list
-  | Struct of struct_var * prov list * ty list
+  | RecStruct of struct_var * prov list * ty list * (field * expr) list
+  | TupStruct of struct_var * prov list * ty list
   | Ptr of owned * place
 and expr = source_loc * preexpr
 [@@deriving show]
@@ -188,7 +196,7 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
     let params = List.mapi (fun i ty -> (string_of_int i, ty)) tys
     in let tys = List.map (fun var -> (inferred, TyVar var)) tyvars
     in let body =
-      (inferred, (App ((inferred, Struct (name, provs, tys)), provs, tys,
+      (inferred, (App ((inferred, TupStruct (name, provs, tys)), provs, tys,
                      List.map (fun pair -> (inferred, Move (Var (fst pair)))) params)))
     in Some (name, provs, tyvars, params, (inferred, Struct (name, provs, tys)), body)
   | _ -> None
@@ -249,6 +257,8 @@ let loan_env_exclude (ell : loan_env) (var : prov) : loan_env =
 (* place_env is mutually recursive with ty and as such, is defined above *)
 let empty_gamma : place_env = []
 
+type struct_kind = Rec | Tup [@@deriving show]
+
 type tc_error =
   | TypeMismatch of ty * ty (* expected * found *)
   | TypeMismatchIterable of ty (* found *)
@@ -264,6 +274,7 @@ type tc_error =
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var
+  | WrongStructConstructor of source_loc * struct_var * struct_kind
   | InvalidType of ty
   | InvalidProv of prov
   | InvalidLoan of source_loc * owned * place_expr

@@ -5,8 +5,7 @@ use std::process;
 
 use pretty::{BoxDoc, Doc};
 use proc_macro2::{LineColumn, Span};
-use syn::{Block, Expr, Fields, FnArg, Item, Lit, Member, Pat, Path, ReturnType, Stmt, Type, UnOp};
-use syn::{BinOp, ExprAssign, ExprBinary, ExprLit, GenericArgument, PathArguments, RangeLimits};
+use syn::*;
 use syn::spanned::Spanned;
 
 type PP = Doc<'static, BoxDoc<'static, ()>>;
@@ -191,7 +190,7 @@ fn resolve_name(path: Path, is_type: bool) -> PP {
             .append(quote(Doc::text(name)))
             .group()
     } else {
-        Doc::text("Struct")
+        Doc::text(if is_type { "Struct" } else { "TupStruct" })
             .append(Doc::space())
             .append(parenthesize(
                 quote(Doc::text(name))
@@ -744,7 +743,7 @@ impl PrettyPrint for Expr {
         }
 
         if let Expr::Unary(expr) = self {
-            return expr.span().to_doc()
+            return parenthesize(expr.span().to_doc()
                 .append(Doc::text(","))
                 .append(Doc::space())
                 .append(
@@ -756,6 +755,7 @@ impl PrettyPrint for Expr {
                                 .append(parenthesize(expr.expr.to_place_expr_doc()))
                         ))
                 )
+            )
         }
 
         if let Expr::Binary(expr) = self {
@@ -1141,6 +1141,58 @@ impl PrettyPrint for Expr {
             }
         }
 
+        if let Expr::Struct(expr) = self {
+            let last_args1 = expr.path.segments.last().unwrap().value().arguments.clone();
+            let last_args2 = last_args1.clone();
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("RecStruct")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                quote(expr.path.to_doc())
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    // provenance variable arguments
+                                    .append(
+                                        Doc::text("[")
+                                            .append(last_args1.to_lifetime_generics_doc())
+                                            .append(Doc::text("]"))
+                                            .group()
+                                    )
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    // type variable arguments
+                                    .append(
+                                        Doc::text("[")
+                                            .append(last_args2.to_type_generics_doc())
+                                            .append(Doc::text("]"))
+                                            .group()
+                                    )
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    // arguments
+                                    .append(
+                                        Doc::text("[")
+                                            .append(Doc::intersperse(
+                                                expr.fields
+                                                    .into_iter()
+                                                    .map(|field| {
+                                                        parenthesize(field.to_doc())
+                                                    }),
+                                                Doc::text(";").append(Doc::space())
+                                            ))
+                                            .append(Doc::text("]"))
+                                            .group()
+                                    )
+                            ))
+                            .group()
+                    )
+            )
+        }
+
         if let Expr::Call(expr) = self {
             if let Expr::Path(func) = &*expr.func {
                 let last_args1 = func.path.segments.last().unwrap().value().arguments.clone();
@@ -1258,6 +1310,19 @@ impl PrettyPrint for Path {
         Doc::intersperse(
             self.segments.into_iter().map(|seg| Doc::text(format!("{}", seg.ident))),
             Doc::text("::")
+        )
+    }
+}
+
+impl PrettyPrint for FieldValue {
+    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        parenthesize(
+            (match self.member {
+               Member::Named(id) => quote(Doc::text(format!("{}", id))),
+               Member::Unnamed(idx) => quote(Doc::text(format!("{}", idx.index))),
+            }).append(Doc::text(","))
+                .append(Doc::space())
+                .append(self.expr.to_doc())
         )
     }
 }

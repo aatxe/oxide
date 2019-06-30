@@ -142,7 +142,7 @@ let all_loans (omega : owned) (ell : loan_env) (gamma : place_env) : loans =
     | Array (typ, _) -> work typ loans
     | Slice typ -> work typ loans
     | Tup typs -> List.fold_right List.append (List.map (fun typ -> work typ []) typs) loans
-    | Struct (_, _, _) -> loans (* FIXME: need sigma to figure out loans in struct *)
+    | Struct (_, provs, _) ->  List.concat (loans :: List.map (prov_to_loans ell) provs)
   in List.fold_right (fun entry -> work (snd entry)) gamma []
 
 (*  compute all subplaces from a given place *)

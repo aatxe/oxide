@@ -222,7 +222,7 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega 
          | Some loan -> Succ (None, loan) (* in this case, we've found a _real_ conflict *)
          | None -> (* but here, the only conflict are precisely loans being reborrowed *)
            let hd = List.hd possible_conflicts
-           in if is_at_least omega (fst hd) then
+           in if not (place_expr_is_place (snd hd)) && is_at_least omega (fst hd) then
              Succ (Some (place_env_lookup_spec gamma (snd hd)), loan)
            else Succ (None, loan)
   in let tmp = List.map safe_then_ty loans
@@ -418,7 +418,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let ty_pairs = List.combine new_params arg_tys
          in let types_match (tys : ty * ty) : bool =
               let (expected, found) = tys
-              in expected == found (* FIXME: why the heck is this ==? it works this way... *)
+              in (snd expected) = (snd found)
          in (match List.find_opt types_match ty_pairs with
              | None ->
                let new_ret_ty = do_sub ret_ty
@@ -436,12 +436,35 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* (ellFinal, unified_ty) = unify_many (fst expr) ellPrime tys
       in let final_ty : ty = (inferred, Array (unified_ty, List.length tys))
       in Succ (final_ty, ellFinal, gammaPrime)
-    | Struct (name, _, _) ->
+    | RecStruct (name, provs, tys, fields) ->
+      (match global_env_find_struct sigma name with
+       | Some (Rec (_, dfn_provs, tyvars, dfn_fields)) ->
+         let fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) fields
+         in let dfn_fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) dfn_fields
+         in let exprs = List.map snd fields_sorted
+         in let (prov_sub, ty_sub) = (List.combine provs dfn_provs,
+                                      List.combine tys tyvars)
+         in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
+         in let expected_tys = List.map (fun x -> do_sub (snd x)) dfn_fields_sorted
+         in let pairs = List.combine exprs expected_tys
+         in let tc_exp (acc : (loan_env * place_env) tc) (p : expr * ty) =
+           let* (ell, gamma) = acc
+           in let (expr, expected_ty) = p
+           in let* (found_ty, ell_prime, gamma_prime) = tc delta ell gamma expr
+           in if (snd expected_ty) = (snd found_ty) then Succ (ell_prime, gamma_prime)
+           else Fail (TypeMismatch (expected_ty, found_ty))
+         in let* (ell_prime, gamma_prime) = List.fold_left tc_exp (Succ (ell, gamma)) pairs
+         in Succ ((inferred, Struct (name, provs, tys)), ell_prime, gamma_prime)
+       | Some (Tup _) -> Fail (WrongStructConstructor (fst expr, name, Rec))
+       | None -> Fail (UnknownStruct (fst expr, name)))
+    | TupStruct (name, _, _) ->
       (match global_env_find_fn sigma name with
        | Some (_, provs, tyvars, params, ret_ty, _) ->
          let fn_ty : ty = (inferred, Fun (provs, tyvars, List.map snd params, [], ret_ty))
          in Succ (fn_ty, ell, gamma)
-       | None -> Fail (UnknownStruct (fst expr, name)))
+       | None ->
+         if global_env_find_struct sigma name == None then Fail (UnknownStruct (fst expr, name))
+         else Fail (WrongStructConstructor (fst expr, name, Tup)))
     | Ptr _ -> failwith "unimplemented"
   and tc_many (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
       (exprs : expr list) : (ty list * loan_env * place_env) tc =
@@ -486,7 +509,9 @@ and free_provs (expr : expr) : provs =
   | While (e1, e2) | For (_, e1, e2) ->
     List.append (free_provs e1) (free_provs e2)
   | Tup es | Array es -> List.flatten (List.map free_provs es)
-  | Struct (_, provs, _) -> provs
+  | RecStruct (_, provs, _, es) ->
+    List.flatten (provs :: List.map (fun x -> free_provs (snd x)) es)
+  | TupStruct (_, provs, _) -> provs
 
 let wf_global_env (sigma : global_env) : unit tc =
   let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
