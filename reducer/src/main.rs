@@ -216,7 +216,21 @@ fn resolve_name(path: Path, is_type: bool) -> PP {
 }
 
 fn copyable_doc(attrs: Vec<Attribute>) -> PP {
-   Doc::text("false") 
+    for attr in attrs {
+        match attr.parse_meta() {
+            Ok(Meta::List(metas)) => {
+                for meta in metas.nested.into_iter() {
+                    if let NestedMeta::Meta(Meta::Word(ident)) = meta {
+                        if ident.to_string() == "Copy" {
+                            return Doc::text("true")
+                        }
+                    }
+                }
+            },
+            Ok(_) | Err(_) => continue,
+        }
+    }
+    Doc::text("false")
 }
 
 trait PrettyPrint {
