@@ -218,11 +218,13 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega 
          Succ (Some (place_env_lookup_spec gamma (snd loan)), loan)
        | Some possible_conflicts ->
          (* the reason these are only _possible_ conflicts is essentially reborrows *)
-         match List.find_opt (fun loan -> not (List.mem loan loans)) possible_conflicts with
+         let is_in (loan : loan) (other_loan : loan) : bool = (snd other_loan) = (snd loan)
+         in let is_real (loan : loan) : bool = not (List.exists (is_in loan) loans)
+         in match List.find_opt is_real possible_conflicts with
          | Some loan -> Succ (None, loan) (* in this case, we've found a _real_ conflict *)
          | None -> (* but here, the only conflict are precisely loans being reborrowed *)
            let hd = List.hd possible_conflicts
-           in if not (place_expr_is_place (snd hd)) && is_at_least omega (fst hd) then
+           in if not (place_expr_is_place (snd pi)) && is_at_least omega (fst hd) then
              Succ (Some (place_env_lookup_spec gamma (snd hd)), loan)
            else Succ (None, loan)
   in let tmp = List.map safe_then_ty loans
@@ -292,9 +294,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
              let* copy = copyable sigma ty
              in if copy then Succ (ell_prime, gamma) else failwith "unreachable"
          in Succ (ty, ellPrime, gammaPrime)
-       | Succ (ty, loans) ->
-         if copy && List.for_all ((=) Shared) (List.map fst loans) then
-            Succ (ty, ell_prime, gamma)
+       | Succ (ty, _) ->
+         if copy then Succ (ty, ell_prime, gamma)
          else failwith "unreachable"
        | Fail err -> Fail err)
     | Borrow (prov, omega, pi) ->
