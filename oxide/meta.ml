@@ -87,7 +87,7 @@ let rec places_typ (sigma : global_env) (pi : place) (tau : ty) : place_env tc =
     in List.fold_left work (Succ [(pi, tau)]) projs
   | Struct (name, provs, tys) ->
     (match global_env_find_struct sigma name with
-     | Some (Rec (_, dfn_provs, tyvs, fields)) ->
+     | Some (Rec (_, _, dfn_provs, tyvs, fields)) ->
         let sub (pair : field * ty) : field * ty =
           let (field, ty) = pair
           in (field, subst_many (subst_many_prov ty (List.combine provs dfn_provs))
@@ -95,7 +95,7 @@ let rec places_typ (sigma : global_env) (pi : place) (tau : ty) : place_env tc =
         in let new_fields = List.map sub fields
         in let projs = List.map field_func new_fields
         in List.fold_left work (Succ [(pi, tau)]) projs
-     | Some (Tup (_, dfn_provs, tyvs, fields)) ->
+     | Some (Tup (_, _, dfn_provs, tyvs, fields)) ->
         let sub (ty : ty) : ty =
           subst_many (subst_many_prov ty (List.combine provs dfn_provs)) (List.combine tys tyvs)
         in let new_fields = List.map sub fields
@@ -330,17 +330,52 @@ let rec value (sigma : store) (pi : place) : value =
     in Tup values
   | Array values -> Array values
 
-let rec noncopyable (typ : ty) : bool =
+let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   match snd typ with
-  | Any -> false
-  | BaseTy _ -> false
-  | TyVar _ -> true
-  | Ref (_, Unique, _) -> true
-  | Ref (_, Shared, typPrime) -> noncopyable typPrime
-  | Fun (_, _, _, _, _) -> false
-  | Array (typPrime, _) -> noncopyable typPrime
-  | Slice typPrime -> noncopyable typPrime
-  | Tup typs -> List.for_all noncopyable typs
-  | Struct _ -> false (* currently, we'll treat structs as noncopyable *)
+  | Any -> Succ false
+  | BaseTy _ -> Succ false
+  | TyVar _ -> Succ true
+  | Ref (_, Unique, _) -> Succ true
+  | Ref (_, Shared, typPrime) -> noncopyable sigma typPrime
+  | Fun (_, _, _, _, _) -> Succ false
+  | Array (typPrime, _) -> noncopyable sigma typPrime
+  | Slice typPrime -> noncopyable sigma typPrime
+  | Tup typs ->
+    let work (acc : bool tc) (typ : ty) : bool tc =
+      let* res = acc
+      in let* ty_noncopyable = noncopyable sigma typ
+      in Succ (res || ty_noncopyable)
+    in List.fold_left work (Succ false) typs
+  | Struct (_, _, _) -> Succ true
 
-let copyable (typ : ty) : bool = not (noncopyable typ)
+let copyable (sigma : global_env) (typ : ty) : bool tc =
+  let* res = noncopyable sigma typ
+  in Succ (not res)
+
+let valid_copy_impl (sigma : global_env) (def : struct_def) : unit tc =
+  match def with
+  | Rec (true, name, _, _, fields) ->
+    let work (acc : (ty option) tc) (typ : ty) : (ty option) tc =
+      let* res = acc
+      in let* ty_copyable = copyable sigma typ
+      in if (res == None) then
+        if ty_copyable then Succ None
+        else acc
+      else Succ (Some typ)
+    in (match List.fold_left work (Succ None) (List.map snd fields) with
+    | Succ None -> Succ ()
+    | Succ (Some ty) -> Fail (InvalidCopyImpl (name, ty))
+    | Fail err -> Fail err)
+  | Tup (true, name, _, _, tys) ->
+    let work (acc : (ty option) tc) (typ : ty) : (ty option) tc =
+      let* res = acc
+      in let* ty_copyable = copyable sigma typ
+      in if (res == None) then
+        if ty_copyable then Succ None
+        else acc
+      else Succ (Some typ)
+    in (match List.fold_left work (Succ None) tys with
+    | Succ None -> Succ ()
+    | Succ (Some ty) -> Fail (InvalidCopyImpl (name, ty))
+    | Fail err -> Fail err)
+  | Rec (false, _, _, _, _) | Tup (false, _, _, _, _) -> Succ ()
