@@ -146,7 +146,7 @@ let valid_type (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : pl
       let* () = valid_prov delta ell gamma prov
       in let* () = valid ty
       in let mismatched_tys =
-           List.find_all (fun (_, pi) -> place_env_lookup_spec gamma pi != ty)
+           List.find_all (fun (_, pi) -> (snd (place_env_lookup_spec gamma pi)) != (snd ty))
              (loan_env_lookup ell prov)
       in (match mismatched_tys with
           | [] -> Succ ()
@@ -182,7 +182,7 @@ let rec compute_ty (sigma : global_env) (phi : place_expr_parts) (ty : ty) : ty 
   | (Deref :: phi_prime, Ref (_, _, ty)) -> compute_ty sigma phi_prime ty
   | (FieldProj field :: phi_prime, Struct (name, provs, tys)) ->
     (match global_env_find_struct sigma name with
-     | Some (Rec (_, dfn_provs, tyvars, dfn_tys)) ->
+     | Some (Rec (_, _, dfn_provs, tyvars, dfn_tys)) ->
        (match List.assoc_opt field dfn_tys with
         | Some ty ->
           let new_ty = subst_many (subst_many_prov ty (List.combine provs dfn_provs))
@@ -193,7 +193,7 @@ let rec compute_ty (sigma : global_env) (phi : place_expr_parts) (ty : ty) : ty 
      | None -> Fail (UnknownStruct (fst ty, name)))
   | (IndexProj idx :: phi_prime, Struct (name, provs, tys)) ->
     (match global_env_find_struct sigma name with
-     | Some (Tup (_, dfn_provs, tyvars, dfn_tys)) ->
+     | Some (Tup (_, _, dfn_provs, tyvars, dfn_tys)) ->
        (match List.nth_opt dfn_tys idx with
         | Some ty ->
           let new_ty = subst_many (subst_many_prov ty (List.combine provs dfn_provs))
@@ -274,12 +274,14 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          let* (ellPrime, gammaPrime) =
            match place_expr_to_place pi with
            | Some pi ->
-             if noncopyable ty then
+             let* noncopy = noncopyable sigma ty
+             in if noncopy then
                let* (ellPrime, gammaPrime) = envs_minus sigma ell gamma pi
                in Succ (ellPrime, gammaPrime)
              else Succ (ell, gamma)
            | None ->
-             if copyable ty then Succ (ell, gamma) else failwith "unreachable"
+             let* copy = copyable sigma ty
+             in if copy then Succ (ell, gamma) else failwith "unreachable"
          in Succ (ty, ellPrime, gammaPrime)
        | Succ (_, loans) ->
          Format.printf "%a@." pp_loans loans;
@@ -311,7 +313,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ ((_, BaseTy U32), ell1, gamma1) ->
          (match omega_safe sigma ell1 gamma1 Shared (fst expr, pi) with
           | Succ ((_, Array (ty, _)), _) ->
-            if copyable ty then Succ (ty, ell1, gamma1)
+            let* copy = copyable sigma ty
+            in if copy then Succ (ty, ell1, gamma1)
             else Fail (CannotMove (fst expr, pi))
           | Succ (found, _) -> Fail (TypeMismatch ((dummy, Array ((dummy, Any), -1)), found))
           | Fail err -> Fail err)
@@ -418,7 +421,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let ty_pairs = List.combine new_params arg_tys
          in let types_match (tys : ty * ty) : bool =
               let (expected, found) = tys
-              in (snd expected) = (snd found)
+              in (snd expected) == (snd found)
          in (match List.find_opt types_match ty_pairs with
              | None ->
                let new_ret_ty = do_sub ret_ty
@@ -438,7 +441,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in Succ (final_ty, ellFinal, gammaPrime)
     | RecStruct (name, provs, tys, fields) ->
       (match global_env_find_struct sigma name with
-       | Some (Rec (_, dfn_provs, tyvars, dfn_fields)) ->
+       | Some (Rec (_, _, dfn_provs, tyvars, dfn_fields)) ->
          let fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) fields
          in let dfn_fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) dfn_fields
          in let exprs = List.map snd fields_sorted
@@ -451,8 +454,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
            let* (ell, gamma) = acc
            in let (expr, expected_ty) = p
            in let* (found_ty, ell_prime, gamma_prime) = tc delta ell gamma expr
-           in if (snd expected_ty) = (snd found_ty) then Succ (ell_prime, gamma_prime)
-           else Fail (TypeMismatch (expected_ty, found_ty))
+           in let* ell_final = subtype Combine ell_prime found_ty expected_ty
+           in Succ (ell_final, gamma_prime)
          in let* (ell_prime, gamma_prime) = List.fold_left tc_exp (Succ (ell, gamma)) pairs
          in Succ ((inferred, Struct (name, provs, tys)), ell_prime, gamma_prime)
        | Some (Tup _) -> Fail (WrongStructConstructor (fst expr, name, Rec))
@@ -529,9 +532,10 @@ let wf_global_env (sigma : global_env) : unit tc =
       in let* (output_ty, ellPrime, _) = type_check sigma delta ell gamma body
       in let* _ = subtype Combine ellPrime output_ty ret_ty
       in Succ ()
-    | RecStructDef (name, provs, tyvars, fields) ->
+    | RecStructDef (_, name, provs, tyvars, fields) ->
       let delta = (provs, tyvars)
       in let ell = ([], (List.map snd provs, []))
+      in let* () = valid_copy_impl sigma (unwrap (global_env_find_struct sigma name))
       in let* () = valid_types sigma delta ell empty_gamma (List.map snd fields)
       in let find_dup (pair : field * ty)
                       (acc : (field * ty) list * ((field * ty) * (field * ty)) option) =
@@ -542,9 +546,10 @@ let wf_global_env (sigma : global_env) : unit tc =
       in (match List.fold_right find_dup fields ([], None) with
           | (_, None) -> Succ ()
           | (_, Some (p1, p2)) -> Fail (DuplicateFieldsInStructDef (name, p1, p2)))
-    | TupStructDef (_, provs, tyvars, tys) ->
+    | TupStructDef (_, name, provs, tyvars, tys) ->
       let delta = (provs, tyvars)
       in let ell = ([], (List.map snd provs, []))
+      in let* () = valid_copy_impl sigma (unwrap (global_env_find_struct sigma name))
       in let* () = valid_types sigma delta ell empty_gamma tys
       in Succ ()
   in List.fold_left valid_global_entry (Succ ()) (List.cons drop sigma)

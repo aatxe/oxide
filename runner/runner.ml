@@ -69,12 +69,13 @@ let rec run_dir dir =
   let _ = Stdio.print_endline dir in
   let* files = readdir dir in
   let* results = mapM ~f:(fun name ->
-      let* s = stat (dir ^ "/" ^ name) in
-      if phys_equal s.st_kind Unix.S_DIR
-      then run_dir (dir ^ "/" ^ name)
-      else if String.is_suffix ~suffix:".rs" name
-      then run_file (dir ^ "/" ^ name)
-      else return (name, NotTestFile))
+      if String.is_prefix name ~prefix:"." then return (name, NotTestFile)
+      else let* s = stat (dir ^ "/" ^ name) in
+        if phys_equal s.st_kind Unix.S_DIR
+        then run_dir (dir ^ "/" ^ name)
+        else if String.is_suffix ~suffix:".rs" name
+        then run_file (dir ^ "/" ^ name)
+        else return (name, NotTestFile))
       files in
   let* _ = write_results results dir in
   (* let* _ = eprint ([%derive.show: (string * result) list] results) in *)

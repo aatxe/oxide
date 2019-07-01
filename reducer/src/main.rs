@@ -215,6 +215,10 @@ fn resolve_name(path: Path, is_type: bool) -> PP {
     }
 }
 
+fn copyable_doc(attrs: Vec<Attribute>) -> PP {
+   Doc::text("false") 
+}
+
 trait PrettyPrint {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>>;
 }
@@ -304,7 +308,10 @@ impl PrettyPrint for Item {
                 Fields::Named(fields) => {
                     Doc::text("RecStructDef")
                         .append(parenthesize(
-                            quote(Doc::text(format!("{}", item.ident)))
+                            copyable_doc(item.attrs)
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                .append(quote(Doc::text(format!("{}", item.ident))))
                                 .append(Doc::text(","))
                                 .append(Doc::space())
                                 // provenance variables
@@ -365,7 +372,10 @@ impl PrettyPrint for Item {
                 Fields::Unnamed(fields) => {
                     Doc::text("TupStructDef")
                         .append(parenthesize(
-                            quote(Doc::text(format!("{}", item.ident)))
+                            copyable_doc(item.attrs)
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                .append(quote(Doc::text(format!("{}", item.ident))))
                                 .append(Doc::text(","))
                                 .append(Doc::space())
                                 // provenance variables
@@ -1128,10 +1138,14 @@ impl PrettyPrint for Expr {
                         .append(
                             Doc::text("Abort")
                                 .append(Doc::space())
-                                .append(match syn::parse2::<Lit>(expr.mac.tts) {
-                                    Ok(lit) => lit.to_doc(),
-                                    Err(_) => panic!("we don't support panic or \
-                                                      aborts with non-literal arguments")
+                                .append(if expr.mac.tts.is_empty () {
+                                    quote(Doc::text("abort: no message provided"))
+                                } else {
+                                    match syn::parse2::<Lit>(expr.mac.tts) {
+                                        Ok(lit) => lit.to_doc(),
+                                        Err(_) => panic!("we don't support panic or \
+                                                          aborts with non-literal arguments")
+                                    }
                                 })
                                 .group()
                         )

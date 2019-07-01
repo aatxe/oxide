@@ -176,9 +176,9 @@ type store = (place * shape) list [@@deriving show]
 
 type fn_def = fn_var * prov list * ty_var list * (var * ty) list * ty * expr
 [@@deriving show]
-type rec_struct_def = struct_var * prov list * ty_var list * (field * ty) list
+type rec_struct_def = bool * struct_var * prov list * ty_var list * (field * ty) list
 [@@deriving show]
-type tup_struct_def = struct_var * prov list * ty_var list * ty list
+type tup_struct_def = bool * struct_var * prov list * ty_var list * ty list
 [@@deriving show]
 type struct_def =
   | Rec of rec_struct_def
@@ -198,11 +198,11 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
     match entry with
     | FnDef (fn_here, _, _, _, _, _) -> fn_here = fn
     (* we treat tuple structs as having defined a function to construct them *)
-    | TupStructDef (fn_here, _, _, _) -> fn_here = fn
+    | TupStructDef (_, fn_here, _, _, _) -> fn_here = fn
     | _ -> false
   in match List.find_opt is_right_fn sigma with
   | Some (FnDef defn) -> Some defn
-  | Some (TupStructDef (name, provs, tyvars, tys)) ->
+  | Some (TupStructDef (_, name, provs, tyvars, tys)) ->
     let params = List.mapi (fun i ty -> (string_of_int i, ty)) tys
     in let tys = List.map (fun var -> (inferred, TyVar var)) tyvars
     in let body =
@@ -214,8 +214,8 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
 let global_env_find_struct (sigma : global_env) (name : struct_var) : struct_def option =
   let is_right_struct (entry : global_entry) : bool =
     match entry with
-    | RecStructDef (name_here, _, _, _) -> name_here = name
-    | TupStructDef (name_here, _, _, _) -> name_here = name
+    | RecStructDef (_, name_here, _, _, _) -> name_here = name
+    | TupStructDef (_, name_here, _, _, _) -> name_here = name
     | _ -> false
   in match List.find_opt is_right_struct sigma with
   | Some (RecStructDef defn) -> Some (Rec defn)
@@ -291,6 +291,7 @@ type tc_error =
   | InvalidArrayLen of ty * int
   | InvalidOperationOnType of place_expr_part * ty
   | DuplicateFieldsInStructDef of struct_var * (field * ty) * (field * ty)
+  | InvalidCopyImpl of struct_var * ty (* for struct * because of ty *)
   | UnboundPlace of source_loc * place
   | UnboundPlaceExpr of source_loc * place_expr
   | AbsProvsNotSubtype of prov * prov
