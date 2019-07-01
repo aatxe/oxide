@@ -346,7 +346,10 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
       in let* ty_noncopyable = noncopyable sigma typ
       in Succ (res || ty_noncopyable)
     in List.fold_left work (Succ false) typs
-  | Struct (_, _, _) -> Succ true
+  | Struct (name, _, _) ->
+    match  global_env_find_struct sigma name with
+    | Some (Rec (copyable, _, _, _, _)) | Some (Tup (copyable, _, _, _, _)) -> Succ (not copyable)
+    | None -> Fail (UnknownStruct (fst typ, name))
 
 let copyable (sigma : global_env) (typ : ty) : bool tc =
   let* res = noncopyable sigma typ
