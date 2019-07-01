@@ -207,7 +207,7 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
 let norm_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
     (phi : place_expr) : places tc =
   let rec norm (phi : place_expr) : places tc =
-    let* loans = eval_place_expr loc ell gamma Unique phi
+    let* loans = eval_place_expr loc ell gamma Shared phi
     in let progress = List.map (fun loan -> (place_expr_to_place (snd loan), snd loan)) loans
     in let still_to_norm =
          List.map (fun pair -> snd pair) (List.filter (fun pair -> fst pair = None) progress)

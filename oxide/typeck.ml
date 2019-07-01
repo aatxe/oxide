@@ -210,7 +210,7 @@ let rec compute_ty (sigma : global_env) (phi : place_expr_parts) (ty : ty) : ty 
 
 let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega : owned)
     (pi : source_loc * place_expr) : (ty * loans) tc =
-  let* loans = eval_place_expr (fst pi) ell gamma omega (snd pi)
+  let* loans = eval_place_expr (fst pi) ell gamma Shared (snd pi)
   in let safe_then_ty (loan : loan) : (ty option * loan) tc =
        let* res = is_safe (fst pi) ell gamma omega (snd loan)
        in match res with
@@ -237,6 +237,10 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega 
     | None ->
       let tys = List.map (fun pair -> unwrap (fst pair)) opt_tys
       in let* (ellPrime, ty) = unify_many (fst pi) ell tys
+      in let* _ =
+        let* noncopy = noncopyable sigma ty
+        in if noncopy then eval_place_expr (fst pi) ell gamma omega (snd pi)
+        else Succ []
       in if ellPrime = ell then
         if (snd ty) = Any then
           let init_ty = place_env_lookup_spec gamma (Var (root_of (snd pi)))
@@ -269,7 +273,12 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in Succ (out_ty, ellFinal, gamma2)
        | _ -> failwith "unreachable")
     | Move pi ->
-      (match omega_safe sigma ell gamma Unique (fst expr, pi) with
+      let* places = norm_place_expr (fst expr) ell gamma pi
+      in let tys = List.map (place_env_lookup gamma) places
+      in let* (ell_prime, unified_ty) = unify_many (fst expr) ell tys
+      in let* copy = copyable sigma unified_ty
+      in let omega = if copy then Shared else Unique
+      in (match omega_safe sigma ell_prime gamma omega (fst expr, pi) with
        | Succ (ty, [(Unique, pi)]) ->
          let* (ellPrime, gammaPrime) =
            match place_expr_to_place pi with
@@ -278,14 +287,15 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
              in if noncopy then
                let* (ellPrime, gammaPrime) = envs_minus sigma ell gamma pi
                in Succ (ellPrime, gammaPrime)
-             else Succ (ell, gamma)
+             else Succ (ell_prime, gamma)
            | None ->
              let* copy = copyable sigma ty
-             in if copy then Succ (ell, gamma) else failwith "unreachable"
+             in if copy then Succ (ell_prime, gamma) else failwith "unreachable"
          in Succ (ty, ellPrime, gammaPrime)
-       | Succ (_, loans) ->
-         Format.printf "%a@." pp_loans loans;
-         failwith "unreachable"
+       | Succ (ty, loans) ->
+         if copy && List.for_all ((=) Shared) (List.map fst loans) then
+            Succ (ty, ell_prime, gamma)
+         else failwith "unreachable"
        | Fail err -> Fail err)
     | Borrow (prov, omega, pi) ->
       let* (ty, loans) = omega_safe sigma ell gamma omega (fst expr, pi)
