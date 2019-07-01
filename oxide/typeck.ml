@@ -210,7 +210,7 @@ let rec compute_ty (sigma : global_env) (phi : place_expr_parts) (ty : ty) : ty 
 
 let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega : owned)
     (pi : source_loc * place_expr) : (ty * loans) tc =
-  let* loans = eval_place_expr (fst pi) ell gamma Shared (snd pi)
+  let* loans = eval_place_expr (fst pi) ell gamma omega (snd pi)
   in let safe_then_ty (loan : loan) : (ty option * loan) tc =
        let* res = is_safe (fst pi) ell gamma omega (snd loan)
        in match res with
