@@ -28,6 +28,7 @@ let identity x = x
 let with_output ?(silent=true) file k =
   with_temp_file ~prefix:"garbage" ~suffix:"err" (fun err ->
       with_temp_file ~prefix:"test" ~suffix:"ml" (fun f ->
+          let* _ = print (file ^ "\n") in
           let* exit_ = chdir "reducer" ((if silent then stderr_to err else identity) (stdout_to f (run_exit_code "cargo" ["run"; file]))) in
           if not (Int.equal exit_ 0) then
             return (file, ReducerFailed)
@@ -64,13 +65,13 @@ let write_results results dir =
                    ("typeerror", h TypeCheckerFailed);
                    ("reducererror", h ReducerFailed)])))
 
-let rec run dir =
+let rec run_dir dir =
   let _ = Stdio.print_endline dir in
   let* files = readdir dir in
   let* results = mapM ~f:(fun name ->
       let* s = stat (dir ^ "/" ^ name) in
       if phys_equal s.st_kind Unix.S_DIR
-      then run (dir ^ "/" ^ name)
+      then run_dir (dir ^ "/" ^ name)
       else if String.is_suffix ~suffix:".rs" name
       then run_file (dir ^ "/" ^ name)
       else return (name, NotTestFile))
@@ -90,12 +91,16 @@ let trust file =
       let* _ = stdout_to (file ^ ".output") (print output) in
       return (file, OutputMissing))
 
+let retrust path =
+  pipe (run "jq" ["-r"; ".doesntmatch | .[]"; path ^ "/results.json"]) (iter_lines (fun file -> let* _ = trust file in return ()))
+
 let _ =
   let usage () =
     (Stdio.print_endline "usage: ";
      Stdio.print_endline "  PROGNAME run path/to/root/of/tests";
      Stdio.print_endline "  PROGNAME check path/to/single/test.rs";
-     Stdio.print_endline "  PROGNAME trust path/to/single/test.rs") in
+     Stdio.print_endline "  PROGNAME trust path/to/single/test.rs";
+     Stdio.print_endline "  PROGNAME retrust path/to/root/of/tests") in
   if Array.length Sys.argv < 3 then
     (* NOTE(dbp 2019-06-28): Argument parsing, done terribly. *)
     usage ()
@@ -108,10 +113,12 @@ let _ =
         in
         match Sys.argv.(1) with
         |"run" ->
-          let* _ = run pth in return ()
+          let* _ = run_dir pth in return ()
         |"check" ->
           let* _ = check pth in return ()
         |"trust" ->
           let* _ = trust pth in return ()
+        |"retrust" ->
+          let* _ = retrust pth in return ()
         |_ -> usage (); return ()
       ) in ()
