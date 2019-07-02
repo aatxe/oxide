@@ -647,6 +647,56 @@ impl PrettyPrint for Type {
             )
         }
 
+        if let Type::BareFn(ty) = self {
+            let ty_span = ty.span();
+            return parenthesize(
+                ty_span.to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(Doc::text("Fun"))
+                    .append(Doc::space())
+                    .append(parenthesize(
+                        // lifetime variables
+                        Doc::text("[]")
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            // type variables
+                            .append(Doc::text("[]"))
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            // parameter types
+                            .append(
+                                Doc::text("[")
+                                    .append(Doc::intersperse(
+                                        ty.inputs.into_iter().map(|arg| arg.ty.to_doc()),
+                                        Doc::text(";").append(Doc::space())
+                                    ))
+                                    .append(Doc::text("]"))
+                                    .group()
+                            )
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            // captured environment
+                            .append(Doc::text("[]"))
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            // return type
+                            .append(parenthesize(match ty.output {
+                                ReturnType::Default =>
+                                    ty_span.to_doc()
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(Doc::text("BaseTy")
+                                            .append(Doc::space())
+                                            .append(Doc::text("Unit"))
+                                    )
+                                    .group(),
+                                ReturnType::Type(_, ty) => ty.to_doc(),
+                            }))
+                    ))
+            )
+        }
+
         if let Type::Path(ty) = self {
             let ty_name = ty.path.segments.iter().fold(
                 String::new(),
@@ -1103,15 +1153,18 @@ impl PrettyPrint for Expr {
                             .append(Doc::space())
                             .append(parenthesize(
                                 Doc::text("[]")
+                                    .append(Doc::text(","))
                                     .append(Doc::space())
                                     .append(Doc::text("[]"))
                                     .append(Doc::text(","))
                                     .append(Doc::space())
                                     .append(
-                                        Doc::intersperse(
-                                            expr.inputs.into_iter().map(|arg| arg.to_doc()),
-                                            Doc::text(";").append(Doc::space())
-                                        )
+                                        Doc::text("[")
+                                            .append(Doc::intersperse(
+                                                expr.inputs.into_iter().map(|arg| arg.to_doc()),
+                                                Doc::text(";").append(Doc::space())
+                                            ))
+                                            .append(Doc::text("]"))
                                     )
                                     .append(Doc::text(","))
                                     .append(Doc::space())
@@ -1119,11 +1172,7 @@ impl PrettyPrint for Expr {
                                         ReturnType::Default => Doc::text("None"),
                                         ReturnType::Type(_, ty) => Doc::text("Some")
                                             .append(Doc::space())
-                                            .append(parenthesize(
-                                                ty.span().to_doc()
-                                                    .append(Doc::text(","))
-                                                    .append(Doc::space())
-                                                    .append(ty.to_doc())
+                                            .append(parenthesize(ty.to_doc()
                                             ))
                                             .group()
                                     })
