@@ -237,12 +237,12 @@ let loan_env_lookup_opt (ell : loan_env) (var : prov) : loans option =
   List.assoc_opt (snd var) (fst ell)
 let loan_env_is_abs (ell : loan_env) (var : prov) : bool = List.mem (snd var) (sndfst ell)
 let loan_env_abs_sub (ell : loan_env) (v1 : prov) (v2 : prov) : bool =
-  List.mem (snd v1, snd v2) (sndsnd ell)
+  List.mem (snd v1, snd v2) (sndsnd ell) || (snd v1) = (snd v2)
 let loan_env_lookup (ell : loan_env) (var : prov) : loans =
   if loan_env_is_abs ell var then [] else List.assoc (snd var) (fst ell)
 
 let loan_env_include (ell : loan_env) (var : prov) (loans : loans) : loan_env =
-  (List.cons (snd var, loans) (fst ell), snd ell)
+  (List.cons (snd var, loans) (List.remove_assoc (snd var) (fst ell)), snd ell)
 let loan_env_bind (ell : loan_env) (var : prov) : loan_env =
   (fst ell, (List.cons (snd var) (sndfst ell), sndsnd ell))
 let loan_env_bindall (ell : loan_env) (vars : prov list) : loan_env =

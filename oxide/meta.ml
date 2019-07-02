@@ -129,7 +129,7 @@ let place_env_append (gamma1 : place_env) (gamma2 : place_env) = List.append gam
 let place_env_exclude (gamma : place_env) (x : place) = List.remove_assoc x gamma
 
 (* compute all the at-least-omega loans in a given gamma *)
-let all_loans (omega : owned) (ell : loan_env) (gamma : place_env) : loans =
+let rec all_loans (omega : owned) (ell : loan_env) (gamma : place_env) : loans =
   let rec work (typ : ty) (loans : loans) : loans =
     match snd typ with
     | Any -> loans
@@ -138,7 +138,7 @@ let all_loans (omega : owned) (ell : loan_env) (gamma : place_env) : loans =
     | Ref (prov, omega_prime, typ) ->
       if is_at_least omega omega_prime then List.append (prov_to_loans ell prov) (work typ loans)
       else work typ loans
-    | Fun (_, _, _, _, _) -> loans
+    | Fun (_, _, _, gamma_c, _) -> List.append loans (all_loans omega ell gamma_c)
     | Array (typ, _) -> work typ loans
     | Slice typ -> work typ loans
     | Tup typs -> List.fold_right List.append (List.map (fun typ -> work typ []) typs) loans
@@ -174,6 +174,40 @@ let find_loans (omega : owned) (ell : loan_env) (gamma : place_env) (pi : place_
     in root_of_pi = root_of pi_prime
   in List.filter relevant (all_loans omega ell gamma)
 
+(* decompose the type by peforming the operations in phi on it to compute the type of phi *)
+(* invariant: ty must be the type of root_of phi on use *)
+let rec compute_ty (sigma : global_env) (phi : place_expr_parts) (ty : ty) : ty tc =
+  match (phi, snd ty) with
+  | ([], _) -> Succ ty
+  | (Deref :: phi_prime, Ref (_, _, ty)) -> compute_ty sigma phi_prime ty
+  | (FieldProj field :: phi_prime, Struct (name, provs, tys)) ->
+    (match global_env_find_struct sigma name with
+     | Some (Rec (_, _, dfn_provs, tyvars, dfn_tys)) ->
+       (match List.assoc_opt field dfn_tys with
+        | Some ty ->
+          let new_ty = subst_many (subst_many_prov ty (List.combine provs dfn_provs))
+                                  (List.combine tys tyvars)
+          in compute_ty sigma phi_prime new_ty
+        | None -> Fail (InvalidOperationOnType (List.hd phi, ty)))
+     | Some (Tup _) -> Fail (InvalidOperationOnType (List.hd phi, ty))
+     | None -> Fail (UnknownStruct (fst ty, name)))
+  | (IndexProj idx :: phi_prime, Struct (name, provs, tys)) ->
+    (match global_env_find_struct sigma name with
+     | Some (Tup (_, _, dfn_provs, tyvars, dfn_tys)) ->
+       (match List.nth_opt dfn_tys idx with
+        | Some ty ->
+          let new_ty = subst_many (subst_many_prov ty (List.combine provs dfn_provs))
+                                  (List.combine tys tyvars)
+          in compute_ty sigma phi_prime new_ty
+        | None -> Fail (InvalidOperationOnType (List.hd phi, ty)))
+     | Some (Rec _) -> Fail (InvalidOperationOnType (List.hd phi, ty))
+     | None -> Fail (UnknownStruct (fst ty, name)))
+  | (IndexProj idx :: phi_prime, Tup tys) ->
+    (match List.nth_opt tys idx with
+     | Some ty -> compute_ty sigma phi_prime ty
+     | None -> Fail (InvalidOperationOnType (List.hd phi, ty)))
+  | (_, _) -> Fail (InvalidOperationOnType (List.hd phi, ty))
+
 (* evaluates the place expression down to a collection of possible places *)
 let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
     (omega : owned) (pi : place_expr) : loans tc =
@@ -193,7 +227,12 @@ let rec eval_place_expr (loc : source_loc) (ell : loan_env) (gamma : place_env)
                 else Fail (InvalidProv prov)
           else Fail (PermissionErr (loc, (omega, Deref pi), (ref_loc, Ref (prov, rfomega, ty))))
          | Some found -> Fail (TypeMismatchRef found)
-         | None -> Fail (UnboundPlaceExpr (loc, snd loan))
+         | None ->
+            match place_env_lookup_opt gamma (Var (root_of pi)) with
+            | Some ty ->
+              let* _ = compute_ty empty_sigma (to_parts pi) ty
+              in Succ []
+            | None -> Fail (UnboundPlaceExpr (loc, snd loan))
     in List.fold_left work (Succ []) loans
   | FieldProj (pi, field) ->
     let to_proj (loan : loan) : loan = (fst loan, FieldProj (snd loan, field))

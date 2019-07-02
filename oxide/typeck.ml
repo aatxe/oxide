@@ -70,6 +70,13 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
         let* ell_provs = subtype_prov_many mode ell provs1 provs2
         in sub_many ell_provs tys1 tys2
       else Fail (UnificationFailed (ty1, ty2))
+    | (Fun (prov1, tyvar1, tys1, _, ret_ty1), Fun (prov2, tyvar2, tys2, _, ret_ty2)) ->
+      let tyvar_for_sub = List.map (fun x -> (inferred, TyVar x)) tyvar1
+      in let (prov_sub, ty_sub) = (List.combine prov1 prov2, List.combine tyvar_for_sub tyvar2)
+      in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
+      in let alpharenamed_tys2 = List.map do_sub tys2
+      in let* ell_prime = sub_many ell alpharenamed_tys2 tys1
+      in sub ell_prime ret_ty1 ret_ty2
     | (Any, _) -> Succ ell
     | (_, _) -> Fail (UnificationFailed (ty1, ty2))
   and sub_many (ell : loan_env) (tys1 : ty list) (tys2 : ty list) : loan_env tc =
@@ -174,40 +181,6 @@ let type_of (prim : prim) : ty =
   | Num _ -> BaseTy U32
   | True | False -> BaseTy Bool)
 
-(* decompose the type by peforming the operations in phi on it to compute the type of phi *)
-(* invariant: ty must be the type of root_of phi on use *)
-let rec compute_ty (sigma : global_env) (phi : place_expr_parts) (ty : ty) : ty tc =
-  match (phi, snd ty) with
-  | ([], _) -> Succ ty
-  | (Deref :: phi_prime, Ref (_, _, ty)) -> compute_ty sigma phi_prime ty
-  | (FieldProj field :: phi_prime, Struct (name, provs, tys)) ->
-    (match global_env_find_struct sigma name with
-     | Some (Rec (_, _, dfn_provs, tyvars, dfn_tys)) ->
-       (match List.assoc_opt field dfn_tys with
-        | Some ty ->
-          let new_ty = subst_many (subst_many_prov ty (List.combine provs dfn_provs))
-                                  (List.combine tys tyvars)
-          in compute_ty sigma phi_prime new_ty
-        | None -> Fail (InvalidOperationOnType (List.hd phi, ty)))
-     | Some (Tup _) -> Fail (InvalidOperationOnType (List.hd phi, ty))
-     | None -> Fail (UnknownStruct (fst ty, name)))
-  | (IndexProj idx :: phi_prime, Struct (name, provs, tys)) ->
-    (match global_env_find_struct sigma name with
-     | Some (Tup (_, _, dfn_provs, tyvars, dfn_tys)) ->
-       (match List.nth_opt dfn_tys idx with
-        | Some ty ->
-          let new_ty = subst_many (subst_many_prov ty (List.combine provs dfn_provs))
-                                  (List.combine tys tyvars)
-          in compute_ty sigma phi_prime new_ty
-        | None -> Fail (InvalidOperationOnType (List.hd phi, ty)))
-     | Some (Rec _) -> Fail (InvalidOperationOnType (List.hd phi, ty))
-     | None -> Fail (UnknownStruct (fst ty, name)))
-  | (IndexProj idx :: phi_prime, Tup tys) ->
-    (match List.nth_opt tys idx with
-     | Some ty -> compute_ty sigma phi_prime ty
-     | None -> Fail (InvalidOperationOnType (List.hd phi, ty)))
-  | (_, _) -> Fail (InvalidOperationOnType (List.hd phi, ty))
-
 let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega : owned)
     (pi : source_loc * place_expr) : (ty * loans) tc =
   let* loans = eval_place_expr (fst pi) ell gamma omega (snd pi)
@@ -253,7 +226,21 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega 
 
 let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
                (expr : expr) : (ty * loan_env * place_env) tc =
-  let rec tc (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
+  (* pick the right type, but copy over the inferred closure envs for fun types from the left *)
+  let rec right_merge (ty1 : ty) (ty2 : ty) : ty =
+    match (snd ty1, snd ty2) with
+    | (Any, Any) | (BaseTy _, BaseTy _) | (TyVar _, TyVar _)
+    | (Array _, Array _) | (Slice _, Slice _) -> ty2
+    | (Ref (_, _, ty1), Ref (prov, omega, ty2)) ->
+      (fst ty2, Ref (prov, omega, right_merge ty1 ty2))
+    | (Fun (_, _, _, gamma_c, _), Fun (prov, tyvars, tys, _, ret_ty)) ->
+      let fun_ty : ty = (fst ty2, Fun (prov, tyvars, tys, gamma_c, ret_ty))
+      in fun_ty
+    | (Tup tys1, Tup tys2) -> (fst ty2, Tup (List.map2 right_merge tys1 tys2))
+    | (Struct (_, _, tys1), Struct (name, provs, tys2)) ->
+      (fst ty2, Struct (name, provs, List.map2 right_merge tys1 tys2))
+    | _ -> failwith "unreachable"
+  in let rec tc (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
              (expr : expr) : (ty * loan_env * place_env) tc =
     match snd expr with
     | Prim prim -> Succ (type_of prim, ell, gamma)
@@ -354,7 +341,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Let (var, ann_ty, e1, e2) ->
       let* (ty1, ell1, gamma1) = tc delta ell gamma e1
       in let* ell1Prime = subtype Combine ell1 ty1 ann_ty
-      in let* gam_ext = places_typ sigma (Var var) ann_ty
+      in let* gam_ext = places_typ sigma (Var var) (right_merge ty1 ann_ty)
       in let* (ty2, ell2, gamma2) = tc delta ell1Prime (place_env_append gam_ext gamma1) e2
       in let* (ell2Prime, gamma2Prime) = envs_minus sigma ell2 gamma2 (Var var)
       in Succ (ty2, ell2Prime, gamma2Prime)
@@ -528,7 +515,8 @@ and free_provs (expr : expr) : provs =
   | TupStruct (_, provs, _) -> provs
 
 let wf_global_env (sigma : global_env) : unit tc =
-  let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
+  let sigma = List.cons drop sigma
+  in let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
     let* () = acc
     in match entry with
     | FnDef (_, provs, tyvars, params, ret_ty, body) ->
