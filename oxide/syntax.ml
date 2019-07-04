@@ -241,6 +241,13 @@ let loan_env_abs_sub (ell : loan_env) (v1 : prov) (v2 : prov) : bool =
 let loan_env_lookup (ell : loan_env) (var : prov) : loans =
   if loan_env_is_abs ell var then [] else List.assoc (snd var) (fst ell)
 
+let loan_env_filter_dom (ell : loan_env) (provs : provs) : loan_env =
+  let prov_vars = List.map snd provs
+  in (List.filter (fun x -> List.mem (fst x) prov_vars) (fst ell),
+      (List.filter (fun x -> List.mem x prov_vars) (sndfst ell),
+       List.filter (fun x -> List.mem (fst x) prov_vars || List.mem (snd x) prov_vars)
+                   (sndsnd ell)))
+
 let loan_env_include (ell : loan_env) (var : prov) (loans : loans) : loan_env =
   (List.cons (snd var, loans) (List.remove_assoc (snd var) (fst ell)), snd ell)
 let loan_env_bind (ell : loan_env) (var : prov) : loan_env =

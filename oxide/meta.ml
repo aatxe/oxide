@@ -13,7 +13,9 @@ let is_at_least (omega : owned) (omega_prime : owned) : bool =
 
 (* extract all the specific loans from a given region *)
 let prov_to_loans (ell : loan_env) (prov : prov) : loans =
-  loan_env_lookup ell prov
+  match loan_env_lookup_opt ell prov with
+  | Some loans -> loans
+  | None -> []
 
 (* substitutes this for that in ty *)
 let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
@@ -325,7 +327,6 @@ let envs_minus (sigma : global_env) (ell : loan_env) (gamma : place_env)
     List.fold_right loop (List.map (fun x -> Some x) tys) pair
   in loop (place_env_lookup_opt gamma pi) (Succ (ell, gamma))
 
-
 let rec prefixed_by (target : place) (in_pi : place) : bool =
   if target = in_pi then true
   else match in_pi with
@@ -421,3 +422,43 @@ let valid_copy_impl (sigma : global_env) (def : struct_def) : unit tc =
     | Succ (Some ty) -> Fail (InvalidCopyImpl (name, ty))
     | Fail err -> Fail err)
   | Rec (false, _, _, _, _) | Tup (false, _, _, _, _) -> Succ ()
+
+let rec free_provs_ty (ty : ty) : provs =
+  match snd ty with
+  | Any | BaseTy _ | TyVar _ -> []
+  | Ref (prov, _, ty) -> List.cons prov (free_provs_ty ty)
+  | Fun _ -> [] (* FIXME: actually implement *)
+  | Array (ty, _) | Slice ty -> free_provs_ty ty
+  | Tup tys -> List.flatten (List.map free_provs_ty tys)
+  | Struct (_, provs, tys) -> List.flatten (List.cons provs (List.map free_provs_ty tys))
+and free_provs (expr : expr) : provs =
+  match snd expr with
+  | Prim _ | Move _ | Fn _ | Abort _ | Ptr _ -> []
+  | BinOp (_, e1, e2) -> List.append (free_provs e1) (free_provs e2)
+  | Borrow (prov, _, _) -> [prov]
+  | BorrowIdx (prov, _, _, e) -> List.cons prov (free_provs e)
+  | BorrowSlice (prov, _, _, e1, e2) ->
+    List.cons prov (List.append (free_provs e1) (free_provs e2))
+  | LetProv (provs, e) ->
+    List.filter (fun prov -> not (List.mem prov provs)) (free_provs e)
+  | Let (_, ty, e1, e2) ->
+    List.append (free_provs_ty ty) (List.append (free_provs e1) (free_provs e2))
+  | Assign (_, e) -> free_provs e
+  | Seq (e1, e2) -> List.append (free_provs e1) (free_provs e2)
+  | Fun _ -> [] (* FIXME: actually implement *)
+  | App (e1, provs, tys, es) ->
+    List.concat [free_provs e1; provs;
+                 List.flatten (List.map free_provs_ty tys);
+                 List.flatten (List.map free_provs es)]
+  | Idx (_, e) -> free_provs e
+  | Branch (e1, e2, e3) ->
+    List.concat [free_provs e1; free_provs e2; free_provs e3]
+  | While (e1, e2) | For (_, e1, e2) ->
+    List.append (free_provs e1) (free_provs e2)
+  | Tup es | Array es -> List.flatten (List.map free_provs es)
+  | RecStruct (_, provs, _, es) ->
+    List.flatten (provs :: List.map (fun x -> free_provs (snd x)) es)
+  | TupStruct (_, provs, _) -> provs
+
+let free_provs_place_env (gamma : place_env) : provs =
+  List.flatten (List.map (fun x -> free_provs_ty (snd x)) gamma)

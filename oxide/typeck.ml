@@ -199,7 +199,7 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : place_env) (omega 
            let hd = List.hd possible_conflicts
            in if not (place_expr_is_place (snd pi)) && is_at_least omega (fst hd) then
              Succ (Some (place_env_lookup_spec gamma (snd hd)), loan)
-           else Succ (None, loan)
+           else Succ (None, hd)
   in let tmp = List.map safe_then_ty loans
   in let opt_tys =
        List.flatten (List.map (fun tc -> match tc with Succ x -> [x] | Fail _ -> []) tmp)
@@ -231,8 +231,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     match (snd ty1, snd ty2) with
     | (Any, Any) | (BaseTy _, BaseTy _) | (TyVar _, TyVar _)
     | (Array _, Array _) | (Slice _, Slice _) -> ty2
-    | (Ref (_, _, ty1), Ref (prov, omega, ty2)) ->
-      (fst ty2, Ref (prov, omega, right_merge ty1 ty2))
+    | (Ref (_, _, ity1), Ref (prov, omega, ity2)) ->
+      (fst ty2, Ref (prov, omega, right_merge ity1 ity2))
     | (Fun (_, _, _, gamma_c, _), Fun (prov, tyvars, tys, _, ret_ty)) ->
       let fun_ty : ty = (fst ty2, Fun (prov, tyvars, tys, gamma_c, ret_ty))
       in fun_ty
@@ -401,13 +401,15 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* (ret_ty, ellPrime, gammaPrime) =
            tc deltaPrime ellPrime (place_env_append gam_ext gamma) body
       in let gamma_c = place_env_diff gamma gammaPrime
+      in let free = free_provs_place_env gamma_c
+      in let ell_restored = union (loan_env_filter_dom ell free) ellPrime
       in let fn_ty (ret_ty : ty) : ty =
            (inferred, Fun (provs, tyvars, List.map snd params, gamma_c, ret_ty))
       in (match opt_ret_ty with
           | Some ann_ret_ty ->
-            let* ellFinal = subtype Combine ellPrime ret_ty ann_ret_ty
+            let* ellFinal = subtype Combine ell_restored ret_ty ann_ret_ty
             in Succ (fn_ty ann_ret_ty, ellFinal, gammaPrime)
-          | None -> Succ (fn_ty ret_ty, ellPrime, gammaPrime))
+          | None -> Succ (fn_ty ret_ty, ell_restored, gammaPrime))
     | App (fn, new_provs, new_tys, args) ->
       (match tc delta ell gamma fn with
        | Succ ((_, Fun (provs, tyvars, params, _, ret_ty)), ellF, gammaF) ->
@@ -475,44 +477,6 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in Succ (List.cons ty curr_tys, ellPrime, gammaPrime)
     in List.fold_left work (Succ ([], ell, gamma)) exprs
   in tc delta ell gamma expr
-
-
-let rec free_provs_ty (ty : ty) : provs =
-  match snd ty with
-  | Any | BaseTy _ | TyVar _ -> []
-  | Ref (prov, _, ty) -> List.cons prov (free_provs_ty ty)
-  | Fun _ -> [] (* FIXME: actually implement *)
-  | Array (ty, _) | Slice ty -> free_provs_ty ty
-  | Tup tys -> List.flatten (List.map free_provs_ty tys)
-  | Struct (_, provs, tys) -> List.flatten (List.cons provs (List.map free_provs_ty tys))
-and free_provs (expr : expr) : provs =
-  match snd expr with
-  | Prim _ | Move _ | Fn _ | Abort _ | Ptr _ -> []
-  | BinOp (_, e1, e2) -> List.append (free_provs e1) (free_provs e2)
-  | Borrow (prov, _, _) -> [prov]
-  | BorrowIdx (prov, _, _, e) -> List.cons prov (free_provs e)
-  | BorrowSlice (prov, _, _, e1, e2) ->
-    List.cons prov (List.append (free_provs e1) (free_provs e2))
-  | LetProv (provs, e) ->
-    List.filter (fun prov -> not (List.mem prov provs)) (free_provs e)
-  | Let (_, ty, e1, e2) ->
-    List.append (free_provs_ty ty) (List.append (free_provs e1) (free_provs e2))
-  | Assign (_, e) -> free_provs e
-  | Seq (e1, e2) -> List.append (free_provs e1) (free_provs e2)
-  | Fun _ -> [] (* FIXME: actually implement *)
-  | App (e1, provs, tys, es) ->
-    List.concat [free_provs e1; provs;
-                 List.flatten (List.map free_provs_ty tys);
-                 List.flatten (List.map free_provs es)]
-  | Idx (_, e) -> free_provs e
-  | Branch (e1, e2, e3) ->
-    List.concat [free_provs e1; free_provs e2; free_provs e3]
-  | While (e1, e2) | For (_, e1, e2) ->
-    List.append (free_provs e1) (free_provs e2)
-  | Tup es | Array es -> List.flatten (List.map free_provs es)
-  | RecStruct (_, provs, _, es) ->
-    List.flatten (provs :: List.map (fun x -> free_provs (snd x)) es)
-  | TupStruct (_, provs, _) -> provs
 
 let wf_global_env (sigma : global_env) : unit tc =
   let sigma = List.cons drop sigma
