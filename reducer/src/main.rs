@@ -711,7 +711,7 @@ impl PrettyPrint for Type {
                 ty.span().to_doc()
                     .append(Doc::text(","))
                     .append(Doc::space())
-                    .append(if ty_name == "u32" || ty_name == "usize" || ty_name == "isize" {
+                    .append(if ty_name == "u32" || ty_name == "usize" || ty_name == "isize" || ty_name == "i32" {
                         Doc::text("BaseTy")
                             .append(Doc::space())
                             .append(Doc::text("U32"))
