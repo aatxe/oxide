@@ -471,11 +471,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Ptr _ -> failwith "unimplemented"
   and tc_many (delta : tyvar_env) (ell : loan_env) (gamma : place_env)
       (exprs : expr list) : (ty list * loan_env * place_env) tc =
-    let work (acc : (ty list * loan_env * place_env) tc) (e : expr) =
+    let work (e : expr) (acc : (ty list * loan_env * place_env) tc) =
       let* (curr_tys, curr_ell, curr_gamma) = acc
       in let* (ty, ellPrime, gammaPrime) = tc delta curr_ell curr_gamma e
       in Succ (List.cons ty curr_tys, ellPrime, gammaPrime)
-    in List.fold_left work (Succ ([], ell, gamma)) exprs
+    in List.fold_right work exprs (Succ ([], ell, gamma))
   in tc delta ell gamma expr
 
 let wf_global_env (sigma : global_env) : unit tc =
