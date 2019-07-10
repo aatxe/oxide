@@ -103,7 +103,7 @@ let _ =
      Stdio.print_endline "  PROGNAME trust path/to/single/test.rs";
      Stdio.print_endline "  PROGNAME retrust path/to/root/of/tests") in
   if Array.length Sys.argv < 3 then
-    (* NOTE(dbp 2019-06-28): Argument parsing, done terribly. *)
+    (* NOTE(2019-06-28): Argument parsing, done terribly. *)
     usage ()
   else
     let _ = eval (
