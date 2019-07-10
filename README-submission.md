@@ -6,7 +6,8 @@ We require OCaml 4.08 and for now need to use two pins for ppx.
 
 It requires `dune`.
 
-The Rust to Oxide compiler is written in Rust.
+The Rust to Oxide compiler is written in Rust and requires that and Cargo
+(tested on 1.36.0).
 
 ## Running
 

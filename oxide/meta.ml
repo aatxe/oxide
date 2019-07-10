@@ -376,7 +376,7 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   | BaseTy _ -> Succ false
   | TyVar _ -> Succ true
   | Ref (_, Unique, _) -> Succ true
-  | Ref (_, Shared, typPrime) -> noncopyable sigma typPrime
+  | Ref (_, Shared, _) -> Succ false
   | Fun (_, _, _, _, _) -> Succ false
   | Array (typPrime, _) -> noncopyable sigma typPrime
   | Slice typPrime -> noncopyable sigma typPrime
