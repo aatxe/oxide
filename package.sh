@@ -26,5 +26,8 @@ rm $DIR/runner/.merlin
 
 cp README-submission.md $DIR/README.md
 
+cp dune-project $DIR
+cp eval.sh $DIR
+
 zip -r $DIR-$REV.zip $DIR/*
 rm -rf $DIR

@@ -45,3 +45,9 @@ The meaning of the `results.json` file is:
   "reducererror": [ // tests for which the reducer threw an error (most likely due to missing type annotations) ]
 }
 ```
+
+## Evaluation
+
+You can run `eval.sh`, which will run the test harness on the `borrowck` test
+suite, printing counts of the various categories above, as well as printing
+counts for the various categories of excluded tests.
