@@ -40,6 +40,8 @@ This repository is split into six parts:
 5. [`reducer/`](reducer/) — a desugarer (simple compiler) from (a subset of) Rust to Oxide
     - Run reducer with `RUSTFLAGS='--cfg procmacro2_semver_exempt'` for source filename tracking.
 6. [`runner/`](runner/) — a test harness for driving the reducer/typechecker. 
+    - This requires the following opam packages:
+    `opam install opam shexp stdio yojson`
 
 
 ## Related Works

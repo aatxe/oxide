@@ -11,7 +11,15 @@ The Rust to Oxide compiler is written in Rust and requires that and Cargo
 
 ## Running
 
-The tests cases can be run using a test harness written in OCaml. Build it with:
+The tests cases can be run using a test harness written in OCaml. Install the opam dependencies with:
+
+```
+opam install opam shexp stdio yojson
+```
+
+And install the system dependency [jq](https://stedolan.github.io/jq/) (commandline json processor).
+
+Then you can build it with:
 
 ```
 dune build runner/runner.exe
