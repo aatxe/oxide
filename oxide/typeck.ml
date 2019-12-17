@@ -7,25 +7,25 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
     (prov1 : prov) (prov2 : prov) : loan_env tc =
   match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
   | (Combine, Some rep1, Some rep2) ->
-    (* U-CombineLocalProvenances*)
+    (* UP-CombineLocalProvenances*)
     let ellPrime = loan_env_exclude ell prov2
     in Succ (loan_env_include ellPrime prov2 (list_union rep1 rep2))
   | (Override, Some rep1, Some _) ->
-    (* U-OverrideLocalProvenances *)
+    (* UP-OverrideLocalProvenances *)
     let ellPrime = loan_env_exclude ell prov2
     in Succ (loan_env_include ellPrime prov2 rep1)
   | (_, None, Some _) ->
-    (* U-AbstractProvLocalProv *)
+    (* UP-AbstractProvLocalProv *)
     if not (loan_env_is_abs ell prov1) then Fail (InvalidProv prov1)
     else if loan_env_abs_sub ell prov1 prov2 then Succ ell
     else Fail (InvalidProv prov1)
   | (_, Some _, None) ->
-    (* U-LocalProvAbstractProv *)
+    (* UP-LocalProvAbstractProv *)
     if not (loan_env_is_abs ell prov2) then Fail (InvalidProv prov2)
     else let ellPrime = loan_env_add_abs_sub ell prov1 prov2
     in Succ ellPrime
   | (_, None, None) ->
-    (* U-AbstractProvenances *)
+    (* UP-AbstractProvenances *)
     if not (loan_env_is_abs ell prov1) then
       Fail (InvalidProv prov1)
     else if not (loan_env_is_abs ell prov2) then
@@ -44,32 +44,40 @@ let subtype_prov_many (mode : subtype_modality) (ell : loan_env)
 let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
   let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
     match (snd ty1, snd ty2) with
+    (* UT-Refl for base types *)
     | (BaseTy bt1, BaseTy bt2) ->
       if bt1 = bt2 then Succ ell
       else Fail (UnificationFailed (ty1, ty2))
+    (* UT-Refl for type variables *)
     | (TyVar v1, TyVar v2) ->
       if v1 = v2 then Succ ell
       else Fail (UnificationFailed (ty1, ty2))
+    (* UT-Array *)
     | (Array (t1, m), Array (t2, n)) ->
       if m = n then sub ell t1 t2
       else Fail (UnificationFailed (ty1, ty2))
+    (* UT-Slice *)
     | (Slice t1, Slice t2) -> sub ell t1 t2
-    | (Tup tys1, Tup tys2) ->
-      let work (acc : loan_env tc) (tys : ty * ty) =
-        let* ell = acc
-        in let (ty1, ty2) = tys
-        in sub ell ty1 ty2
-      in List.fold_left work (Succ ell) (List.combine tys1 tys2)
-    | (Ref (v1, o1, t1), Ref (v2, o2, t2)) ->
-      if o1 = o2 then
-        let* ellPrime = subtype_prov mode ell v1 v2
-        in sub ellPrime t1 t2
-      else Fail (UnificationFailed (ty1, ty2))
+    (* UT-SharedRef *)
+    | (Ref (v1, Shared, t1), Ref (v2, Shared, t2)) ->
+      let* ellPrime = subtype_prov mode ell v1 v2
+      in sub ellPrime t1 t2
+    (* UT-UniqueRef *)
+    | (Ref (v1, Unique, t1), Ref (v2, Unique, t2)) ->
+      let* ellPrime = subtype_prov mode ell v1 v2
+      in let* ell1 = sub ellPrime t1 t2
+      in let* ell2 = sub ellPrime t2 t1
+      in if ell1 = ell2 then Succ ell1
+      else Fail (UnificationFailed (t1, t2))
+    (* UT-Tuple *)
+    | (Tup tys1, Tup tys2) -> sub_many ell tys1 tys2
+    (* UT-Struct *)
     | (Struct (name1, provs1, tys1), Struct (name2, provs2, tys2)) ->
       if name1 = name2 then
         let* ell_provs = subtype_prov_many mode ell provs1 provs2
         in sub_many ell_provs tys1 tys2
       else Fail (UnificationFailed (ty1, ty2))
+    (* UT-Function *)
     | (Fun (prov1, tyvar1, tys1, _, ret_ty1), Fun (prov2, tyvar2, tys2, _, ret_ty2)) ->
       let tyvar_for_sub = List.map (fun x -> (inferred, TyVar x)) tyvar1
       in let (prov_sub, ty_sub) = (List.combine prov1 prov2, List.combine tyvar_for_sub tyvar2)
