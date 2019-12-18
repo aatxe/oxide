@@ -105,6 +105,14 @@ let var_env_lookup_place_expr (gamma : var_env) (pi : place_expr) : ty tc =
   match place_expr_to_place pi with
   | Some pi -> var_env_lookup gamma pi
   | None -> Fail (PlaceExprNotAPlace pi)
+let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
+  match place_expr_to_place pi with
+  | Some (_, (root, _)) ->
+    (match List.assoc_opt root gamma with
+    | Some _ -> true
+    | None -> false)
+  | None -> false
+
 let var_env_include (gamma : var_env) (x : var) (typ : ty) =
   Succ (List.cons (x, typ) gamma)
 let var_env_append (gamma1 : var_env) (gamma2 : var_env) = List.append gamma1 gamma2

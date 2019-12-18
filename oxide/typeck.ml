@@ -125,15 +125,16 @@ let intersect (envs1 : loan_env * var_env) (envs2 : loan_env * var_env) : loan_e
   let (ell1, gamma1) = envs1
   in let (ell2, gamma2) = envs2
   in let ell = union ell1 ell2
-  in let also_in_gamma2 (pair : place * ty) =
-       let (pi, ty) = pair
-       in match var_env_lookup_opt gamma2 pi with
-       | Some ty2 -> ty == ty2 (* TODO: maybe unify, but then were changing ell *)
+  in let also_in_gamma2 (pair : var * ty) =
+       let (x, ty) = pair
+       in match List.assoc_opt x gamma2 with
+       | Some ty2 -> ty == ty2 (* TODO: maybe unify, but then we're changing ell *)
        | None -> false
   in (ell, List.find_all also_in_gamma2 gamma1)
 
 let var_env_diff (gam1 : var_env) (gam2 : var_env) : var_env =
-  let not_in_gam2 (entry1 : place * ty) = not (List.exists (fun entry2 -> fst entry2 = fst entry1) gam2)
+  let not_in_gam2 (entry1 : var * ty) : bool =
+    not (List.exists (fun entry2 -> fst entry2 = fst entry1) gam2)
   in List.filter not_in_gam2 gam1
 
 let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) : unit tc =
@@ -141,7 +142,7 @@ let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) 
   if loan_env_mem ell prov then
     match loan_env_lookup_opt ell prov with
     | Some loans ->
-      let invalid_loans = List.filter (fun p -> var_env_contains_spec gamma (snd p)) loans
+      let invalid_loans = List.filter (fun p -> var_env_contains_place_expr gamma (snd p)) loans
       in (match invalid_loans with
       | [] -> Succ ()
       | (omega, pi) :: _ -> Fail (InvalidLoan (fst prov, omega, pi)))
@@ -160,12 +161,14 @@ let valid_type (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : va
     | Ref (prov, _, ty) ->
       let* () = valid_prov delta ell gamma prov
       in let* () = valid ty
-      in let mismatched_tys =
-           List.find_all (fun (_, pi) -> (snd (var_env_lookup_spec gamma pi)) != (snd ty))
-             (loan_env_lookup ell prov)
-      in (match mismatched_tys with
-          | [] -> Succ ()
-          | (_, pi) :: _ -> Fail (TypeMismatch (ty, var_env_lookup_spec gamma pi)))
+      in let place_exprs = List.map snd (loan_env_lookup ell prov)
+      in let work (pi : place_expr) (acc : unit tc) : unit tc =
+        let* () = acc
+        in let* ty_root = var_env_lookup gamma (fst pi, (sndfst pi, []))
+        in let* ty_pi = compute_ty ty_root (sndsnd pi)
+        in if snd ty_pi = snd ty then Succ ()
+        else Fail (TypeMismatch (ty, ty_pi))
+      in List.fold_right work place_exprs (Succ ())
     | Fun _ -> failwith "unimplemented"
     | Array (typ, n) -> if n >= 0 then valid typ else Fail (InvalidArrayLen (ty, n))
     | Slice typ -> valid typ
