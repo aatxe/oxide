@@ -285,18 +285,18 @@ type tc_error =
   | TypeMismatchRef of ty (* found *)
   | VarEnvMismatch of source_loc * var_env * var_env (* source_loc * expected * found *)
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
-  | SafetyErr of source_loc * (owned * place_expr) * (owned * place_expr)
-                (* source_loc * attempted access * conflicting loan *)
-  | PermissionErr of source_loc * (owned * place_expr) * ty
-                     (* source_loc * attempted access * ty that doesn't permit this access *)
-  | CannotMove of source_loc * place_expr
+  | SafetyErr of (owned * place_expr) * (owned * place_expr)
+                (* attempted access * conflicting loan *)
+  | PermissionErr of (owned * place_expr) * ty
+                     (* attempted access * ty that doesn't permit this access *)
+  | CannotMove of place_expr
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var
   | WrongStructConstructor of source_loc * struct_var * struct_kind
   | InvalidType of ty
   | InvalidProv of prov
-  | InvalidLoan of source_loc * owned * place_expr
+  | InvalidLoan of owned * place_expr
   | InvalidArrayLen of ty * int
   | InvalidOperationOnType of path * ty
   | InvalidOperationOnTypeEP of expr_path * ty
