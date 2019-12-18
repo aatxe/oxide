@@ -9,6 +9,10 @@ let uniq_cons (x : 'a) (xs : 'a list) : 'a list =
 let list_union (xs : 'a list) (ys : 'a list) : 'a list =
   List.fold_right uniq_cons xs ys
 
+(* replace the element at index i in xs with x *)
+let replace xs i x =
+  List.mapi (fun idx elem -> if idx = i then x else elem) xs
+
 let unwrap (opt : 'a option) : 'a =
   match opt with
   | Some x -> x

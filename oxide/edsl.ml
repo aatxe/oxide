@@ -50,9 +50,15 @@ let letexp (var : var) (ty : ty) (e1 : expr) (e2 : expr) : expr =
   (loc(), Let (var, ty, e1, e2))
 let letbe (loc : source_loc) (var : var) (ty : ty) (e1 : expr) (e2 : expr) : expr =
   (loc, Let (var, ty, e1, e2))
-let (~*) (pi : place_expr) : place_expr = Deref pi
-let ($.) (pi : place_expr) (idx : int) : place_expr = IndexProj (pi, idx)
-let ($.$) (pi : place_expr) (field : string) : place_expr = FieldProj (pi, field)
+let (~*) (pi : place_expr) : place_expr =
+  let (loc, (root, path)) = pi
+  in (loc, (root, List.append path [Deref]))
+let ($.) (pi : place_expr) (idx : int) : place_expr =
+  let (loc, (root, path)) = pi
+  in (loc, (root, List.append path [Index idx]))
+let ($.$) (pi : place_expr) (field : string) : place_expr =
+  let (loc, (root, path)) = pi
+  in (loc, (root, List.append path [Field field]))
 let num (n : int) : expr = (loc(), Prim (Num n))
 let tup (exprs : expr list) : expr = (loc(), Tup exprs)
 let app (fn : expr) (provs : prov_var list) (tys : ty list) (args : expr list) : expr =
@@ -60,7 +66,7 @@ let app (fn : expr) (provs : prov_var list) (tys : ty list) (args : expr list) :
 let (~@) (fn : fn_var) : expr = (loc(), Fn fn)
 let (~@@) (mv : expr) : expr =
   match mv with
-  | (loc, Move (Var var)) -> (loc, Fn var)
+  | (loc, Move (_, (var, []))) -> (loc, Fn var)
   | _ -> failwith "bad codegen: found a non-variable function name"
 let cond (e1 : expr) (e2 : expr) (e3 : expr) : expr = (loc(), Branch (e1, e2, e3))
 let (<==) (pi : place_expr) (e : expr) : expr = (loc(), Assign (pi, e))
