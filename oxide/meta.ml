@@ -94,6 +94,12 @@ let var_env_lookup (gamma : var_env) (pi : place) : ty tc =
     let* (_, ty) = decompose ty path
     in Succ ty
   | None -> Fail (UnboundPlace pi)
+let var_env_lookup_many (gamma : var_env) (pis : place list) : ty list tc =
+  let lookup_seq (pi : place) (acc : ty list tc) : ty list tc =
+    let* tys = acc
+    in let* ty = var_env_lookup gamma pi
+    in Succ (List.cons ty tys)
+  in List.fold_right lookup_seq pis (Succ [])
 let var_env_lookup_opt (gamma : var_env) (pi : place) : (ty option) tc =
   let (root, path) = snd pi
   in match List.assoc_opt root gamma with
