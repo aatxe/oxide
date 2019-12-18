@@ -75,6 +75,16 @@ let rec decompose (ty : ty) (path : path) : (ty_ctx * ty) tc =
   | (Struct _, (Field _) :: _) -> failwith "unimplemented"
   | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
 
+(* find the type of the expr path based on the original type *)
+let rec compute_ty (ty : ty) (path : expr_path) : ty tc =
+  let (loc, ty) = ty
+  in match (ty, path) with
+  | (ty, []) -> Succ (loc, ty)
+  | (Ref (_, _, ty), Deref :: path) -> compute_ty ty path
+  | (Tup tys, (Index n) :: path) -> compute_ty (List.nth tys n) path
+  | (Struct _, (Field _) :: _) -> failwith "unimplemented"
+  | (ty, path) -> Fail (InvalidOperationOnTypeEP (path, (loc, ty)))
+
 (* var env operations *)
 
 let var_env_lookup (gamma : var_env) (pi : place) : ty tc =
@@ -133,34 +143,26 @@ let find_loans (omega : owned) (ell : loan_env) (gamma : var_env) (pi : place_ex
 
 (* evaluates the place expression down to a collection of possible places *)
 let eval_place_expr (ell : loan_env) (gamma : var_env) (omega : owned) (pi : place_expr) : loans tc =
-  let (loc, pi) = pi
-  in let rec eval_place_expr (pi : preplace_expr) : loans tc = 
-    match snd pi with
-    | [] -> Succ [(omega, (loc, Var var))]
+  let rec eval_place_expr (pi : place_expr) : loans tc =
+    let (prefix, suffix) = partition ((!=) Deref) (sndsnd pi)
+    in match suffix with
+    | [] -> Succ [(omega, pi)]
     | Deref :: path ->
-      let* loans = eval_place_expr pi
-      in let work (acc : loans tc) (loan : loan) : loans tc =
-          let* loans = acc
-          in let ty = var_env_lookup_place_expr gamma (snd loan)
-          in match ty with
-          | Succ (ref_loc, Ref (prov, rfomega, ty)) ->
-            if is_at_least omega rfomega then
-                match loan_env_lookup_opt ell prov with
-                | Some new_loans -> Succ (List.append loans new_loans)
-                | None ->
-                  if loan_env_is_abs ell prov then Succ []
-                  else Fail (InvalidProv prov)
-            else Fail (PermissionErr (loc, (omega, Deref pi), (ref_loc, Ref (prov, rfomega, ty))))
-          | Succ found -> Fail (TypeMismatchRef found)
-          | Fail (PlaceExprNotAPlace _) ->
-              let* ty = var_env_lookup gamma (Var (root_of pi))
-              in let* _ = decompose ty (sndsnd pi)
-              in Succ []
-      in List.fold_left work (Succ []) loans
-    | Index idx :: path ->
-      let to_proj (loan : loan) : loan = (fst loan, (loc, Path (sndsnd loan, idx)))
-      in let* loans = eval_place_expr pi
-      in Succ (List.map to_proj loans)
+        let* ty = var_env_lookup gamma (fst pi, (sndfst pi, unwrap (expr_path_to_path prefix)))
+        in (match snd ty with
+        | Ref (prov, _, _) ->
+          let loans = loan_env_lookup ell prov
+          in let add_path_to_back (loan : loan) : place_expr =
+            let (_, (loc, (root, loan_path))) = loan
+            in (loc, (root, List.append loan_path path))
+          in let current_loans = List.map add_path_to_back loans
+          in let follow (pi : place_expr) (acc : loans tc) =
+            let* loans_so_far = acc
+            in let* new_loans = eval_place_expr pi
+            in Succ (List.append loans_so_far new_loans)
+          in List.fold_right follow current_loans (Succ [])
+        | _ -> Fail (TypeMismatchRef ty))
+    | _ :: _ -> failwith "unreachable"
   in eval_place_expr pi
 
 let norm_place_expr (ell : loan_env) (gamma : var_env) (phi : place_expr) : places tc =
@@ -238,48 +240,15 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
   in let* opt = var_env_lookup_opt gamma pi
   in loop opt (Succ (ell, gamma))
 
-let rec prefixed_by (target : place) (in_pi : place) : bool =
-  if target = in_pi then true
-  else match in_pi with
-  | Var _ -> false
-  | FieldProj (piPrime, _) -> prefixed_by target piPrime
-  | IndexProj (piPrime, _) -> prefixed_by target piPrime
+let rec path_prefixed_by (target : path) (in_path : path) : bool =
+  match (target, in_path) with
+  | ([], _) -> true
+  | (_, []) -> false
+  | (x :: target, y :: in_path) -> x = y && path_prefixed_by target in_path
 
-let rec replace (prefix : place) (new_pi : place)  (in_pi : place) : place =
-  if prefix = in_pi then new_pi
-  else match in_pi with
-  | Var x -> Var x
-  | FieldProj (piPrime, field) -> FieldProj (replace prefix new_pi piPrime, field)
-  | IndexProj (piPrime, idx) -> IndexProj (replace prefix new_pi piPrime, idx)
-
-(* given a root place pi, compute all the places and shapes based on v *)
-let rec places_val (sigma : store) (pi : place) (v : value) : (place * shape) list =
-  match v with
-  | Prim p -> [(pi, Prim p)]
-  | Ptr (omega, piPrime) -> [(pi, Ptr (omega, piPrime))]
-  | Fun (provvars, tyvars, params, body) -> [(pi, Fun (provvars, tyvars, params, body))]
-  | Tup values ->
-    let work (acc : (place * shape) list) (pair : place * value) =
-      let (pi, v) = pair
-      in List.concat [acc; places_val sigma pi v]
-    in let func (idx : int) (v : value) =
-      let piPrime : place = IndexProj  (pi, idx)
-      in (piPrime, v)
-    in let projs = List.mapi func values
-    in List.fold_left work [(pi, Tup (List.map (fun _ -> ()) values))] projs
-  | Array values -> [(pi, Array values)]
-
-(* given a store sigma, compute the value at pi from its shape in sigma *)
-let rec value (sigma : store) (pi : place) : value =
-  match List.assoc pi sigma with
-  | Hole -> value sigma pi
-  | Prim p -> Prim p
-  | Ptr (omega, pi) -> Ptr (omega, pi)
-  | Fun (provvars, tyvars, params, body) -> Fun (provvars, tyvars, params, body)
-  | Tup boxes ->
-    let values = List.mapi (fun idx -> fun () -> value sigma (IndexProj (pi, idx))) boxes
-    in Tup values
-  | Array values -> Array values
+let prefixed_by (target : place) (in_pi : place) : bool =
+  let (target, in_pi) = (snd target, snd in_pi)
+  in fst target = fst in_pi && path_prefixed_by (snd target) (snd in_pi)
 
 let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   match snd typ with

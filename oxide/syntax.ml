@@ -299,6 +299,7 @@ type tc_error =
   | InvalidLoan of source_loc * owned * place_expr
   | InvalidArrayLen of ty * int
   | InvalidOperationOnType of path * ty
+  | InvalidOperationOnTypeEP of expr_path * ty
   | DuplicateFieldsInStructDef of struct_var * (field * ty) * (field * ty)
   | InvalidCopyImpl of struct_var * ty (* for struct * because of ty *)
   | UnboundPlace of place
