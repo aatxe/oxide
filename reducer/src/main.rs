@@ -872,7 +872,7 @@ impl PrettyPrint for Expr {
                         Doc::text("Move")
                             .append(Doc::space())
                             .append(parenthesize(expr.to_place_expr_doc()))
-                            )
+                    )
             )
         }
 
