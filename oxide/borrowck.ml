@@ -8,16 +8,16 @@ open Oxide.Syntax
 let borrow_tuple_fields_2 : expr =
   reset "borrow_tuple_fields_2.rs";
   (letexp x ~:(prod [u32; u32]) (*=*) (tup [num 1; num 2])
-  (letexp a ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd ((Var x) $. 0))
-  (letexp b ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq ((Var x) $. 0))
-  (move (Var a)))))
+  (letexp a ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd ((var x) $. 0))
+  (letexp b ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq ((var x) $. 0))
+  (move (var a)))))
 
 let borrow_tuple_fields_3 : expr =
   reset "borrow_tuple_fields_3.rs";
   (letexp x ~:(prod [u32; u32]) (*=*) (tup [num 1; num 2])
-  (letexp a ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd ((Var x) $. 0))
-  (letexp b ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq ((Var x) $. 0))
-  (move (Var a)))))
+  (letexp a ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd ((var x) $. 0))
+  (letexp b ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq ((var x) $. 0))
+  (move (var a)))))
 
 (* borrow_tuple_fields 4, 5, 6 omitted because of structs (4 also has Box<_>) *)
 
@@ -28,18 +28,18 @@ let borrowck_access_permissions_4a : expr =
   reset "borrowck_access_permissions_4a.rs";
   (letexp x ~:u32 (*=*) (num 1)
   (letexp x_mut ~:u32 (*=*) (num 2)
-  (letexp ref_x ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd (Var x))
-  (letexp ref_x_mut ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq (Var x_mut))
-  (letexp y ~:(~&p3 uniq u32) (*=*) (borrow p3 uniq ~*(Var ref_x))
+  (letexp ref_x ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd (var x))
+  (letexp ref_x_mut ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq (var x_mut))
+  (letexp y ~:(~&p3 uniq u32) (*=*) (borrow p3 uniq ~*(var ref_x))
   unit)))))
 
 let borrowck_access_permissions_4b : expr =
   reset "borrowck_access_permissions_4b.rs";
   (letexp x ~:u32 (*=*) (num 1)
   (letexp x_mut ~:u32 (*=*) (num 2)
-  (letexp ref_x ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd (Var x))
-  (letexp ref_x_mut ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq (Var x_mut))
-  (letexp y ~:(~&p3 uniq u32) (*=*) (borrow p3 uniq ~*(Var ref_x_mut))
+  (letexp ref_x ~:(~&p1 shrd u32) (*=*) (borrow p1 shrd (var x))
+  (letexp ref_x_mut ~:(~&p2 uniq u32) (*=*) (borrow p2 uniq (var x_mut))
+  (letexp y ~:(~&p3 uniq u32) (*=*) (borrow p3 uniq ~*(var ref_x_mut))
   unit)))))
 
 (* borrowck_access_permissions 5 omitted because of unsafe *)

@@ -50,6 +50,7 @@ let letexp (var : var) (ty : ty) (e1 : expr) (e2 : expr) : expr =
   (loc(), Let (var, ty, e1, e2))
 let letbe (loc : source_loc) (var : var) (ty : ty) (e1 : expr) (e2 : expr) : expr =
   (loc, Let (var, ty, e1, e2))
+let var (var : var) : place_expr = (loc(), (var, []))
 let (~*) (pi : place_expr) : place_expr =
   let (loc, (root, path)) = pi
   in (loc, (root, List.append path [Deref]))

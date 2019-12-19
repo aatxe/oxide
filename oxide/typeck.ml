@@ -145,7 +145,7 @@ let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) 
       let invalid_loans = List.filter (fun p -> var_env_contains_place_expr gamma (snd p)) loans
       in (match invalid_loans with
       | [] -> Succ ()
-      | (omega, pi) :: _ -> Fail (InvalidLoan (fst prov, omega, pi)))
+      | (omega, pi) :: _ -> Fail (InvalidLoan (omega, pi)))
     | None -> Fail (InvalidProv prov)
   else if loan_env_is_abs ell prov then Succ ()
   else Fail (InvalidProv prov)
@@ -239,21 +239,7 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
 
 let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
                (expr : expr) : (ty * loan_env * var_env) tc =
-  (* pick the right type, but copy over the inferred closure envs for fun types from the left *)
-  let rec right_merge (ty1 : ty) (ty2 : ty) : ty =
-    match (snd ty1, snd ty2) with
-    | (Any, Any) | (BaseTy _, BaseTy _) | (TyVar _, TyVar _)
-    | (Array _, Array _) | (Slice _, Slice _) -> ty2
-    | (Ref (_, _, ity1), Ref (prov, omega, ity2)) ->
-      (fst ty2, Ref (prov, omega, right_merge ity1 ity2))
-    | (Fun (_, _, _, gamma_c, _), Fun (prov, tyvars, tys, _, ret_ty)) ->
-      let fun_ty : ty = (fst ty2, Fun (prov, tyvars, tys, gamma_c, ret_ty))
-      in fun_ty
-    | (Tup tys1, Tup tys2) -> (fst ty2, Tup (List.map2 right_merge tys1 tys2))
-    | (Struct (_, _, tys1), Struct (name, provs, tys2)) ->
-      (fst ty2, Struct (name, provs, List.map2 right_merge tys1 tys2))
-    | _ -> failwith "unreachable"
-  in let rec tc (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+  let rec tc (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
              (expr : expr) : (ty * loan_env * var_env) tc =
     match snd expr with
     (* T-Unit, T-u32, T-True, T-False *)
@@ -365,7 +351,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Let (var, ann_ty, e1, e2) ->
       let* (ty1, ell1, gamma1) = tc delta ell gamma e1
       in let* ell1Prime = subtype Combine ell1 ty1 ann_ty
-      in let* gamma1Prime = var_env_include gamma1 var ann_ty
+      in let gamma1Prime = var_env_include gamma1 var ann_ty
       in let* (ty2, ell2, gamma2) = tc delta ell1Prime gamma1Prime e2
       in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
       in Succ (ty2, ell2Prime, gamma2Prime)
@@ -397,7 +383,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       (match tc delta ell gamma e1 with
        (* T-ForArray *)
        | Succ ((_, Array (elem_ty, _)), ell1, gamma1) ->
-         let* gamma1Prime = var_env_include gamma1 var elem_ty
+         let gamma1Prime = var_env_include gamma1 var elem_ty
          in let* (_, ell2, gamma2) = tc delta ell1 gamma1Prime e2
          in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
          in if gamma2Prime = gamma1 then
@@ -406,7 +392,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          else Fail (VarEnvMismatch (fst e2, gamma1, gamma2Prime))
        (* T-ForSlice *)
        | Succ ((_, Ref (prov, omega, (_, Slice elem_ty))), ell1, gamma1) ->
-         let* gamma1Prime = var_env_include gamma1 var (inferred, Ref (prov, omega, elem_ty))
+         let gamma1Prime = var_env_include gamma1 var (inferred, Ref (prov, omega, elem_ty))
          in let* (_, ell2, gamma2) = tc delta ell1 gamma1Prime e2
          in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
          in if gamma2Prime = gamma1 then
@@ -424,14 +410,13 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | None -> Fail (UnknownFunction (fst expr, fn)))
     (* T-Closure *)
     | Fun (provs, tyvars, params, opt_ret_ty, body) ->
-      let places_typ_u (pair : var * ty) = places_typ sigma (Var (fst pair)) (snd pair)
-      in let* gam_ext =
-        List.fold_right (fun x y -> let* x = x in let* y = y in Succ (list_union x y))
-                        (List.map places_typ_u params) (Succ [])
+      let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
+        var_env_include gamma (fst pair) (snd pair)
+      in let gammaPrime = List.fold_left var_include_fold [] params
       in let deltaPrime = (list_union provs (fst delta), list_union tyvars (snd delta))
       in let ellPrime = loan_env_bindall ell provs
       in let* (ret_ty, ellPrime, gammaPrime) =
-           tc deltaPrime ellPrime (var_env_append gam_ext gamma) body
+           tc deltaPrime ellPrime gammaPrime body
       in let gamma_c = var_env_diff gamma gammaPrime
       in let free = free_provs_var_env gamma_c
       in let ell_restored = union (loan_env_filter_dom ell free) ellPrime
@@ -527,10 +512,9 @@ let wf_global_env (sigma : global_env) : unit tc =
         List.filter (fun prov -> not (List.mem prov provs)) (free_provs body)
       in let delta = (List.append provs free_provs, tyvars)
       in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
-      in let places_include_fold (gamma : var_env tc) (pair : var * ty) : var_env tc =
-        let* gamma = gamma
-        in var_env_include sigma gamma (Var (fst pair)) (snd pair)
-      in let* gamma = List.fold_left places_include_fold (Succ []) params
+      in let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
+        var_env_include gamma (fst pair) (snd pair)
+      in let gamma = List.fold_left var_include_fold [] params
       in let* (output_ty, ellPrime, _) = type_check sigma delta ell gamma body
       in let* _ = subtype Combine ellPrime output_ty ret_ty
       in Succ ()
