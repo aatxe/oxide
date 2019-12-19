@@ -1,12 +1,10 @@
 ## Requirements
 
-We require OCaml 4.08 and for now need to use two pins for ppx.
-  - `opam pin add ppx_tools https://github.com/ocaml-ppx/ppx_tools.git#master`
-  - `opam pin add ppx_deriving https://github.com/gasche/ppx_deriving.git#4.08-support`
+We require OCaml 4.08 for user-defined binding form support.
 
 It requires `dune`.
 
-The Rust to Oxide compiler is written in Rust and requires that and Cargo
+The Rust to Oxide compiler is written in Rust and requires the Rust compiler and Cargo
 (tested on 1.36.0).
 
 ## Running
