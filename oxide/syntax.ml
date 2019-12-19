@@ -83,6 +83,7 @@ type prety =
   | Slice of ty
   | Tup of ty list
   | Struct of struct_var * prov list * ty list
+  | Uninit of ty
 [@@deriving show]
 and ty = source_loc * prety [@@deriving show]
 and var_env = (var * ty) list [@@deriving show]
@@ -167,6 +168,7 @@ and expr = source_loc * preexpr
 [@@deriving show]
 
 type value =
+  | Dead
   | Prim of prim
   | Fun of prov list * ty_var list * (var * ty) list * expr
   | Tup of value list

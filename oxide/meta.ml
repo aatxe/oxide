@@ -23,6 +23,7 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
     let loc = fst ty
     in match snd ty with
     | Any | BaseTy _ | TyVar _ -> ty
+    | Uninit ty -> (loc, Uninit (sub ty))
     | Ref (pv, omega, ty) ->
       let prov = if (snd pv) = (snd that) then this else pv
       in (loc, Ref (prov, omega, sub ty))
@@ -49,6 +50,7 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
     in match snd ty with
     | Any | BaseTy _ -> ty
     | TyVar tv -> if tv = that then this else ty
+    | Uninit ty -> (loc, Uninit (sub ty))
     | Ref (pv, omega, ty) -> (loc, Ref (pv, omega, sub ty))
     | Fun (pvs, tvs, tys, gamma, ret_ty) ->
       if not (List.mem that tvs) then (loc, Fun (pvs, tvs, sub_many tys, gamma, sub ret_ty))
@@ -127,15 +129,12 @@ let var_env_exclude (gamma : var_env) (x : var) = List.remove_assoc x gamma
 let rec all_loans (omega : owned) (ell : loan_env) (gamma : var_env) : loans =
   let rec work (typ : ty) (loans : loans) : loans =
     match snd typ with
-    | Any -> loans
-    | BaseTy _ -> loans
-    | TyVar _ -> loans
+    | Any | BaseTy _ | TyVar _ -> loans
     | Ref (prov, omega_prime, typ) ->
       if is_at_least omega omega_prime then List.append (prov_to_loans ell prov) (work typ loans)
       else work typ loans
     | Fun (_, _, _, gamma_c, _) -> List.append loans (all_loans omega ell gamma_c)
-    | Array (typ, _) -> work typ loans
-    | Slice typ -> work typ loans
+    | Uninit typ | Array (typ, _) | Slice typ -> work typ loans
     | Tup typs -> List.fold_right List.append (List.map (fun typ -> work typ []) typs) loans
     | Struct (_, provs, _) ->  List.concat (loans :: List.map (prov_to_loans ell) provs)
   in List.fold_right (fun entry -> work (snd entry)) gamma []
@@ -228,7 +227,7 @@ let rec contains_prov (gamma : var_env) (prov : prov) =
       if not (List.mem prov pvs) then
         ty_contains ret_ty || tys_contains tys || contains_prov gam prov
       else false
-    | Array (ty, _) | Slice ty -> ty_contains ty
+    | Uninit ty | Array (ty, _) | Slice ty -> ty_contains ty
     | Tup tys -> tys_contains tys
     | Struct (_, pvs, _) -> List.mem prov pvs
   and tys_contains (tys : ty list) : bool =
@@ -245,7 +244,7 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
       else Succ (ell, new_gamma)
     | Some (_, Any) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
     | Some (_, Struct _) -> pair
-    | Some (_, Array (ty, _)) | Some (_, Slice ty) -> loop (Some ty) pair
+    | Some (_, Uninit ty) | Some (_, Array (ty, _)) | Some (_, Slice ty) -> loop (Some ty) pair
     | Some (_, Tup tys) -> loops tys pair
     | None -> Succ (ell, gamma)
   and loops (tys : ty list) (pair : (loan_env * var_env) tc) =
@@ -268,6 +267,7 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   | Any -> Succ false
   | BaseTy _ -> Succ false
   | TyVar _ -> Succ true
+  | Uninit _ -> Succ false (* probably never ask this question anyway *)
   | Ref (_, Unique, _) -> Succ true
   | Ref (_, Shared, _) -> Succ false
   | Fun (_, _, _, _, _) -> Succ false
@@ -319,6 +319,7 @@ let valid_copy_impl (sigma : global_env) (def : struct_def) : unit tc =
 let rec free_provs_ty (ty : ty) : provs =
   match snd ty with
   | Any | BaseTy _ | TyVar _ -> []
+  | Uninit ty -> free_provs_ty ty
   | Ref (prov, _, ty) -> List.cons prov (free_provs_ty ty)
   | Fun _ -> [] (* FIXME: actually implement *)
   | Array (ty, _) | Slice ty -> free_provs_ty ty

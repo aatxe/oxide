@@ -153,8 +153,7 @@ let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) 
 let valid_type (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env) (ty : ty) : unit tc =
   let rec valid (ty : ty) : unit tc =
     match snd ty with
-    | Any -> Succ ()
-    | BaseTy _ -> Succ ()
+    | Any | BaseTy _ -> Succ ()
     | TyVar tyvar ->
       if List.mem tyvar (snd delta) then Succ ()
       else Fail (InvalidType ty)
@@ -171,7 +170,7 @@ let valid_type (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : va
       in List.fold_right work place_exprs (Succ ())
     | Fun _ -> failwith "unimplemented"
     | Array (typ, n) -> if n >= 0 then valid typ else Fail (InvalidArrayLen (ty, n))
-    | Slice typ -> valid typ
+    | Uninit typ | Slice typ -> valid typ
     | Tup tys -> valid_many tys
     | Struct _ -> Succ () (* TODO: use sigma *)
   and valid_many (tys : ty list) =
