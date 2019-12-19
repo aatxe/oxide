@@ -25,18 +25,16 @@ similarities to our approach, and may aid in its understanding.
 
 This repository is split into six parts:
 
-1. [`notes/`](notes/) — an assorted selection of my notes, some about the language levels of Rust
-2. [`history/`](history/) — largely-iterative prior attempts at building & designing Oxide
+1. [`history/`](history/) — largely-iterative prior attempts at building & designing Oxide
     - [`ownershipv1`](history/ownershipv1.md) and [`ownershipv2`](history/ownershipv2.md) both have
       some notes included that might be insightful to some degree. Evidently, I got lazy afterward
       and stopped writing actual prose in the models. Afterward, I switched to LaTeX.
+2. [`history/notes/`](history/notes/) — an assorted selection of my old notes
 3. [`history/examples/`](history/examples/) — a collection of old examples (and counter-examples) at each level
     - Each example is in "proper" Rust syntax for that level _and_ its corresponding `oxide` form at the time.
 4. [`oxide/`](oxide/) — an implementation of Oxide in OCaml
     - Currently, it's just the type checker, but we will eventually have an interpreter too.
-    - We require OCaml 4.08 and for now need to use two pins for ppx.
-      - `opam pin add ppx_tools https://github.com/ocaml-ppx/ppx_tools.git#master`
-      - `opam pin add ppx_deriving https://github.com/gasche/ppx_deriving.git#4.08-support`
+    - We require OCaml 4.08 for user-defined binding form support.
 5. [`reducer/`](reducer/) — a desugarer (simple compiler) from (a subset of) Rust to Oxide
     - Run reducer with `RUSTFLAGS='--cfg procmacro2_semver_exempt'` for source filename tracking.
 6. [`runner/`](runner/) — a test harness for driving the reducer/typechecker. 
