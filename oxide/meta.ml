@@ -69,10 +69,11 @@ let subst_many (ty : ty) (pairs : (ty * ty_var) list) : ty =
 let rec decompose (ty : ty) (path : path) : (ty_ctx * ty) tc =
   let (loc, ty) = ty
   in match (ty, path) with
-  | (ty, []) -> Succ (Hole, (loc, ty))
+  | (ty, []) -> Succ ((inferred, Hole), (loc, ty))
   | (Tup tys, (Index n) :: path) ->
     let* (inner_ctx, ty) = decompose (List.nth tys n) path
-    in let ctx : ty_ctx = Tup (List.mapi (fun idx ty -> if idx = n then inner_ctx else Ty ty) tys)
+    in let replace (idx : int) (ty : ty) : ty_ctx = if idx = n then inner_ctx else (fst ty, Ty ty)
+    in let ctx : ty_ctx = (loc, Tup (List.mapi replace tys))
     in Succ (ctx, ty)
   | (Struct _, (Field _) :: _) -> failwith "unimplemented"
   | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
@@ -86,6 +87,13 @@ let rec compute_ty (ty : ty) (path : expr_path) : ty tc =
   | (Tup tys, (Index n) :: path) -> compute_ty (List.nth tys n) path
   | (Struct _, (Field _) :: _) -> failwith "unimplemented"
   | (ty, path) -> Fail (InvalidOperationOnTypeEP (path, (loc, ty)))
+
+let rec plug (fill : ty) (ctx : ty_ctx) : ty =
+  let (loc, ctx) = ctx
+  in match ctx with
+  | Hole -> fill
+  | Ty ty -> ty
+  | Tup ctx -> (loc, Tup (List.map (plug fill) ctx))
 
 (* var env operations *)
 
@@ -120,6 +128,19 @@ let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
     | Some _ -> true
     | None -> false)
   | None -> false
+
+let var_env_type_update (gamma : var_env) (pi : place) (ty : ty) : var_env tc =
+  let (root, path) = snd pi
+  in match List.assoc_opt root gamma with
+  | Some root_ty ->
+    let* (ctx, _) = decompose root_ty path
+    in Succ (replace_assoc gamma root (plug ty ctx))
+  | None -> Fail (UnboundPlace pi)
+
+let var_env_uninit_many (gamma : var_env) (vars : var list) : var_env =
+  let work (entry : var * ty) : var * ty =
+    if List.mem (fst entry) vars then (fst entry, (inferred, Uninit (snd entry))) else entry
+  in List.map work gamma
 
 let var_env_include (gamma : var_env) (x : var) (typ : ty) = List.cons (x, typ) gamma
 let var_env_append (gamma1 : var_env) (gamma2 : var_env) = List.append gamma1 gamma2
@@ -353,6 +374,58 @@ and free_provs (expr : expr) : provs =
   | RecStruct (_, provs, _, es) ->
     List.flatten (provs :: List.map (fun x -> free_provs (snd x)) es)
   | TupStruct (_, provs, _) -> provs
+
+let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) : var list tc =
+   let nc (var : var) : bool tc = noncopyable sigma (List.assoc var gamma)
+   in let rec free (expr : expr) : var list tc =
+     match snd expr with
+     | Prim _ | Fn _ | Abort _ -> Succ []
+     | BinOp (_, e1, e2)
+     | While (e1, e2)
+     | Seq (e1, e2) ->
+       let* free1 = free e1
+       in let* free2 = free e2
+       in Succ (List.append free1 free2)
+     | Move (_, (root, _))
+     | Borrow (_, _, (_, (root, _)))
+     | Ptr (_, (_, (root, _))) ->
+       let* noncopyable = nc root
+       in if noncopyable then Succ [root] else Succ []
+     | BorrowIdx (_, _, (_, (root, _)), e1)
+     | Idx ((_, (root, _)), e1)
+     | Assign ((_, (root, _)), e1) ->
+       let* free1 = free e1
+       in Succ (List.cons root free1)
+     | BorrowSlice (_, _, (_, (root, _)), e1, e2) ->
+       let* free1 = free e1
+       in let* free2 = free e2
+       in let* noncopyable = nc root
+       in Succ (List.concat [if noncopyable then [root] else []; free1; free2])
+     | LetProv (_, e) -> free e
+     | Let (x, _, e1, e2)
+     | For (x, e1, e2) ->
+       let* free1 = free e1
+       in let* free2 = free e2
+       in Succ (List.append free1 (List.filter ((!=) x) free2))
+     | Fun _ -> Succ [] (* FIXME: actually implement *)
+     | App (e1, _, _, exprs) ->
+       let* frees = free_many exprs
+       in let* free1 = free e1
+       in Succ (List.append free1 frees)
+     | Branch (e1, e2, e3) ->
+       let* free1 = free e1
+       in let* free2 = free e2
+       in let* free3 = free e3
+       in Succ (List.concat [free1; free2; free3])
+     | Tup exprs | Array exprs -> free_many exprs
+     | RecStruct _ | TupStruct _ -> Succ [] (* FIXME: implement *)
+   and free_many (exprs : expr list) : var list tc =
+     let work (expr : expr) (acc : var list tc) : var list tc =
+       let* free_so_far = acc
+       in let* free = free expr
+       in Succ (List.append free free_so_far)
+     in List.fold_right work exprs (Succ [])
+   in free expr
 
 let free_provs_var_env (gamma : var_env) : provs =
   List.flatten (List.map (fun x -> free_provs_ty (snd x)) gamma)

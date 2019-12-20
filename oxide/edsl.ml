@@ -38,6 +38,7 @@ let uniq : owned = Unique
 let prod (tys : ty list) : ty = (loc(), Tup tys)
 let (~&) (prov : prov_var) (omega : owned) (ty : ty) : ty =
   (loc(), Ref ((loc(), prov), omega, ty))
+let uninit (ty : ty) : ty = (fst ty, Uninit ty)
 
 let unit : expr = (static, Prim Unit)
 let tru : expr = (static, Prim True)

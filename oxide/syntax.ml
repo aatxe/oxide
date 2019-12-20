@@ -89,11 +89,12 @@ and ty = source_loc * prety [@@deriving show]
 and var_env = (var * ty) list [@@deriving show]
 
 (* invariant: a type context should only ever include one hole *)
-type ty_ctx =
+type prety_ctx =
   | Hole
   | Ty of ty
   | Tup of ty_ctx list
 [@@deriving show]
+and ty_ctx = source_loc * prety_ctx [@@deriving show]
 
 (* is the given type a sized type? *)
 let is_sized (typ : ty) : bool =

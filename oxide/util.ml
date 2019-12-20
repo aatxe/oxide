@@ -13,6 +13,10 @@ let list_union (xs : 'a list) (ys : 'a list) : 'a list =
 let replace xs i x =
   List.mapi (fun idx elem -> if idx = i then x else elem) xs
 
+(* replace the element value associated with the given key in xs with new_value *)
+let replace_assoc xs key new_value =
+  List.map (fun (k, v) -> if k = key then (k, new_value) else (k, v)) xs
+
 let unwrap (opt : 'a option) : 'a =
   match opt with
   | Some x -> x
