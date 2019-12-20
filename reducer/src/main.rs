@@ -739,9 +739,18 @@ impl PrettyPrintPlaceExpr for Expr {
         }
 
         if let Expr::Path(expr) = self {
-            return Doc::text("Var")
-                .append(Doc::space())
-                .append(quote(expr.path.to_doc()))
+            return parenthesize(
+                expr.span().to_doc()
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(parenthesize(
+                        quote(expr.path.to_doc())
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            .append(Doc::text("[]"))
+                            .group()
+                    ))
+            )
         }
 
         if let Expr::Unary(expr) = self {
@@ -863,7 +872,7 @@ impl PrettyPrint for Expr {
                         Doc::text("Move")
                             .append(Doc::space())
                             .append(parenthesize(expr.to_place_expr_doc()))
-                            )
+                    )
             )
         }
 

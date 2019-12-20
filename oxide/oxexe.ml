@@ -4,14 +4,14 @@ open Oxide.Typeck
 open Borrowck (* examples from rust's borrowck tests *)
 open Polonius (* examples from me, Niko, or the nll tests *)
 
-let print_is_safe (ell : loan_env) (gamma : place_env) (omega : owned) (pi : place_expr) =
-  (match is_safe dummy ell gamma omega pi with
+let print_is_safe (ell : loan_env) (gamma : var_env) (omega : owned) (pi : place_expr) =
+  (match is_safe ell gamma omega pi with
    | Fail err ->
      Format.printf "ERROR: %a@." pp_tc_error err
    | Succ None ->
-     Format.printf "%a is %a safe in@.  %a@." pp_place_expr pi pp_owned omega pp_place_env gamma
+     Format.printf "%a is %a safe in@.  %a@." pp_place_expr pi pp_owned omega pp_var_env gamma
    | Succ (Some _) ->
-     Format.printf "%a is not %a safe in@.  %a@." pp_place_expr pi pp_owned omega pp_place_env gamma)
+     Format.printf "%a is not %a safe in@.  %a@." pp_place_expr pi pp_owned omega pp_var_env gamma)
 
 let print_tc (sigma : global_env) (expr : expr) =
   match type_check sigma empty_delta empty_ell empty_gamma expr with
@@ -19,7 +19,7 @@ let print_tc (sigma : global_env) (expr : expr) =
     Format.printf "%a@. under %a@. and@. %a@."
       pp_ty ty
       pp_loan_env ellPrime
-      pp_place_env gammaPrime
+      pp_var_env gammaPrime
   | Fail err -> Format.printf "ERROR: %a@." pp_tc_error err
 
 let print_tc_closed (expr : expr) = print_tc empty_sigma expr

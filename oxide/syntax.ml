@@ -13,54 +13,58 @@ type field = string [@@deriving show]
 
 type subtype_modality = Combine | Override [@@deriving show]
 type owned = Shared | Unique [@@deriving show]
-type place =
-  | Var of var
-  | FieldProj of place * field
-  | IndexProj of place * int
+type path_entry =
+  | Field of field
+  | Index of int
 [@@deriving show]
+type path = path_entry list [@@deriving show]
+type preplace = var * path [@@deriving show]
+type place = source_loc * preplace [@@deriving show]
 type places = place list [@@deriving show]
-type place_expr =
-  | Var of var
-  | Deref of place_expr
-  | FieldProj of place_expr * field
-  | IndexProj of place_expr * int
+type expr_path_entry =
+  | Field of field
+  | Index of int
+  | Deref
 [@@deriving show]
+type expr_path = expr_path_entry list [@@deriving show]
+type preplace_expr = var * expr_path [@@deriving show]
+type place_expr = source_loc * preplace_expr [@@deriving show]
 
-type place_expr_part = Deref | FieldProj of field | IndexProj of int [@@deriving show]
-type place_expr_parts = place_expr_part list [@@deriving show]
+let path_entry_to_expr_path_entry (entry : path_entry) : expr_path_entry =
+  match entry with
+  | Field f -> Field f
+  | Index i -> Index i
 
-let rec to_parts (phi : place_expr) : place_expr_parts =
-  match phi with
-  | Var _ -> []
-  | Deref inner -> List.append (to_parts inner) [Deref]
-  | FieldProj (inner, field) -> List.append (to_parts inner) [FieldProj field]
-  | IndexProj (inner, idx) -> List.append (to_parts inner) [IndexProj idx]
+let path_to_expr_path (path : path) : expr_path = List.map path_entry_to_expr_path_entry path
 
-let rec place_to_place_expr (pi : place) : place_expr =
-  match pi with
-  | Var var -> Var var
-  | FieldProj (pi_prime, field) -> FieldProj (place_to_place_expr pi_prime, field)
-  | IndexProj (pi_prime, idx) -> IndexProj (place_to_place_expr pi_prime, idx)
+let place_to_place_expr (pi : place) : place_expr =
+  let (root, path) = snd pi
+  in (fst pi, (root, path_to_expr_path path))
 
-let rec place_expr_to_place (pi : place_expr) : place option =
-  match pi with
-  | Var var -> Some (Var var)
-  | Deref _ -> None
-  | FieldProj (pi_prime, field) ->
-    (match place_expr_to_place pi_prime with
-     | Some pi_prime -> Some (FieldProj (pi_prime, field))
-     | None -> None)
-  | IndexProj (pi_prime, idx) ->
-    (match place_expr_to_place pi_prime with
-    | Some pi_prime -> Some (IndexProj (pi_prime, idx))
-    | None -> None)
+let expr_path_entry_to_path_entry (entry : expr_path_entry) : path_entry option =
+  match entry with
+  | Field f -> Some (Field f)
+  | Index i -> Some (Index i)
+  | Deref -> None
+
+let expr_path_to_path (path : expr_path) : path option =
+  let work (entry : expr_path_entry) (acc : path option) : path option =
+    match acc with
+    | Some path ->
+      (match expr_path_entry_to_path_entry entry with
+       | Some entry -> Some (List.cons entry path)
+       | None -> None)
+    | None -> None
+  in List.fold_right work path (Some [])
+
+let place_expr_to_place (pi : place_expr) : place option =
+  let (root, path) = snd pi
+  in match expr_path_to_path path with
+  | Some path -> Some (fst pi, (root, path))
+  | None -> None
 
 (* returns true if the place expression doesn't contain any dereferencing *)
-let rec place_expr_is_place (pi : place_expr) : bool =
-  match pi with
-  | Var _ -> true
-  | Deref _ -> false
-  | FieldProj (pi_prime, _) | IndexProj (pi_prime, _) -> place_expr_is_place pi_prime
+let place_expr_is_place (pi : place_expr) : bool = List.mem Deref (sndsnd pi)
 
 type loan = owned * place_expr [@@deriving show]
 type loans = loan list [@@deriving show]
@@ -74,14 +78,23 @@ type prety =
   | BaseTy of base_ty
   | TyVar of ty_var
   | Ref of prov * owned * ty
-  | Fun of prov list * ty_var list * ty list * place_env * ty
+  | Fun of prov list * ty_var list * ty list * var_env * ty
   | Array of ty * int
   | Slice of ty
   | Tup of ty list
   | Struct of struct_var * prov list * ty list
+  | Uninit of ty
 [@@deriving show]
 and ty = source_loc * prety [@@deriving show]
-and place_env = (place * ty) list [@@deriving show]
+and var_env = (var * ty) list [@@deriving show]
+
+(* invariant: a type context should only ever include one hole *)
+type prety_ctx =
+  | Hole
+  | Ty of ty
+  | Tup of ty_ctx list
+[@@deriving show]
+and ty_ctx = source_loc * prety_ctx [@@deriving show]
 
 (* is the given type a sized type? *)
 let is_sized (typ : ty) : bool =
@@ -156,6 +169,7 @@ and expr = source_loc * preexpr
 [@@deriving show]
 
 type value =
+  | Dead
   | Prim of prim
   | Fun of prov list * ty_var list * (var * ty) list * expr
   | Tup of value list
@@ -163,16 +177,7 @@ type value =
   | Ptr of owned * place
 [@@deriving show]
 
-type shape =
-  | Hole
-  | Prim of prim
-  | Fun of prov list * ty_var list * (var * ty) list * expr
-  | Tup of unit list
-  | Array of value list
-  | Ptr of owned * place
-[@@deriving show]
-
-type store = (place * shape) list [@@deriving show]
+type store = (var * value) list [@@deriving show]
 
 type fn_def = fn_var * prov list * ty_var list * (var * ty) list * ty * expr
 [@@deriving show]
@@ -207,7 +212,7 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
     in let tys = List.map (fun var -> (inferred, TyVar var)) tyvars
     in let body =
       (inferred, (App ((inferred, TupStruct (name, provs, tys)), provs, tys,
-                     List.map (fun pair -> (inferred, Move (Var (fst pair)))) params)))
+                     List.map (fun pair -> (inferred, Move (inferred, (fst pair, [])))) params)))
     in Some (name, provs, tyvars, params, (inferred, Struct (name, provs, tys)), body)
   | _ -> None
 
@@ -271,8 +276,8 @@ let loan_env_exclude (ell : loan_env) (var : prov) : loan_env =
    (List.filter (fun v -> v != (snd var)) (sndfst ell),
     List.filter (fun cs -> fst cs != snd var || snd cs != snd var) (sndsnd ell)))
 
-(* place_env is mutually recursive with ty and as such, is defined above *)
-let empty_gamma : place_env = []
+(* var_env is mutually recursive with ty and as such, is defined above *)
+let empty_gamma : var_env = []
 
 type struct_kind = Rec | Tup [@@deriving show]
 
@@ -281,26 +286,28 @@ type tc_error =
   | TypeMismatchIterable of ty (* found *)
   | TypeMismatchFunction of ty (* found *)
   | TypeMismatchRef of ty (* found *)
-  | PlaceEnvMismatch of source_loc * place_env * place_env (* source_loc * expected * found *)
+  | VarEnvMismatch of source_loc * var_env * var_env (* source_loc * expected * found *)
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
-  | SafetyErr of source_loc * (owned * place_expr) * (owned * place_expr)
-                (* source_loc * attempted access * conflicting loan *)
-  | PermissionErr of source_loc * (owned * place_expr) * ty
-                     (* source_loc * attempted access * ty that doesn't permit this access *)
-  | CannotMove of source_loc * place_expr
+  | SafetyErr of (owned * place_expr) * (owned * place_expr)
+                (* attempted access * conflicting loan *)
+  | PermissionErr of (owned * place_expr) * ty
+                     (* attempted access * ty that doesn't permit this access *)
+  | CannotMove of place_expr
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var
   | WrongStructConstructor of source_loc * struct_var * struct_kind
   | InvalidType of ty
   | InvalidProv of prov
-  | InvalidLoan of source_loc * owned * place_expr
+  | InvalidLoan of owned * place_expr
   | InvalidArrayLen of ty * int
-  | InvalidOperationOnType of place_expr_part * ty
+  | InvalidOperationOnType of path * ty
+  | InvalidOperationOnTypeEP of expr_path * ty
   | DuplicateFieldsInStructDef of struct_var * (field * ty) * (field * ty)
   | InvalidCopyImpl of struct_var * ty (* for struct * because of ty *)
-  | UnboundPlace of source_loc * place
-  | UnboundPlaceExpr of source_loc * place_expr
+  | UnboundPlace of place
+  | UnboundPlaceExpr of place_expr
+  | PlaceExprNotAPlace of place_expr
   | AbsProvsNotSubtype of prov * prov
 [@@deriving show]
 
