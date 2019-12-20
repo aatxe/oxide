@@ -1416,7 +1416,7 @@ impl PrettyPrint for FieldValue {
 impl PrettyPrint for UnOp {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         Doc::text(match self {
-            UnOp::Deref(_) => "Deref",
+            UnOp::Deref(_) => "~*",
             UnOp::Not(_) => "Not",
             UnOp::Neg(_) => "Neg",
         })
