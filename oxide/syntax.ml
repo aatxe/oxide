@@ -81,8 +81,9 @@ type prety =
   | Fun of prov list * ty_var list * ty list * var_env * ty
   | Array of ty * int
   | Slice of ty
+  | Rec of (field * ty) list
   | Tup of ty list
-  | Struct of struct_var * prov list * ty list
+  | Struct of struct_var * prov list * ty list * ty option
   | Uninit of ty
 [@@deriving show]
 and ty = source_loc * prety [@@deriving show]
@@ -92,6 +93,8 @@ and var_env = (var * ty) list [@@deriving show]
 type prety_ctx =
   | Hole
   | Ty of ty
+  | Tagged of struct_var * prov list * ty list * ty_ctx
+  | Rec of (field * ty_ctx) list
   | Tup of ty_ctx list
 [@@deriving show]
 and ty_ctx = source_loc * prety_ctx [@@deriving show]
@@ -207,13 +210,14 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
     | _ -> false
   in match List.find_opt is_right_fn sigma with
   | Some (FnDef defn) -> Some defn
-  | Some (TupStructDef (_, name, provs, tyvars, tys)) ->
-    let params = List.mapi (fun i ty -> (string_of_int i, ty)) tys
+  | Some (TupStructDef (_, name, provs, tyvars, param_tys)) ->
+    let params = List.mapi (fun i ty -> (string_of_int i, ty)) param_tys
     in let tys = List.map (fun var -> (inferred, TyVar var)) tyvars
+    in let tagged_ty : ty option = Some (inferred, Tup param_tys)
     in let body =
       (inferred, (App ((inferred, TupStruct (name, provs, tys)), provs, tys,
                      List.map (fun pair -> (inferred, Move (inferred, (fst pair, [])))) params)))
-    in Some (name, provs, tyvars, params, (inferred, Struct (name, provs, tys)), body)
+    in Some (name, provs, tyvars, params, (inferred, Struct (name, provs, tys, tagged_ty)), body)
   | _ -> None
 
 let global_env_find_struct (sigma : global_env) (name : struct_var) : struct_def option =
@@ -286,6 +290,7 @@ type tc_error =
   | TypeMismatchIterable of ty (* found *)
   | TypeMismatchFunction of ty (* found *)
   | TypeMismatchRef of ty (* found *)
+  | TypeMismatchArray of ty (* found *)
   | VarEnvMismatch of source_loc * var_env * var_env (* source_loc * expected * found *)
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
   | SafetyErr of (owned * place_expr) * (owned * place_expr)

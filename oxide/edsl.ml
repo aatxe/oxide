@@ -20,7 +20,7 @@ let (x_mut, ref_x, ref_x_mut) = ("x_mut", "ref_x", "ref_x_mut")
 (* provenance variables for use in programs *)
 let (p1, p2, p3, p4, p5, p6) = ("'a", "'b", "'c", "'d", "'e", "'f")
 
-(* function names for use in prograrms *)
+(* function names for use in programs *)
 let (gimmie) = ("gimmie")
 
 (* short-hand for use in programs *)
@@ -28,6 +28,8 @@ let fn (name : fn_var) (provs : prov list) (tyvars : ty_var list)
     (params : (var * ty) list) (ret_ty : ty) (body : expr) : global_entry =
   FnDef (name, provs, tyvars, params, ret_ty, body)
 let (@:) (var : var) (ty : ty) : var * ty = (var, ty)
+let structy (tag : struct_var) (provs : prov list) (tys : ty list) : prety =
+  Struct (tag, provs, tys, None)
 
 let (~:) (ty : ty) : ty = ty
 let u32 : ty = (static, BaseTy U32)

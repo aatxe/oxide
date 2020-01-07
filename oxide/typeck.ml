@@ -72,10 +72,11 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
     (* UT-Tuple *)
     | (Tup tys1, Tup tys2) -> sub_many ell tys1 tys2
     (* UT-Struct *)
-    | (Struct (name1, provs1, tys1), Struct (name2, provs2, tys2)) ->
+    | (Struct (name1, provs1, tys1, tagged_ty1), Struct (name2, provs2, tys2, tagged_ty2)) ->
       if name1 = name2 then
         let* ell_provs = subtype_prov_many mode ell provs1 provs2
-        in sub_many ell_provs tys1 tys2
+        in let* ell_tys = sub_many ell_provs tys1 tys2
+        in sub_opt ell_tys tagged_ty1 tagged_ty2
       else Fail (UnificationFailed (ty1, ty2))
     (* UT-Function *)
     | (Fun (prov1, tyvar1, tys1, _, ret_ty1), Fun (prov2, tyvar2, tys2, _, ret_ty2)) ->
@@ -92,6 +93,10 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
       let* ell = acc
       in sub ell (fst tys) (snd tys)
     in List.fold_left work (Succ ell) (List.combine tys1 tys2)
+  and sub_opt (ell : loan_env) (ty1 : ty option) (ty2 : ty option) : loan_env tc =
+    match (ty1, ty2) with
+    | (Some ty1, Some ty2) -> sub ell ty1 ty2
+    | (Some _, None) | (None, Some _) | (None, None) -> Succ ell
   in sub ell ty1 ty2
 
 let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
@@ -168,9 +173,10 @@ let valid_type (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : va
         in if snd ty_pi = snd ty then Succ ()
         else Fail (TypeMismatch (ty, ty_pi))
       in List.fold_right work place_exprs (Succ ())
-    | Fun _ -> failwith "unimplemented"
+    | Fun _ -> failwith "unimplemented: WF-Function"
     | Array (typ, n) -> if n >= 0 then valid typ else Fail (InvalidArrayLen (ty, n))
     | Uninit typ | Slice typ -> valid typ
+    | Rec pairs -> valid_many (List.map snd pairs)
     | Tup tys -> valid_many tys
     | Struct _ -> Succ () (* TODO: use sigma *)
   and valid_many (tys : ty list) =
@@ -319,7 +325,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
             let* copy = copyable sigma ty
             in if copy then Succ (ty, ell1, gamma1)
             else Fail (CannotMove pi)
-          | Succ (found, _) -> Fail (TypeMismatch ((dummy, Array ((dummy, Any), -1)), found))
+          | Succ (found, _) -> Fail (TypeMismatchArray found)
           | Fail err -> Fail err)
        | Succ (found, _, _) -> Fail (TypeMismatch ((dummy, BaseTy U32), found))
        | Fail err -> Fail err)
@@ -477,7 +483,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
            in let* ell_final = subtype Combine ell_prime found_ty expected_ty
            in Succ (ell_final, gamma_prime)
          in let* (ell_prime, gamma_prime) = List.fold_left tc_exp (Succ (ell, gamma)) pairs
-         in Succ ((inferred, Struct (name, provs, tys)), ell_prime, gamma_prime)
+         in let tagged_ty : ty option = Some (inferred, Rec dfn_fields_sorted)
+         in Succ ((inferred, Struct (name, provs, tys, tagged_ty)), ell_prime, gamma_prime)
        | Some (Tup _) -> Fail (WrongStructConstructor (fst expr, name, Rec))
        | None -> Fail (UnknownStruct (fst expr, name)))
     (* T-TupleStruct *)
@@ -490,7 +497,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          if global_env_find_struct sigma name == None then Fail (UnknownStruct (fst expr, name))
          else Fail (WrongStructConstructor (fst expr, name, Tup)))
     (* T-Pointer *)
-    | Ptr _ -> failwith "unimplemented"
+    | Ptr _ -> failwith "unimplemented: T-Pointer"
   and tc_many (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
       (exprs : expr list) : (ty list * loan_env * var_env) tc =
     let work (e : expr) (acc : (ty list * loan_env * var_env) tc) =

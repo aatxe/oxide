@@ -32,13 +32,17 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
       else ty
     | Array (ty, n) -> (loc, Array (sub ty, n))
     | Slice ty -> (loc, Slice (sub ty))
+    | Rec pairs -> (loc, Rec (sub_many_pairs pairs))
     | Tup tys -> (loc, Tup (sub_many tys))
-    | Struct (name, provs, tys) ->
+    | Struct (name, provs, tys, tagged_ty) ->
       let work (pv : prov) (provs : provs) =
         List.cons (if (snd pv) = (snd that) then this else pv) provs
       in let new_provs = List.fold_right work provs []
-      in (loc, Struct (name, new_provs, sub_many tys))
+      in (loc, Struct (name, new_provs, sub_many tys, sub_opt tagged_ty))
   and sub_many (tys : ty list) : ty list = List.map sub tys
+  and sub_many_pairs (pairs : (field * ty) list) : (field * ty) list =
+    List.map (fun (f, ty) -> (f, sub ty)) pairs
+  and sub_opt (ty : ty option) : ty option = Option.map sub ty
   in sub ty
 
 let subst_many_prov (ty : ty) (pairs : (prov * prov) list) : ty =
@@ -57,9 +61,14 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
       else ty
     | Array (ty, n) -> (loc, Array (sub ty, n))
     | Slice ty -> (loc, Slice (sub ty))
+    | Rec pairs -> (loc, Rec (sub_many_pairs pairs))
     | Tup tys -> (loc, Tup (sub_many tys))
-    | Struct (name, provs, tys) -> (loc, Struct (name, provs, sub_many tys))
+    | Struct (name, provs, tys, tagged_ty) ->
+      (loc, Struct (name, provs, sub_many tys, sub_opt tagged_ty))
   and sub_many (tys : ty list) : ty list = List.map sub tys
+  and sub_many_pairs (pairs : (field * ty) list) : (field * ty) list =
+    List.map (fun (f, ty) -> (f, sub ty)) pairs
+  and sub_opt (ty : ty option) : ty option = Option.map sub ty
   in sub ty
 
 let subst_many (ty : ty) (pairs : (ty * ty_var) list) : ty =
@@ -70,12 +79,18 @@ let rec decompose (ty : ty) (path : path) : (ty_ctx * ty) tc =
   let (loc, ty) = ty
   in match (ty, path) with
   | (ty, []) -> Succ ((inferred, Hole), (loc, ty))
+  | (Rec pairs, (Field f) :: path) ->
+    let* (inner_ctx, ty) = decompose (List.assoc f pairs) path
+    in let replace (pair : field * ty) : field * ty_ctx =
+      if fst pair = f then (f, inner_ctx) else (fst pair, (fst ty, Ty ty))
+    in let ctx : ty_ctx = (loc, Rec (List.map replace pairs))
+    in Succ (ctx, ty)
   | (Tup tys, (Index n) :: path) ->
     let* (inner_ctx, ty) = decompose (List.nth tys n) path
     in let replace (idx : int) (ty : ty) : ty_ctx = if idx = n then inner_ctx else (fst ty, Ty ty)
     in let ctx : ty_ctx = (loc, Tup (List.mapi replace tys))
     in Succ (ctx, ty)
-  | (Struct _, (Field _) :: _) -> failwith "unimplemented"
+  | (Struct (_, _, _, Some ty), path) -> decompose ty path
   | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
 
 (* find the type of the expr path based on the original type *)
@@ -84,8 +99,9 @@ let rec compute_ty (ty : ty) (path : expr_path) : ty tc =
   in match (ty, path) with
   | (ty, []) -> Succ (loc, ty)
   | (Ref (_, _, ty), Deref :: path) -> compute_ty ty path
+  | (Rec pairs, (Field f) :: path) -> compute_ty (List.assoc f pairs) path
   | (Tup tys, (Index n) :: path) -> compute_ty (List.nth tys n) path
-  | (Struct _, (Field _) :: _) -> failwith "unimplemented"
+  | (Struct (_, _, _, Some ty), path) -> compute_ty ty path
   | (ty, path) -> Fail (InvalidOperationOnTypeEP (path, (loc, ty)))
 
 let rec plug (fill : ty) (ctx : ty_ctx) : ty =
@@ -93,6 +109,8 @@ let rec plug (fill : ty) (ctx : ty_ctx) : ty =
   in match ctx with
   | Hole -> fill
   | Ty ty -> ty
+  | Tagged (tag, provs, tys, ctx) -> (loc, Struct (tag, provs, tys, Some (plug fill ctx)))
+  | Rec pair -> (loc, Rec (List.map (fun (f, ctx) -> (f, plug fill ctx)) pair))
   | Tup ctx -> (loc, Tup (List.map (plug fill) ctx))
 
 (* var env operations *)
@@ -156,8 +174,9 @@ let rec all_loans (omega : owned) (ell : loan_env) (gamma : var_env) : loans =
       else work typ loans
     | Fun (_, _, _, gamma_c, _) -> List.append loans (all_loans omega ell gamma_c)
     | Uninit typ | Array (typ, _) | Slice typ -> work typ loans
+    | Rec pairs -> List.fold_right List.append (List.map (fun pr -> work (snd pr) []) pairs) loans
     | Tup typs -> List.fold_right List.append (List.map (fun typ -> work typ []) typs) loans
-    | Struct (_, provs, _) ->  List.concat (loans :: List.map (prov_to_loans ell) provs)
+    | Struct (_, provs, _, _) ->  List.concat (loans :: List.map (prov_to_loans ell) provs)
   in List.fold_right (fun entry -> work (snd entry)) gamma []
 
 (* find the root of a given place expr *)
@@ -249,8 +268,9 @@ let rec contains_prov (gamma : var_env) (prov : prov) =
         ty_contains ret_ty || tys_contains tys || contains_prov gam prov
       else false
     | Uninit ty | Array (ty, _) | Slice ty -> ty_contains ty
+    | Rec pairs -> tys_contains (List.map snd pairs)
     | Tup tys -> tys_contains tys
-    | Struct (_, pvs, _) -> List.mem prov pvs
+    | Struct (_, pvs, _, _) -> List.mem prov pvs
   and tys_contains (tys : ty list) : bool =
     List.exists ty_contains tys
   in List.exists (fun pair -> ty_contains (snd pair)) gamma
@@ -266,6 +286,7 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
     | Some (_, Any) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
     | Some (_, Struct _) -> pair
     | Some (_, Uninit ty) | Some (_, Array (ty, _)) | Some (_, Slice ty) -> loop (Some ty) pair
+    | Some (_, Rec pairs) -> loops (List.map snd pairs) pair
     | Some (_, Tup tys) -> loops tys pair
     | None -> Succ (ell, gamma)
   and loops (tys : ty list) (pair : (loan_env * var_env) tc) =
@@ -294,13 +315,19 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   | Fun (_, _, _, _, _) -> Succ false
   | Array (typPrime, _) -> noncopyable sigma typPrime
   | Slice typPrime -> noncopyable sigma typPrime
+  | Rec pairs ->
+    let work (acc : bool tc) (pair : field * ty) : bool tc =
+      let* res = acc
+      in let* ty_noncopyable = noncopyable sigma (snd pair)
+      in Succ (res || ty_noncopyable)
+    in List.fold_left work (Succ false) pairs
   | Tup typs ->
     let work (acc : bool tc) (typ : ty) : bool tc =
       let* res = acc
       in let* ty_noncopyable = noncopyable sigma typ
       in Succ (res || ty_noncopyable)
     in List.fold_left work (Succ false) typs
-  | Struct (name, _, _) ->
+  | Struct (name, _, _, _) ->
     match  global_env_find_struct sigma name with
     | Some (Rec (copyable, _, _, _, _)) | Some (Tup (copyable, _, _, _, _)) -> Succ (not copyable)
     | None -> Fail (UnknownStruct (fst typ, name))
@@ -344,8 +371,9 @@ let rec free_provs_ty (ty : ty) : provs =
   | Ref (prov, _, ty) -> List.cons prov (free_provs_ty ty)
   | Fun _ -> [] (* FIXME: actually implement *)
   | Array (ty, _) | Slice ty -> free_provs_ty ty
+  | Rec tys -> List.flatten (List.map (fun pair -> free_provs_ty (snd pair)) tys)
   | Tup tys -> List.flatten (List.map free_provs_ty tys)
-  | Struct (_, provs, tys) -> List.flatten (List.cons provs (List.map free_provs_ty tys))
+  | Struct (_, provs, tys, _) -> List.flatten (List.cons provs (List.map free_provs_ty tys))
 and free_provs (expr : expr) : provs =
   match snd expr with
   | Prim _ | Move _ | Fn _ | Abort _ | Ptr _ -> []

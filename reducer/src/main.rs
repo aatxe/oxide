@@ -190,11 +190,10 @@ fn resolve_name(path: Path, is_type: bool) -> PP {
             .append(quote(Doc::text(name)))
             .group()
     } else {
-        Doc::text(if is_type { "Struct" } else { "TupStruct" })
+        Doc::text(if is_type { "structy" } else { "TupStruct" })
             .append(Doc::space())
-            .append(parenthesize(
+            .append(
                 quote(Doc::text(name))
-                    .append(Doc::text(","))
                     .append(Doc::space())
                     .append(
                         Doc::text("[")
@@ -202,7 +201,6 @@ fn resolve_name(path: Path, is_type: bool) -> PP {
                             .append(Doc::text("]"))
                             .group()
                     )
-                    .append(Doc::text(","))
                     .append(Doc::space())
                     .append(
                         Doc::text("[")
@@ -210,7 +208,7 @@ fn resolve_name(path: Path, is_type: bool) -> PP {
                             .append(Doc::text("]"))
                             .group()
                     )
-            ))
+            )
             .group()
     }
 }
