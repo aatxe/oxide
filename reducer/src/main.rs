@@ -24,7 +24,7 @@ fn main() {
     let filename = match (args.next(), args.next()) {
         (Some(filename), None) => filename,
         _ => {
-            eprintln!("Usage: dump-syntax path/to/filename.rs");
+            eprintln!("Usage: reducer path/to/filename.rs");
             process::exit(1);
         }
     };
@@ -46,7 +46,7 @@ fn main() {
     let program =
         Doc::text("let")
         .append(Doc::space())
-        .append(Doc::text("prog"))
+        .append(Doc::text("sigma"))
         .append(Doc::space())
         .append(Doc::text(":"))
         .append(Doc::space())
@@ -70,7 +70,7 @@ fn main() {
         .append(Doc::space())
         .append(Doc::text("wf_global_env"))
         .append(Doc::space())
-        .append(Doc::text("prog"))
+        .append(Doc::text("sigma"))
         .append(Doc::space())
         .append(Doc::text("with"))
         .nest(2)
@@ -91,7 +91,7 @@ fn main() {
                 .append(Doc::space())
                 .append(Doc::text("pp_global_env"))
                 .append(Doc::space())
-                .append(Doc::text("prog"))
+                .append(Doc::text("sigma"))
                 .group()
         )
         .append(Doc::newline())
@@ -123,7 +123,7 @@ fn main() {
                         .append(
                             Doc::text("pp_global_env")
                                 .append(Doc::space())
-                                .append(Doc::text("prog"))
+                                .append(Doc::text("sigma"))
                                 .group()
                         )
                         .nest(2)
