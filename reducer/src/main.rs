@@ -10,6 +10,8 @@ use syn::spanned::Spanned;
 
 type PP = Doc<'static, BoxDoc<'static, ()>>;
 
+enum ResolutionType { FunName, StructName, TypeVar }
+
 static mut LAST_SYM: u64 = 0;
 
 fn gensym() -> PP {
@@ -170,7 +172,7 @@ fn quote(doc: PP) -> PP {
 //   (1) a lowercase path is a function name
 //   (2) an uppercase path is a type variable if the is_type flag is true and the length is 1
 //   (3) an uppercase path is otherwise a struct name
-fn resolve_name(path: Path, is_type: bool) -> PP {
+fn resolve_name(path: Path, is_type: bool) -> (PP, ResolutionType) {
     let last_args1 = path.segments.last().unwrap().value().arguments.clone();
     let last_args2 = last_args1.clone();
     let name = path.segments.iter().fold(String::new(), |mut acc, seg| {
@@ -180,17 +182,17 @@ fn resolve_name(path: Path, is_type: bool) -> PP {
     }).split_off(2);
 
     if name == name.to_lowercase() {
-        Doc::text("Fn")
+        (Doc::text("Fn")
             .append(Doc::space())
             .append(quote(Doc::text(name)))
-            .group()
+            .group(), ResolutionType::FunName)
     } else if is_type && name.len() == 1 {
-        Doc::text("TyVar")
+        (Doc::text("TyVar")
             .append(Doc::space())
             .append(quote(Doc::text(name)))
-            .group()
+            .group(), ResolutionType::TypeVar)
     } else {
-        Doc::text(if is_type { "structy" } else { "TupStruct" })
+        (Doc::text(if is_type { "structy" } else { "tupstruct" })
             .append(Doc::space())
             .append(
                 quote(Doc::text(name))
@@ -209,7 +211,7 @@ fn resolve_name(path: Path, is_type: bool) -> PP {
                             .group()
                     )
             )
-            .group()
+            .group(), ResolutionType::StructName)
     }
 }
 
@@ -724,7 +726,7 @@ impl PrettyPrint for Type {
                             .append(Doc::text("Bool"))
                             .group()
                     } else {
-                        resolve_name(ty.path, true)
+                        resolve_name(ty.path, true).0
                     })
             )
         }
@@ -1285,58 +1287,92 @@ impl PrettyPrint for Expr {
             if let Expr::Path(func) = &*expr.func {
                 let last_args1 = func.path.segments.last().unwrap().value().arguments.clone();
                 let last_args2 = last_args1.clone();
-                return parenthesize(
-                    expr.span().to_doc()
-                        .append(Doc::text(","))
-                        .append(Doc::space())
-                        .append(
-                            Doc::text("App")
-                                .append(Doc::space())
-                                .append(parenthesize(
-                                    parenthesize(
-                                        func.path.span().to_doc()
+                let (resolved, typ) = resolve_name(func.path.clone(), false);
+
+                if let ResolutionType::FunName = typ {
+                    return parenthesize(
+                        expr.span().to_doc()
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            .append(
+                                Doc::text("App")
+                                    .append(Doc::space())
+                                    .append(parenthesize(
+                                        parenthesize(
+                                            func.path.span().to_doc()
+                                                .append(Doc::text(","))
+                                                .append(Doc::space())
+                                                .append(resolved)
+                                        )
                                             .append(Doc::text(","))
                                             .append(Doc::space())
-                                            .append(resolve_name(func.path.clone(), false))
+                                            // provenance variable arguments
+                                            .append(
+                                                Doc::text("[")
+                                                    .append(last_args1.to_lifetime_generics_doc())
+                                                    .append(Doc::text("]"))
+                                                    .group()
+                                            )
+                                            .append(Doc::text(","))
+                                            .append(Doc::space())
+                                            // type variable arguments
+                                            .append(
+                                                Doc::text("[")
+                                                    .append(last_args2.to_type_generics_doc())
+                                                    .append(Doc::text("]"))
+                                                    .group()
+                                            )
+                                            .append(Doc::text(","))
+                                            .append(Doc::space())
+                                            // arguments
+                                            .append(
+                                                Doc::text("[")
+                                                    .append(Doc::intersperse(
+                                                        expr.args
+                                                            .into_iter()
+                                                            .map(|expr| {
+                                                                parenthesize(expr.to_doc())
+                                                            }),
+                                                        Doc::text(";").append(Doc::space())
+                                                    ))
+                                                    .append(Doc::text("]"))
+                                                    .group()
+                                            )
+                                    ))
+                                    .group()
+                            )
+                    )
+                }
+
+                if let ResolutionType::StructName = typ {
+                    return parenthesize(
+                        expr.span().to_doc()
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            .append(
+                                resolved
+                                    .append(Doc::space())
+                                    // arguments
+                                    .append(
+                                        Doc::text("[")
+                                            .append(Doc::intersperse(
+                                                expr.args
+                                                    .into_iter()
+                                                    .map(|expr| {
+                                                        parenthesize(expr.to_doc())
+                                                    }),
+                                                Doc::text(";").append(Doc::space())
+                                            ))
+                                            .append(Doc::text("]"))
+                                            .group()
                                     )
-                                        .append(Doc::text(","))
-                                        .append(Doc::space())
-                                        // provenance variable arguments
-                                        .append(
-                                            Doc::text("[")
-                                                .append(last_args1.to_lifetime_generics_doc())
-                                                .append(Doc::text("]"))
-                                                .group()
-                                        )
-                                        .append(Doc::text(","))
-                                        .append(Doc::space())
-                                        // type variable arguments
-                                        .append(
-                                            Doc::text("[")
-                                                .append(last_args2.to_type_generics_doc())
-                                                .append(Doc::text("]"))
-                                                .group()
-                                        )
-                                        .append(Doc::text(","))
-                                        .append(Doc::space())
-                                        // arguments
-                                        .append(
-                                            Doc::text("[")
-                                                .append(Doc::intersperse(
-                                                    expr.args
-                                                        .into_iter()
-                                                        .map(|expr| {
-                                                            parenthesize(expr.to_doc())
-                                                        }),
-                                                    Doc::text(";").append(Doc::space())
-                                                ))
-                                                .append(Doc::text("]"))
-                                                .group()
-                                        )
-                                ))
-                                .group()
-                        )
-                )
+                                    .group()
+                            )
+                            .group()
+                    )
+                }
+
+                unreachable!()
             } else if let Expr::Closure(_) = *expr.func {
                 return parenthesize(
                     expr.span().to_doc()

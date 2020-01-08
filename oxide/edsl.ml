@@ -30,6 +30,8 @@ let fn (name : fn_var) (provs : prov list) (tyvars : ty_var list)
 let (@:) (var : var) (ty : ty) : var * ty = (var, ty)
 let structy (tag : struct_var) (provs : prov list) (tys : ty list) : prety =
   Struct (tag, provs, tys, None)
+let tupstruct (tag : struct_var) (provs : prov list) (tys : ty list) (exprs : expr list) : preexpr =
+  TupStruct (tag, provs, tys, exprs)
 
 let (~:) (ty : ty) : ty = ty
 let u32 : ty = (static, BaseTy U32)
