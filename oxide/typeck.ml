@@ -39,7 +39,7 @@ let subtype_prov_many (mode : subtype_modality) (ell : loan_env)
   let work (acc : loan_env tc) (provs : prov * prov) : loan_env tc =
     let* ell = acc
     in subtype_prov mode ell (fst provs) (snd provs)
-  in List.fold_left work (Succ ell) (List.combine provs1 provs2)
+  in List.fold_left work (Succ ell) (combine "subtype_prov_many" provs1 provs2)
 
 let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
   let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
@@ -86,7 +86,8 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
     (* UT-Function *)
     | (Fun (prov1, tyvar1, tys1, _, ret_ty1), Fun (prov2, tyvar2, tys2, _, ret_ty2)) ->
       let tyvar_for_sub = List.map (fun x -> (inferred, TyVar x)) tyvar1
-      in let (prov_sub, ty_sub) = (List.combine prov1 prov2, List.combine tyvar_for_sub tyvar2)
+      in let (prov_sub, ty_sub) = (combine "UT-Function: provs" prov1 prov2,
+                                   combine "UT-Function: tyvars" tyvar_for_sub tyvar2)
       in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
       in let alpharenamed_tys2 = List.map do_sub tys2
       in let* ell_prime = sub_many ell alpharenamed_tys2 tys1
@@ -97,7 +98,7 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
     let work (acc : loan_env tc) (tys : ty * ty) : loan_env tc =
       let* ell = acc
       in sub ell (fst tys) (snd tys)
-    in List.fold_left work (Succ ell) (List.combine tys1 tys2)
+    in List.fold_left work (Succ ell) (combine "subtype_many: tys" tys1 tys2)
   and sub_opt (ell : loan_env) (ty1 : ty option) (ty2 : ty option) : loan_env tc =
     match (ty1, ty2) with
     | (Some ty1, Some ty2) -> sub ell ty1 ty2
@@ -442,11 +443,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       (match tc delta ell gamma fn with
        | Succ ((_, Fun (provs, tyvars, params, _, ret_ty)), ellF, gammaF) ->
          let* (arg_tys, ellN, gammaN) = tc_many delta ellF gammaF args
-         in let (prov_sub, ty_sub) = (List.combine new_provs provs,
-                                      List.combine new_tys tyvars)
+         in let (prov_sub, ty_sub) = (combine "T-App: provs" new_provs provs,
+                                      combine "T-App: tys" new_tys tyvars)
          in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
          in let new_params = List.map do_sub params
-         in let ty_pairs = List.combine new_params arg_tys
+         in let ty_pairs = combine "T-App: args" new_params arg_tys
          in let types_match (tys : ty * ty) : bool =
               let (expected, found) = tys
               in (snd expected) == (snd found)
@@ -476,11 +477,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          let fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) fields
          in let dfn_fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) dfn_fields
          in let exprs = List.map snd fields_sorted
-         in let (prov_sub, ty_sub) = (List.combine provs dfn_provs,
-                                      List.combine tys tyvars)
+         in let (prov_sub, ty_sub) = (combine "T-RecStruct: provs" provs dfn_provs,
+                                      combine "T-RecStruct: tys" tys tyvars)
          in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
          in let expected_tys = List.map (fun x -> do_sub (snd x)) dfn_fields_sorted
-         in let pairs = List.combine exprs expected_tys
+         in let pairs = combine "T-RecStruct: fields" exprs expected_tys
          in let tc_exp (acc : (loan_env * var_env) tc) (p : expr * ty) =
            let* (ell, gamma) = acc
            in let (expr, expected_ty) = p
@@ -496,11 +497,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | TupStruct (name, provs, tys, exprs) ->
       (match global_env_find_struct sigma name with
        | Some (Tup (_, _, dfn_provs, tyvars, dfn_tys)) ->
-         let (prov_sub, ty_sub) = (List.combine provs dfn_provs,
-                                   List.combine tys tyvars)
+         let (prov_sub, ty_sub) = (combine "T-TupStruct: provs" provs dfn_provs,
+                                   combine "T-TupStruct: tys" tys tyvars)
          in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
          in let expected_tys = List.map (fun x -> do_sub x) dfn_tys
-         in let pairs = List.combine exprs expected_tys
+         in let pairs = combine "T-TupStruct: args" exprs expected_tys
          in let tc_exp (acc : (loan_env * var_env) tc) (p : expr * ty) =
            let* (ell, gamma) = acc
            in let (expr, expected_ty) = p

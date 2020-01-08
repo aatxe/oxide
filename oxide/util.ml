@@ -47,3 +47,7 @@ let rec partition (pred : 'a -> bool) (lst : 'a list) : 'a list * 'a list =
     let (prefix, suffix) = partition pred tl
     in (List.cons hd prefix, suffix)
   | lst -> ([], lst)
+
+let combine (msg : string) (lst1 : 'a list) (lst2 : 'b list) : ('a * 'b) list =
+  if List.length lst1 != List.length lst2 then failwith msg
+  else List.combine lst1 lst2
