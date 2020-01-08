@@ -580,6 +580,10 @@ impl PrettyPrint for Pat {
             return Doc::text(format!("\"{}\"", pat.ident))
         }
 
+        if let Pat::Wild(_) = self {
+            return Doc::text("\"\"")
+        }
+
         println!("{:#?}", self);
         Doc::text("(failwith \"unimplemented\")")
     }
