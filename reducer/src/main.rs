@@ -633,7 +633,7 @@ impl PrettyPrint for Type {
                             .append(Doc::text("Unit"))
                             .group()
                     } else {
-                        Doc::text("Tup")
+                        Doc::text("tupty")
                             .append(Doc::space())
                             .append(
                                 Doc::text("[")
