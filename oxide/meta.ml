@@ -401,7 +401,7 @@ and free_provs (expr : expr) : provs =
   | Tup es | Array es -> List.flatten (List.map free_provs es)
   | RecStruct (_, provs, _, es) ->
     List.flatten (provs :: List.map (fun x -> free_provs (snd x)) es)
-  | TupStruct (_, provs, _) -> provs
+  | TupStruct (_, provs, _, es) -> List.flatten (provs :: List.map free_provs es)
 
 let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) : var list tc =
    let nc (var : var) : bool tc = noncopyable sigma (List.assoc var gamma)

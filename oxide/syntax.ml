@@ -166,7 +166,7 @@ type preexpr =
   | Tup of expr list
   | Array of expr list
   | RecStruct of struct_var * prov list * ty list * (field * expr) list
-  | TupStruct of struct_var * prov list * ty list
+  | TupStruct of struct_var * prov list * ty list * expr list
   | Ptr of owned * place
 and expr = source_loc * preexpr
 [@@deriving show]
@@ -210,14 +210,6 @@ let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
     | _ -> false
   in match List.find_opt is_right_fn sigma with
   | Some (FnDef defn) -> Some defn
-  | Some (TupStructDef (_, name, provs, tyvars, param_tys)) ->
-    let params = List.mapi (fun i ty -> (string_of_int i, ty)) param_tys
-    in let tys = List.map (fun var -> (inferred, TyVar var)) tyvars
-    in let tagged_ty : ty option = Some (inferred, Tup param_tys)
-    in let body =
-      (inferred, (App ((inferred, TupStruct (name, provs, tys)), provs, tys,
-                     List.map (fun pair -> (inferred, Move (inferred, (fst pair, [])))) params)))
-    in Some (name, provs, tyvars, params, (inferred, Struct (name, provs, tys, tagged_ty)), body)
   | _ -> None
 
 let global_env_find_struct (sigma : global_env) (name : struct_var) : struct_def option =
