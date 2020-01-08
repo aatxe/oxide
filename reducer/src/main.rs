@@ -1087,6 +1087,34 @@ impl PrettyPrint for Expr {
             }).to_doc()
         }
 
+        if let Expr::Loop(expr) = self {
+                return parenthesize(
+                    expr.span().to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(
+                            Doc::text("While")
+                                .append(Doc::space())
+                                .append(parenthesize(
+                                    parenthesize(
+                                        expr.loop_token.span().to_doc()
+                                            .append(Doc::text(","))
+                                            .append(Doc::space())
+                                            .append(Doc::text("Prim"))
+                                            .append(Doc::space())
+                                            .append(Doc::text("True"))
+                                    ).group()
+                                        .append(Doc::text(","))
+                                        .append(Doc::space())
+                                        .group()
+                                        .nest(2)
+                                        .append(parenthesize(expr.body.to_doc()))
+                                ))
+                                .group()
+                        )
+                )
+        }
+
         if let Expr::While(expr) = self {
             return parenthesize(
                 expr.span().to_doc()
