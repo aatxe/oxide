@@ -306,6 +306,10 @@ type tc_error =
   | UnboundPlaceExpr of place_expr
   | PlaceExprNotAPlace of place_expr
   | AbsProvsNotSubtype of prov * prov
+  | ProvArityMismatch of string * provs * provs
+  | TysArityMismatch of string * ty list * ty list
+  | TyArityMismatch of string * ty list * ty_var list
+  | ExprArityMismatch of string * expr list * ty list
 [@@deriving show]
 
 type 'a tc =
@@ -319,3 +323,21 @@ let bind (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc =
   | Fail err -> Fail err
 
 let (let*) (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc = bind tc f
+
+(* combine helpers *)
+
+let combine_prov (ctx : string) (prov1 : provs) (prov2 : provs) : (prov * prov) list tc =
+  if List.length prov1 != List.length prov2 then Fail (ProvArityMismatch (ctx, prov1, prov2))
+  else Succ (List.combine prov1 prov2)
+
+let combine_tys (ctx : string) (tys1 : ty list) (tys2 : ty list) : (ty * ty) list tc =
+  if List.length tys1 != List.length tys2 then Fail (TysArityMismatch (ctx, tys1, tys2))
+  else Succ (List.combine tys1 tys2)
+
+let combine_ty (ctx : string) (tys : ty list) (vars : ty_var list) : (ty * ty_var) list tc =
+  if List.length tys != List.length vars then Fail (TyArityMismatch (ctx, tys, vars))
+  else Succ (List.combine tys vars)
+
+let combine_expr (ctx : string) (exprs : expr list) (tys : ty list) : (expr * ty) list tc =
+  if List.length exprs != List.length tys then Fail (ExprArityMismatch (ctx, exprs, tys))
+  else Succ (List.combine exprs tys)
