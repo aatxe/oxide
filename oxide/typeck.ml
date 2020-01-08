@@ -447,7 +447,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          let* (arg_tys, ellN, gammaN) = tc_many delta ellF gammaF args
          in let* prov_sub = combine_prov "T-App" new_provs provs
          in let* ty_sub = combine_ty "T-App" new_tys tyvars
-         in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
+         in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
          in let new_params = List.map do_sub params
          in let* ty_pairs = combine_tys "T-App" new_params arg_tys
          in let types_match (tys : ty * ty) : bool =
@@ -481,7 +481,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let exprs = List.map snd fields_sorted
          in let* prov_sub = combine_prov "T-RecStruct" provs dfn_provs
          in let* ty_sub = combine_ty "T-RecStruct" tys tyvars
-         in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
+         in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
          in let expected_tys = List.map (fun x -> do_sub (snd x)) dfn_fields_sorted
          in let* pairs = combine_expr "T-RecStruct" exprs expected_tys
          in let tc_exp (acc : (loan_env * var_env) tc) (p : expr * ty) =
@@ -501,7 +501,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Some (Tup (_, _, dfn_provs, tyvars, dfn_tys)) ->
          let* prov_sub = combine_prov "T-TupStruct" provs dfn_provs
          in let* ty_sub = combine_ty "T-TupStruct" tys tyvars
-         in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
+         in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
          in let expected_tys = List.map (fun x -> do_sub x) dfn_tys
          in let* pairs = combine_expr "T-TupStruct" exprs expected_tys
          in let tc_exp (acc : (loan_env * var_env) tc) (p : expr * ty) =
@@ -511,7 +511,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
            in let* ell_final = subtype Combine ell_prime found_ty expected_ty
            in Succ (ell_final, gamma_prime)
          in let* (ell_prime, gamma_prime) = List.fold_left tc_exp (Succ (ell, gamma)) pairs
-         in let tagged_ty : ty option = Some (inferred, Tup tys)
+         in let tagged_ty : ty option = Some (inferred, Tup dfn_tys)
          in Succ ((inferred, Struct (name, provs, tys, tagged_ty)), ell_prime, gamma_prime)
        | Some (Rec _) -> Fail (WrongStructConstructor (fst expr, name, Tup))
        | None ->
@@ -743,4 +743,4 @@ let wf_global_env (sigma : global_env) : unit tc =
       in let* () = valid_copy_impl sigma (unwrap (global_env_find_struct sigma name))
       in let* () = valid_types sigma delta ell empty_gamma tys
       in Succ ()
-  in List.fold_left valid_global_entry (Succ ()) (List.cons drop sigma)
+  in List.fold_left valid_global_entry (Succ ()) sigma
