@@ -403,9 +403,8 @@ and free_provs (expr : expr) : provs =
     List.flatten (provs :: List.map (fun x -> free_provs (snd x)) es)
   | TupStruct (_, provs, _, es) -> List.flatten (provs :: List.map free_provs es)
 
-let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) : var list tc =
-   let nc (var : var) : bool tc = noncopyable sigma (List.assoc var gamma)
-   in let rec free (expr : expr) : var list tc =
+let free_vars_helper (expr : expr) (should_include : var -> bool tc) : var list tc =
+   let rec free (expr : expr) : var list tc =
      match snd expr with
      | Prim _ | Fn _ | Abort _ -> Succ []
      | BinOp (_, e1, e2)
@@ -417,8 +416,8 @@ let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) : var list
      | Move (_, (root, _))
      | Borrow (_, _, (_, (root, _)))
      | Ptr (_, (_, (root, _))) ->
-       let* noncopyable = nc root
-       in if noncopyable then Succ [root] else Succ []
+       let* should_include = should_include root
+       in if should_include then Succ [root] else Succ []
      | BorrowIdx (_, _, (_, (root, _)), e1)
      | Idx ((_, (root, _)), e1)
      | Assign ((_, (root, _)), e1) ->
@@ -427,8 +426,8 @@ let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) : var list
      | BorrowSlice (_, _, (_, (root, _)), e1, e2) ->
        let* free1 = free e1
        in let* free2 = free e2
-       in let* noncopyable = nc root
-       in Succ (List.concat [if noncopyable then [root] else []; free1; free2])
+       in let* should_include = should_include root
+       in Succ (List.concat [if should_include then [root] else []; free1; free2])
      | LetProv (_, e) -> free e
      | Let (x, _, e1, e2)
      | For (x, e1, e2) ->
@@ -454,6 +453,11 @@ let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) : var list
        in Succ (List.append free free_so_far)
      in List.fold_right work exprs (Succ [])
    in free expr
+
+let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) =
+  free_vars_helper expr (fun var -> noncopyable sigma (List.assoc var gamma))
+
+let free_vars (expr : expr) = free_vars_helper expr (fun _ -> Succ true)
 
 let free_provs_var_env (gamma : var_env) : provs =
   List.flatten (List.map (fun x -> free_provs_ty (snd x)) gamma)

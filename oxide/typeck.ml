@@ -425,14 +425,14 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Fun (provs, tyvars, params, opt_ret_ty, body) ->
       let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
         var_env_include gamma (fst pair) (snd pair)
-      in let gammaPrime = List.fold_left var_include_fold [] params
+      in let gammaPrime = List.fold_left var_include_fold gamma params
       in let deltaPrime = (list_union provs (fst delta), list_union tyvars (snd delta))
       in let ellPrime = loan_env_bindall ell provs
-      in let* (ret_ty, _, _) =
-           tc deltaPrime ellPrime gammaPrime body
-      in let* free_vars = free_nc_vars sigma gamma body
+      in let* (ret_ty, _, _) = tc deltaPrime ellPrime gammaPrime body
+      in let* free_vars = free_vars body
+      in let* moved_vars = free_nc_vars sigma gamma body
       in let gamma_c = List.map (fun var -> (var, List.assoc var gamma)) free_vars
-      in let gammaPrime = var_env_uninit_many gamma free_vars
+      in let gammaPrime = var_env_uninit_many gamma moved_vars
       in let fn_ty (ret_ty : ty) : ty =
            (inferred, Fun (provs, tyvars, List.map snd params, gamma_c, ret_ty))
       in (match opt_ret_ty with
