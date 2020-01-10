@@ -64,7 +64,7 @@ let place_expr_to_place (pi : place_expr) : place option =
   | None -> None
 
 (* returns true if the place expression doesn't contain any dereferencing *)
-let place_expr_is_place (pi : place_expr) : bool = List.mem Deref (sndsnd pi)
+let place_expr_is_place (pi : place_expr) : bool = not (List.mem Deref (sndsnd pi))
 
 type loan = owned * place_expr [@@deriving show]
 type loans = loan list [@@deriving show]
