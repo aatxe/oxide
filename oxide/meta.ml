@@ -327,7 +327,7 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   | Any -> Succ false
   | BaseTy _ -> Succ false
   | TyVar _ -> Succ true
-  | Uninit _ -> Succ false (* probably never ask this question anyway *)
+  | Uninit _ -> Succ true (* probably never ask this question anyway *)
   | Ref (_, Unique, _) -> Succ true
   | Ref (_, Shared, _) -> Succ false
   | Fun (_, _, _, _, _) -> Succ false
@@ -387,7 +387,10 @@ let rec free_provs_ty (ty : ty) : provs =
   | Any | BaseTy _ | TyVar _ -> []
   | Uninit ty -> free_provs_ty ty
   | Ref (prov, _, ty) -> List.cons prov (free_provs_ty ty)
-  | Fun _ -> [] (* FIXME: actually implement *)
+  | Fun (provs, _, tys, _, ty) ->
+    let free_in_tys = List.flatten (List.map free_provs_ty tys)
+    in let free_in_ret = free_provs_ty ty
+    in List.filter (fun prov -> not (List.mem prov provs)) (List.append free_in_tys free_in_ret)
   | Array (ty, _) | Slice ty -> free_provs_ty ty
   | Rec tys -> List.flatten (List.map (fun pair -> free_provs_ty (snd pair)) tys)
   | Tup tys -> List.flatten (List.map free_provs_ty tys)
@@ -406,7 +409,15 @@ and free_provs (expr : expr) : provs =
     List.append (free_provs_ty ty) (List.append (free_provs e1) (free_provs e2))
   | Assign (_, e) -> free_provs e
   | Seq (e1, e2) -> List.append (free_provs e1) (free_provs e2)
-  | Fun _ -> [] (* FIXME: actually implement *)
+  | Fun (provs, _, params, ret_ty, body) ->
+    let free_in_params = List.flatten (List.map (fun pair -> free_provs_ty (snd pair)) params)
+    in let free_in_ret =
+      match ret_ty with
+      | Some ty -> free_provs_ty ty
+      | None -> []
+    in let free_in_body = free_provs body
+    in List.filter (fun prov -> not (List.mem prov provs))
+                   (List.concat [free_in_params; free_in_ret; free_in_body])
   | App (e1, provs, tys, es) ->
     List.concat [free_provs e1; provs;
                  List.flatten (List.map free_provs_ty tys);
