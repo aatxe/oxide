@@ -287,8 +287,8 @@ type tc_error =
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
   | SafetyErr of (owned * place_expr) * (owned * place_expr)
                 (* attempted access * conflicting loan *)
-  | PermissionErr of (owned * place_expr) * ty
-                     (* attempted access * ty that doesn't permit this access *)
+  | PermissionErr of ty * expr_path * owned
+                     (* type not allowing access * operation being performed * context *)
   | CannotMove of place_expr
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var

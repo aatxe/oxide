@@ -245,7 +245,7 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
       in if ellPrime = ell then
         if (snd ty) = Any then
           let* init_ty = var_env_lookup_place_expr gamma (fst pi, (root_of pi, []))
-          in let* computed_ty = compute_ty init_ty (sndsnd pi)
+          in let* computed_ty = compute_ty_in omega init_ty (sndsnd pi)
           in Succ (computed_ty, uniq_cons (omega, pi) loans)
         else Succ (ty, uniq_cons (omega, pi) loans)
       else Fail (LoanEnvMismatch (fst pi, ell, ellPrime))

@@ -93,16 +93,23 @@ let rec decompose (ty : ty) (path : path) : (ty_ctx * ty) tc =
   | (Struct (_, _, _, Some ty), path) -> decompose ty path
   | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
 
-(* find the type of the expr path based on the original type *)
-let rec compute_ty (ty : ty) (path : expr_path) : ty tc =
+(* find the type of the expr path based on the original type in a context *)
+(* this will error if the context doesn't allow the operation,
+   e.g. dereferencing a shared reference in a unique context *)
+let rec compute_ty_in (ctx : owned) (ty : ty) (path : expr_path) : ty tc =
   let (loc, ty) = ty
   in match (ty, path) with
   | (ty, []) -> Succ (loc, ty)
-  | (Ref (_, _, ty), Deref :: path) -> compute_ty ty path
-  | (Rec pairs, (Field f) :: path) -> compute_ty (List.assoc f pairs) path
-  | (Tup tys, (Index n) :: path) -> compute_ty (List.nth tys n) path
-  | (Struct (_, _, _, Some ty), path) -> compute_ty ty path
+  | (Ref (_, omega, ty), Deref :: path) ->
+    if is_at_least ctx omega then compute_ty_in ctx ty path
+    else Fail (PermissionErr (ty, path, ctx))
+  | (Rec pairs, (Field f) :: path) -> compute_ty_in ctx (List.assoc f pairs) path
+  | (Tup tys, (Index n) :: path) -> compute_ty_in ctx (List.nth tys n) path
+  | (Struct (_, _, _, Some ty), path) -> compute_ty_in ctx ty path
   | (ty, path) -> Fail (InvalidOperationOnTypeEP (path, (loc, ty)))
+
+(* find the type of the expr path based on the original type, assuming a shared use context*)
+let compute_ty (ty : ty) (path : expr_path) : ty tc =  compute_ty_in Shared ty path
 
 let rec plug (fill : ty) (ctx : ty_ctx) : ty =
   let (loc, ctx) = ctx
