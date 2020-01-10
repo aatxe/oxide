@@ -232,10 +232,21 @@ let norm_place_expr (ell : loan_env) (gamma : var_env) (phi : place_expr) : plac
     in List.fold_left continue (Succ complete) still_to_norm
   in norm phi
 
+let rec is_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
+  match (path1, path2) with
+  | (_, []) -> true
+  | ([], _) -> false
+  | (Field f1 :: path1, Field f2 :: path2) -> if f1 = f2 then is_prefix_of path1 path2 else false
+  | (Index i1 :: path1, Index i2 :: path2) -> if i1 = i2 then is_prefix_of path1 path2 else false
+  | (Deref :: path1, Deref :: path2) -> is_prefix_of path1 path2
+  | (_, _) -> false
+
 (* this definition of disjoint essentially only works on places *)
 let not_disjoint (pi : place_expr * place_expr) : bool =
   let (pi1, pi2) = pi
-  in sndfst pi1 = sndfst pi2
+  in if sndfst pi1 = sndfst pi2 then
+    is_prefix_of (sndsnd pi1) (sndsnd pi2) || is_prefix_of (sndsnd pi2) (sndsnd pi1)
+  else true
 
 (* given a gamma, determines whether it is safe to use pi according to omega *)
 let is_safe (ell : loan_env) (gamma : var_env) (omega : owned) (phi : place_expr) : loans option tc =
