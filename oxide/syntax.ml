@@ -294,6 +294,7 @@ type tc_error =
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var
   | WrongStructConstructor of source_loc * struct_var * struct_kind
+  | InvalidReturnType of ty * prov (* return type * invalidated provenance *)
   | InvalidType of ty
   | InvalidProv of prov
   | InvalidLoan of owned * place_expr
