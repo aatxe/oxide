@@ -5,6 +5,7 @@ type source_loc = string * linecol * linecol [@@deriving show]
 let inferred : source_loc = ("<inferred>", (-1, -1), (-1, -1))
 let dummy : source_loc = ("<dummy>", (-1, -1), (-1, -1))
 type var = string [@@deriving show]
+type vars = string list [@@deriving show]
 type ty_var = string [@@deriving show]
 type fn_var = string [@@deriving show]
 type prov_var = string [@@deriving show]

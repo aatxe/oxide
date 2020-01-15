@@ -462,7 +462,7 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : var list 
      | For (x, e1, e2) ->
        let* free1 = free e1
        in let* free2 = free e2
-       in Succ (List.append free1 (List.filter ((!=) x) free2))
+       in Succ (List.append free1 (List.filter ((<>) x) free2))
      | Fun _ -> Succ [] (* FIXME: actually implement *)
      | App (e1, _, _, exprs) ->
        let* frees = free_many exprs
@@ -484,7 +484,12 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : var list 
    in free expr
 
 let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) =
-  free_vars_helper expr (fun var -> noncopyable sigma (List.assoc var gamma))
+  free_vars_helper expr
+  (fun var ->
+     match List.assoc_opt var gamma with
+     | Some ty -> noncopyable sigma ty
+     (* if it's not in gamma, that means it's local to the expression, thus isn't free *)
+     | None -> Succ false)
 
 let free_vars (expr : expr) = free_vars_helper expr (fun _ -> Succ true)
 

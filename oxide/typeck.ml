@@ -375,10 +375,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* ellPrime = subtype Override ell1 ty_update ty_old
       in let place_opts = List.map (fun loan -> place_expr_to_place (snd loan)) loans
       in let places = List.map unwrap (List.filter (fun opt -> opt != None) place_opts)
-      in let work (acc : var_env tc) (_ : place) : var_env tc =
-          let* acc = acc
-          in let* gam_ext = failwith "fixme"
-          in Succ (var_env_append gam_ext acc)
+      in let work (acc : var_env tc) (pi : place) : var_env tc =
+          let* gamma = acc
+          in var_env_type_update gamma pi ty_update
       in let* gammaPrime = List.fold_left work (Succ gamma1) places
       in Succ ((inferred, BaseTy Unit), ellPrime, gammaPrime)
     (* T-Abort *)
