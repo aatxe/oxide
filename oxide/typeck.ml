@@ -419,7 +419,18 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Some (_, provs, tyvars, params, ret_ty, _) ->
          let fn_ty : ty = (inferred, Fun (provs, tyvars, List.map snd params, [], ret_ty))
          in Succ (fn_ty, ell, gamma)
-       | None -> Fail (UnknownFunction (fst expr, fn)))
+       | None ->
+         (match List.assoc_opt fn gamma with
+          (* T-Move for a closure *)
+          | Some (_, Fun _) ->
+            (match omega_safe sigma ell gamma Unique (fst expr, (fn, [])) with
+            | Succ (ty, [(Unique, _)]) ->
+              let* gammaPrime = var_env_type_update gamma (fst expr, (fn, [])) (uninit ty)
+              in Succ (ty, ell, gammaPrime)
+            | Succ _ -> failwith "unreachable"
+            | Fail err -> Fail err)
+          | Some ty -> Fail (TypeMismatchFunction ty)
+          | None -> Fail (UnknownFunction (fst expr, fn))))
     (* T-Closure *)
     | Fun (provs, tyvars, params, opt_ret_ty, body) ->
       let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
