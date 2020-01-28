@@ -457,6 +457,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
               in Succ (ty, ell, gammaPrime)
             | Succ _ -> failwith "unreachable"
             | Fail err -> Fail err)
+          | Some ((_, Uninit (_, Fun _)) as uninit_fn_ty) ->
+            Fail (MovedFunction (expr, uninit_fn_ty))
           | Some ty -> Fail (TypeMismatchFunction ty)
           | None -> Fail (UnknownFunction (fst expr, fn))))
     (* T-Closure *)
@@ -497,6 +499,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
                in let* () = valid_type sigma delta ellN gammaN new_ret_ty
                in Succ (new_ret_ty, ellN, gammaN)
              | Some (expected, found) -> Fail (TypeMismatch (expected, found)))
+       | Succ ((_, Uninit (_, Fun _) as uninit_fn_ty), _, _) ->
+         Fail (MovedFunction (fn, uninit_fn_ty))
        | Succ (found, _, _) -> Fail (TypeMismatchFunction found)
        | Fail err -> Fail err)
     (* T-Tuple *)

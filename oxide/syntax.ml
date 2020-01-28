@@ -310,6 +310,7 @@ type tc_error =
   | PermissionErr of ty * expr_path * owned
                      (* type not allowing access * operation being performed * context *)
   | CannotMove of place_expr
+  | MovedFunction of expr * ty (* expr in function position * the uninitialized type *)
   | PartiallyMoved of place * ty (* place that was moved * the type for it *)
   | PartiallyMovedPath of ty * path (* the type * the path that was moved *)
   | PartiallyMovedTypes of ty * ty (* uninitialized type * initialized type *)
