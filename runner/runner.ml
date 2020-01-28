@@ -102,17 +102,17 @@ let _ =
      Stdio.print_endline "  PROGNAME check path/to/single/test.rs";
      Stdio.print_endline "  PROGNAME trust path/to/single/test.rs";
      Stdio.print_endline "  PROGNAME retrust path/to/root/of/tests") in
-  if Array.length Sys.argv < 3 then
+  if Array.length (Sys.get_argv()) < 3 then
     (* NOTE(2019-06-28): Argument parsing, done terribly. *)
     usage ()
   else
     let _ = eval (
         let* wd = cwd_logical in
         let pth =
-          if String.is_prefix ~prefix:"/" Sys.argv.(2)
-          then Sys.argv.(2) else wd ^ "/" ^ Sys.argv.(2)
+          if String.is_prefix ~prefix:"/" (Sys.get_argv()).(2)
+          then (Sys.get_argv()).(2) else wd ^ "/" ^ (Sys.get_argv()).(2)
         in
-        match Sys.argv.(1) with
+        match (Sys.get_argv()).(1) with
         |"run" ->
           let* _ = run_dir pth in return ()
         |"check" ->
