@@ -12,7 +12,7 @@ The Rust to Oxide compiler is written in Rust and requires the Rust compiler and
 The tests cases can be run using a test harness written in OCaml. Install the opam dependencies with:
 
 ```
-opam install opam shexp stdio yojson
+opam install opam shexp stdio yojson utop ppx_deriving
 ```
 
 And install the system dependency [jq](https://stedolan.github.io/jq/) (commandline json processor).
