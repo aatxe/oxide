@@ -100,12 +100,31 @@ type prety_ctx =
 [@@deriving show]
 and ty_ctx = source_loc * prety_ctx [@@deriving show]
 
+(* type distinguishers: these exist to prevent the need for syntactic stratification *)
+
 (* is the given type a sized type? *)
 let is_sized (typ : ty) : bool =
-  (* this exists so that we don't have to stratify our types *)
   match snd typ with
   | Slice _ -> false
   | _ -> true
+
+(* is the given type fully initialized? *)
+let rec is_init (typ : ty) : bool =
+  match snd typ with
+  | Any | BaseTy _ | TyVar _ -> true
+  | Ref (_, _, ty) -> is_init ty (* invariant: this should always be true *)
+  | Fun (_, _, tys, gamma, ty) ->
+    all_init tys && var_env_init gamma && is_init ty
+  | Array (ty, _) | Slice ty -> is_init ty
+  | Rec fields -> all_init (List.map snd fields)
+  | Tup tys -> all_init tys
+  | Struct (_, _, tys, Some ty) -> all_init tys && is_init ty
+  | Struct (_, _, tys, None) -> all_init tys
+  | Uninit _ -> false
+and all_init (tys : ty list) : bool =
+  List.fold_right (fun ty acc -> acc && is_init ty) tys true
+and var_env_init (gamma : var_env) : bool =
+  all_init (List.map snd gamma)
 
 type prim =
   | Unit
@@ -291,6 +310,7 @@ type tc_error =
   | PermissionErr of ty * expr_path * owned
                      (* type not allowing access * operation being performed * context *)
   | CannotMove of place_expr
+  | PartiallyMoved of place * ty (* place that was moved * the type for it *)
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var

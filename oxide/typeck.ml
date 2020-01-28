@@ -288,10 +288,12 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
            match place_expr_to_place pi with
            | Some pi ->
              let* noncopy = noncopyable sigma ty
-             in if noncopy then
-               let* gammaPrime = var_env_type_update gamma pi (uninit ty)
-               in Succ (ell, gammaPrime)
-             else Succ (ell_prime, gamma)
+             in if is_init ty then
+               if noncopy then
+                 let* gammaPrime = var_env_type_update gamma pi (uninit ty)
+                 in Succ (ell, gammaPrime)
+               else Succ (ell_prime, gamma)
+             else Fail (PartiallyMoved (pi, ty))
            | None ->
              let* copy = copyable sigma ty
              in if copy then Succ (ell_prime, gamma) else failwith "unreachable"
