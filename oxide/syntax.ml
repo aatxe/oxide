@@ -349,6 +349,32 @@ let bind (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc =
 
 let (let*) (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc = bind tc f
 
+(* lifting normal list operations to tc monad *)
+
+let foldl (fn : 'a -> 'b -> 'a tc) (acc : 'a) (lst : 'b list) : 'a tc =
+  let worker (acc : 'a tc) (elem : 'b) : 'a tc =
+    let* acc = acc in fn acc elem
+  in List.fold_left worker (Succ acc) lst
+
+let foldr (fn : 'a -> 'b -> 'b tc) (lst : 'a list) (acc : 'b) : 'b tc =
+  let worker (elem : 'a) (acc : 'b tc) : 'b tc =
+    let* acc = acc in fn elem acc
+  in List.fold_right worker lst (Succ acc)
+
+let all (fn : 'a -> bool tc) (lst : 'a list) : bool tc =
+  let worker (elem : 'a) (acc : 'b tc) : 'b tc =
+    let* acc = acc
+    in let* next = fn elem
+    in Succ (acc && next)
+  in List.fold_right worker lst (Succ true)
+
+let any (fn : 'a -> bool tc) (lst : 'a list) : bool tc =
+  let worker (elem : 'a) (acc : 'b tc) : 'b tc =
+    let* acc = acc
+    in let* next = fn elem
+    in Succ (acc || next)
+  in List.fold_right worker lst (Succ false)
+
 (* combine helpers *)
 
 let combine_prov (ctx : string) (prov1 : provs) (prov2 : provs) : (prov * prov) list tc =

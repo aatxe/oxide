@@ -36,11 +36,8 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
 
 let subtype_prov_many (mode : subtype_modality) (ell : loan_env)
     (provs1 : provs) (provs2 : provs) : loan_env tc =
-  let work (acc : loan_env tc) (provs : prov * prov) : loan_env tc =
-    let* ell = acc
-    in subtype_prov mode ell (fst provs) (snd provs)
-  in let* provs = combine_prov "subtype_prov_many" provs1 provs2
-  in List.fold_left work (Succ ell) provs
+  let* provs = combine_prov "subtype_prov_many" provs1 provs2
+  in foldl (fun ell (prov1, prov2) -> subtype_prov mode ell prov1 prov2) ell provs
 
 let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
   let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
@@ -106,11 +103,8 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
         | Fail err -> Fail err)
     | (_, _) -> Fail (UnificationFailed (ty1, ty2))
   and sub_many (ell : loan_env) (tys1 : ty list) (tys2 : ty list) : loan_env tc =
-    let work (acc : loan_env tc) (tys : ty * ty) : loan_env tc =
-      let* ell = acc
-      in sub ell (fst tys) (snd tys)
-    in let* tys = combine_tys "subtype_many" tys1 tys2
-    in List.fold_left work (Succ ell) tys
+    let* tys = combine_tys "subtype_many" tys1 tys2
+    in foldl (fun ell (ty1, ty2) -> sub ell ty1 ty2) ell tys
   and sub_opt (ell : loan_env) (ty1 : ty option) (ty2 : ty option) : loan_env tc =
     match (ty1, ty2) with
     | (Some ty1, Some ty2) -> sub ell ty1 ty2
@@ -128,10 +122,7 @@ let unify_many (loc : source_loc) (ell : loan_env) (tys : ty list) : (loan_env *
   | [] -> Succ (ell, (loc, Any))
   | [ty] -> Succ (ell, ty)
   | ty :: tys ->
-    let work (acc : (loan_env * ty) tc) (new_ty : ty) =
-      let* (curr_ell, curr_ty) = acc
-      in unify loc curr_ell curr_ty new_ty
-    in List.fold_left work (Succ (ell, ty)) tys
+    foldl (fun (curr_ell, curr_ty) new_ty -> unify loc curr_ell curr_ty new_ty) (ell, ty) tys
 
 let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
   let work (acc : loan_env) (pair : prov_var * loans) : loan_env =
