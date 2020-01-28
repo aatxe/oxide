@@ -93,7 +93,17 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
       in let alpharenamed_tys2 = List.map do_sub tys2
       in let* ell_prime = sub_many ell alpharenamed_tys2 tys1
       in sub ell_prime ret_ty1 ret_ty2
+    (* UT-Bottom *)
     | (Any, _) -> Succ ell
+    (* UT-Uninit *)
+    | (Uninit ty1, Uninit ty2) -> sub ell ty1 ty2
+    (* UT-InitUninit *)
+    | (_, Uninit inner_ty) -> sub ell ty1 inner_ty
+    (* UT-UninitInit *)
+    | (Uninit inner_ty, _) ->
+       (match sub ell inner_ty ty2 with
+        | Succ _ -> Fail (PartiallyMovedTypes (ty1, ty2))
+        | Fail err -> Fail err)
     | (_, _) -> Fail (UnificationFailed (ty1, ty2))
   and sub_many (ell : loan_env) (tys1 : ty list) (tys2 : ty list) : loan_env tc =
     let work (acc : loan_env tc) (tys : ty * ty) : loan_env tc =
@@ -163,7 +173,7 @@ let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) 
   else if loan_env_is_abs ell prov then Succ ()
   else Fail (InvalidProv prov)
 
-let valid_type (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env) (ty : ty) : unit tc =
+let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env) (ty : ty) : unit tc =
   let rec valid (ty : ty) : unit tc =
     match snd ty with
     | Any | BaseTy _ -> Succ ()
@@ -181,16 +191,31 @@ let valid_type (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : va
         in if snd ty_pi = snd ty then Succ ()
         else Fail (TypeMismatch (ty, ty_pi))
       in List.fold_right work place_exprs (Succ ())
-    | Fun _ -> failwith "unimplemented: WF-Function"
-    | Array (typ, n) -> if n >= 0 then valid typ else Fail (InvalidArrayLen (ty, n))
+    | Fun (provs, tyvars, param_tys, gamma_c, ret_ty) ->
+      let* () = valid_var_env gamma_c
+      in let new_delta =
+        (List.append (fst delta) provs, List.append (snd delta) tyvars)
+      in let work (ty : ty) (acc : unit tc) =
+        let* () = acc in valid_type sigma new_delta ell gamma ty
+      in let* () = List.fold_right work param_tys (Succ ())
+      in valid ret_ty
+    | Array (typ, n) ->
+      if n >= 0 then valid typ
+      else Fail (InvalidArrayLen (ty, n))
     | Uninit typ | Slice typ -> valid typ
     | Rec pairs -> valid_many (List.map snd pairs)
     | Tup tys -> valid_many tys
     | Struct _ -> Succ () (* TODO: use sigma *)
-  and valid_many (tys : ty list) =
+  and valid_many (tys : ty list) : unit tc =
     let work (ty : ty) (acc : unit tc) =
       let* () = acc in valid ty
     in List.fold_right work tys (Succ ())
+  and valid_var_env (gamma : var_env) : unit tc =
+    let work (entry : var * ty) (acc : unit tc) =
+      let* () = acc
+      in let (_, ty) = entry
+      in valid ty
+    in List.fold_right work gamma (Succ ())
   in valid ty
 
 let valid_types (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)

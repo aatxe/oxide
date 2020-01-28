@@ -312,6 +312,7 @@ type tc_error =
   | CannotMove of place_expr
   | PartiallyMoved of place * ty (* place that was moved * the type for it *)
   | PartiallyMovedPath of ty * path (* the type * the path that was moved *)
+  | PartiallyMovedTypes of ty * ty (* uninitialized type * initialized type *)
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var
