@@ -64,7 +64,7 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
       let* ellPrime = subtype_prov mode ell v1 v2
       in sub ellPrime t1 t2
     (* UT-UniqueRef *)
-    | (Ref (v1, Unique, t1), Ref (v2, Unique, t2)) ->
+    | (Ref (v1, Unique, t1), Ref (v2, _, t2)) ->
       let* ellPrime = subtype_prov mode ell v1 v2
       in let* ell1 = sub ellPrime t1 t2
       in let* ell2 = sub ellPrime t2 t1
