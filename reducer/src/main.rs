@@ -1447,7 +1447,7 @@ impl PrettyPrint for Expr {
                                 .group()
                         )
                 )
-            } else if let Expr::Call(func) = *expr.func {
+            } else if let Expr::Call(_) = *expr.func {
                 panic!("unimplemented: application in function call position")
             } else {
                 panic!("can't apply something other than an identifier or a closure")
