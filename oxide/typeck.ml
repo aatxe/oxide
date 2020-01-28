@@ -173,7 +173,8 @@ let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) 
   else if loan_env_is_abs ell prov then Succ ()
   else Fail (InvalidProv prov)
 
-let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env) (ty : ty) : unit tc =
+let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+                   (ty : ty) : unit tc =
   let rec valid (ty : ty) : unit tc =
     match snd ty with
     | Any | BaseTy _ -> Succ ()
