@@ -173,25 +173,14 @@ let var_env_append (gamma1 : var_env) (gamma2 : var_env) = List.append gamma1 ga
 let var_env_exclude (gamma : var_env) (x : var) = List.remove_assoc x gamma
 
 (* compute all the at-least-omega loans in a given gamma *)
-let rec all_loans (omega : owned) (ell : loan_env) (gamma : var_env) : loans =
-  let rec work (typ : ty) (loans : loans) : loans =
-    match snd typ with
-    | Any | BaseTy _ | TyVar _ -> loans
-    | Ref (prov, omega_prime, typ) ->
-      if is_at_least omega omega_prime then List.append (prov_to_loans ell prov) (work typ loans)
-      else work typ loans
-    | Fun (_, _, _, gamma_c, _) -> List.append loans (all_loans omega ell gamma_c)
-    | Uninit typ | Array (typ, _) | Slice typ -> work typ loans
-    | Rec pairs -> List.fold_right List.append (List.map (fun pr -> work (snd pr) []) pairs) loans
-    | Tup typs -> List.fold_right List.append (List.map (fun typ -> work typ []) typs) loans
-    | Struct (_, provs, _, _) ->  List.concat (loans :: List.map (prov_to_loans ell) provs)
-  in List.fold_right (fun entry -> work (snd entry)) gamma []
+let all_loans (omega : owned) (ell : loan_env) : loans =
+  List.filter (fun loan -> is_at_least omega (fst loan)) (List.flatten (List.map snd (fst ell)))
 
 (* find the root of a given place expr *)
 let root_of (pi : place_expr) : var = sndfst pi
 
 (* find all at-least-omega loans in gamma that have to do with pi *)
-let find_loans (omega : owned) (ell : loan_env) (gamma : var_env) (pi : place_expr) : loans =
+let find_loans (omega : owned) (ell : loan_env) (pi : place_expr) : loans =
   (* n.b. this is actually too permissive because of reborrowing and deref *)
   let root_of_pi = root_of pi
   in let relevant (loan : loan) : bool =
@@ -199,7 +188,7 @@ let find_loans (omega : owned) (ell : loan_env) (gamma : var_env) (pi : place_ex
     let (_, pi_prime) = loan
        (* the easiest way to check is to check if their roots are the same *)
     in root_of_pi = root_of pi_prime
-  in List.filter relevant (all_loans omega ell gamma)
+  in List.filter relevant (all_loans omega ell)
 
 (* evaluates the place expression down to a collection of possible places *)
 let eval_place_expr (ell : loan_env) (gamma : var_env) (omega : owned) (pi : place_expr) : loans tc =
@@ -267,12 +256,12 @@ let is_safe (ell : loan_env) (gamma : var_env) (omega : owned) (phi : place_expr
     else Succ acc
   in match omega with
   | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
-    let* res = List.fold_left relevant (Succ []) (find_loans Shared ell gamma phi)
+    let* res = List.fold_left relevant (Succ []) (find_loans Shared ell phi)
     in (match res with
         | [] -> Succ None
         | loans -> Succ (Some loans))
   | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
-    let* res = List.fold_left relevant (Succ []) (find_loans Unique ell gamma phi)
+    let* res = List.fold_left relevant (Succ []) (find_loans Unique ell phi)
     in (match res with
         | [] -> Succ None
         | loans -> Succ (Some loans))
