@@ -1447,9 +1447,12 @@ impl PrettyPrint for Expr {
                                 .group()
                         )
                 )
+            } else if let Expr::Paren(expr) = *expr.func {
+                return parenthesize(expr.expr.to_doc())
             } else if let Expr::Call(_) = *expr.func {
                 panic!("unimplemented: application in function call position")
             } else {
+                eprintln!("{:#?}", expr.func);
                 panic!("can't apply something other than an identifier or a closure")
             }
         }
