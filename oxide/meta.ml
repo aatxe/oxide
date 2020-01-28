@@ -91,6 +91,7 @@ let rec decompose (ty : ty) (path : path) : (ty_ctx * ty) tc =
     in let ctx : ty_ctx = (loc, Tup (List.mapi replace tys))
     in Succ (ctx, ty)
   | (Struct (_, _, _, Some ty), path) -> decompose ty path
+  | (Uninit ty, path) -> Fail (PartiallyMovedPath (ty, path))
   | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
 
 (* find the type of the expr path based on the original type in a context *)

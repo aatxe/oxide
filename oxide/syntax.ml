@@ -311,6 +311,7 @@ type tc_error =
                      (* type not allowing access * operation being performed * context *)
   | CannotMove of place_expr
   | PartiallyMoved of place * ty (* place that was moved * the type for it *)
+  | PartiallyMovedPath of ty * path (* the type * the path that was moved *)
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var
