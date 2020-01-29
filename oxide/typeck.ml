@@ -216,8 +216,9 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
        let* res = is_safe ell gamma omega (snd loan)
        in match res with
        | None ->
-         let* res_ty = var_env_lookup_place_expr gamma (snd loan)
-         in Succ (Some res_ty, loan)
+         let* root_ty = var_env_lookup_expr_root gamma (snd loan)
+         in let* res_ty = compute_ty_in omega root_ty (expr_path_of (snd loan))
+          in Succ (Some res_ty, loan)
        | Some possible_conflicts ->
          (* the reason these are only _possible_ conflicts is essentially reborrows *)
          let is_in (loan : loan) (other_loan : loan) : bool = (snd other_loan) = (snd loan)

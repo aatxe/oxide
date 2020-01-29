@@ -108,6 +108,9 @@ let rec compute_ty_in (ctx : owned) (ty : ty) (path : expr_path) : ty tc =
   | (Rec pairs, (Field f) :: path) -> compute_ty_in ctx (List.assoc f pairs) path
   | (Tup tys, (Index n) :: path) -> compute_ty_in ctx (List.nth tys n) path
   | (Struct (_, _, _, Some ty), path) -> compute_ty_in ctx ty path
+  | (Uninit ty, path) ->
+    let* _ = compute_ty_in ctx ty path
+    in Fail (PartiallyMovedExprPath (ty, path))
   | (ty, path) -> Fail (InvalidOperationOnTypeEP (path, (loc, ty)))
 
 (* find the type of the expr path based on the original type, assuming a shared use context*)
@@ -131,6 +134,16 @@ let var_env_lookup (gamma : var_env) (pi : place) : ty tc =
     let* (_, ty) = decompose ty path
     in Succ ty
   | None -> Fail (UnboundPlace pi)
+let var_env_lookup_root (gamma : var_env) (pi : place) : ty tc =
+  let (root, _) = snd pi
+  in match List.assoc_opt root gamma with
+  | Some ty -> Succ ty
+  | None -> Fail (UnboundPlace pi)
+let var_env_lookup_expr_root (gamma : var_env) (phi : place_expr) : ty tc =
+  let (root, _) = snd phi
+  in match List.assoc_opt root gamma with
+  | Some ty -> Succ ty
+  | None -> Fail (UnboundPlaceExpr phi)
 let var_env_lookup_many (gamma : var_env) (pis : place list) : ty list tc =
   let lookup_seq (pi : place) (tys : ty list) : ty list tc =
     let* ty = var_env_lookup gamma pi
@@ -198,14 +211,16 @@ let find_loans (omega : owned) (ell : loan_env) (phi : place_expr) : loans =
     in root_of_phi = expr_root_of phi_prime
   in List.filter relevant (all_loans omega ell)
 
-(* evaluates the place expression down to a collection of possible places *)
-let eval_place_expr (ell : loan_env) (gamma : var_env) (omega : owned) (pi : place_expr) : loans tc =
-  let rec eval_place_expr (pi : place_expr) : loans tc =
-    let (prefix, suffix) = partition ((!=) Deref) (sndsnd pi)
+(* evaluates the place expression to a collection of its constituent loans *)
+let eval_place_expr (ell : loan_env) (gamma : var_env) (omega : owned) (phi : place_expr) : loans tc =
+  let rec eval_place_expr (phi : place_expr) : loans tc =
+    let (prefix, suffix) = partition ((!=) Deref) (expr_path_of phi)
     in match suffix with
-    | [] -> Succ [(omega, pi)]
+    | [] -> Succ [(omega, phi)]
     | Deref :: path ->
-        let* ty = var_env_lookup gamma (fst pi, (sndfst pi, unwrap (expr_path_to_path prefix)))
+        (* invariant: this is definitionally the first deref, and thus, the prefix is a place *)
+        let* ty = var_env_lookup gamma
+                                 (fst phi, (expr_root_of phi, unwrap (expr_path_to_path prefix)))
         in (match snd ty with
         | Ref (prov, _, _) ->
           let loans = loan_env_lookup ell prov
@@ -213,14 +228,18 @@ let eval_place_expr (ell : loan_env) (gamma : var_env) (omega : owned) (pi : pla
             let (_, (loc, (root, loan_path))) = loan
             in (loc, (root, List.append loan_path path))
           in let current_loans = List.map add_path_to_back loans
-          in let follow (pi : place_expr) (loans_so_far : loans) =
-            let* new_loans = eval_place_expr pi
+          in let follow (phi : place_expr) (loans_so_far : loans) =
+            let* new_loans = eval_place_expr phi
             in Succ (List.append loans_so_far new_loans)
-          in foldr follow current_loans []
+          in foldr follow current_loans [(omega, phi)]
+        | Uninit (loc, Ref (prov, omega, ty)) ->
+          let pi = (fst phi, (expr_root_of phi, unwrap (expr_path_to_path prefix)))
+          in Fail (PartiallyMoved (pi, (loc, Ref (prov, omega, ty))))
         | _ -> Fail (TypeMismatchRef ty))
     | _ :: _ -> failwith "unreachable"
-  in eval_place_expr pi
+  in eval_place_expr phi
 
+(* normalizes the place expression to the places it may point to *)
 let norm_place_expr (ell : loan_env) (gamma : var_env) (phi : place_expr) : places tc =
   let rec norm (phi : place_expr) : places tc =
     let* loans = eval_place_expr ell gamma Shared phi
@@ -229,9 +248,11 @@ let norm_place_expr (ell : loan_env) (gamma : var_env) (phi : place_expr) : plac
          List.map (fun pair -> snd pair) (List.filter (fun pair -> fst pair = None) progress)
     in let complete =
          List.map (fun pair -> unwrap (fst pair)) (List.filter (fun pair -> fst pair != None) progress)
-    in let continue (completed : places) (phi : place_expr) : places tc =
-         let* newly_completed = norm phi
+    in let continue (completed : places) (phi_prime : place_expr) : places tc =
+      if phi_prime != phi then
+         let* newly_completed = norm phi_prime
          in Succ (List.append completed newly_completed)
+      else Succ completed (* don't normalize the same phi again! *)
     in foldl continue complete still_to_norm
   in norm phi
 
