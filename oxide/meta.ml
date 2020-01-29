@@ -74,6 +74,114 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
 let subst_many (ty : ty) (pairs : (ty * ty_var) list) : ty =
   List.fold_right (fun pair ty -> subst ty (fst pair) (snd pair)) pairs ty
 
+let subtype_prov (mode : subtype_modality) (ell : loan_env)
+    (prov1 : prov) (prov2 : prov) : loan_env tc =
+  match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
+  | (Combine, Some rep1, Some rep2) ->
+    (* UP-CombineLocalProvenances*)
+    let ellPrime = loan_env_exclude ell prov2
+    in Succ (loan_env_include ellPrime prov2 (list_union rep1 rep2))
+  | (Override, Some rep1, Some _) ->
+    (* UP-OverrideLocalProvenances *)
+    let ellPrime = loan_env_exclude ell prov2
+    in Succ (loan_env_include ellPrime prov2 rep1)
+  | (_, None, Some _) ->
+    (* UP-AbstractProvLocalProv *)
+    if not (loan_env_is_abs ell prov1) then Fail (InvalidProv prov1)
+    else if loan_env_abs_sub ell prov1 prov2 then Succ ell
+    else Fail (InvalidProv prov1)
+  | (_, Some _, None) ->
+    (* UP-LocalProvAbstractProv *)
+    if not (loan_env_is_abs ell prov2) then Fail (InvalidProv prov2)
+    else let ellPrime = loan_env_add_abs_sub ell prov1 prov2
+    in Succ ellPrime
+  | (_, None, None) ->
+    (* UP-AbstractProvenances *)
+    if not (loan_env_is_abs ell prov1) then
+      Fail (InvalidProv prov1)
+    else if not (loan_env_is_abs ell prov2) then
+      Fail (InvalidProv prov2)
+    else if not (loan_env_abs_sub ell prov1 prov2) then
+      Fail (AbsProvsNotSubtype (prov1, prov2))
+    else Succ ell
+
+let subtype_prov_many (mode : subtype_modality) (ell : loan_env)
+    (provs1 : provs) (provs2 : provs) : loan_env tc =
+  let* provs = combine_prov "subtype_prov_many" provs1 provs2
+  in foldl (fun ell (prov1, prov2) -> subtype_prov mode ell prov1 prov2) ell provs
+
+let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
+  let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
+    match (snd ty1, snd ty2) with
+    (* UT-Refl for base types *)
+    | (BaseTy bt1, BaseTy bt2) ->
+      if bt1 = bt2 then Succ ell
+      else Fail (UnificationFailed (ty1, ty2))
+    (* UT-Refl for type variables *)
+    | (TyVar v1, TyVar v2) ->
+      if v1 = v2 then Succ ell
+      else Fail (UnificationFailed (ty1, ty2))
+    (* UT-Array *)
+    | (Array (t1, m), Array (t2, n)) ->
+      if m = n then sub ell t1 t2
+      else Fail (UnificationFailed (ty1, ty2))
+    (* UT-Slice *)
+    | (Slice t1, Slice t2) -> sub ell t1 t2
+    (* UT-SharedRef *)
+    | (Ref (v1, Shared, t1), Ref (v2, Shared, t2)) ->
+      let* ellPrime = subtype_prov mode ell v1 v2
+      in sub ellPrime t1 t2
+    (* UT-UniqueRef *)
+    | (Ref (v1, Unique, t1), Ref (v2, _, t2)) ->
+      let* ellPrime = subtype_prov mode ell v1 v2
+      in let* ell1 = sub ellPrime t1 t2
+      in let* ell2 = sub ellPrime t2 t1
+      in if ell1 = ell2 then Succ ell1
+      else Fail (UnificationFailed (t1, t2))
+    (* UT-Tuple *)
+    | (Tup tys1, Tup tys2) -> sub_many ell tys1 tys2
+    (* UT-Record *)
+    | (Rec fields1, Rec fields2) ->
+      let fields1 = List.sort (fun x y -> compare (fst x) (fst y)) fields1
+      in let fields2 = List.sort (fun x y -> compare (fst x) (fst y)) fields2
+      in sub_many ell (List.map snd fields1) (List.map snd fields2)
+    (* UT-Struct *)
+    | (Struct (name1, provs1, tys1, tagged_ty1), Struct (name2, provs2, tys2, tagged_ty2)) ->
+      if name1 = name2 then
+        let* ell_provs = subtype_prov_many mode ell provs1 provs2
+        in let* ell_tys = sub_many ell_provs tys1 tys2
+        in sub_opt ell_tys tagged_ty1 tagged_ty2
+      else Fail (UnificationFailed (ty1, ty2))
+    (* UT-Function *)
+    | (Fun (prov1, tyvar1, tys1, _, ret_ty1), Fun (prov2, tyvar2, tys2, _, ret_ty2)) ->
+      let tyvar_for_sub = List.map (fun x -> (inferred, TyVar x)) tyvar1
+      in let* prov_sub = combine_prov "UT-Function" prov1 prov2
+      in let* ty_sub = combine_ty "UT-Function" tyvar_for_sub tyvar2
+      in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
+      in let alpharenamed_tys2 = List.map do_sub tys2
+      in let* ell_prime = sub_many ell alpharenamed_tys2 tys1
+      in sub ell_prime ret_ty1 ret_ty2
+    (* UT-Bottom *)
+    | (Any, _) -> Succ ell
+    (* UT-Uninit *)
+    | (Uninit ty1, Uninit ty2) -> sub ell ty1 ty2
+    (* UT-InitUninit *)
+    | (_, Uninit inner_ty) -> sub ell ty1 inner_ty
+    (* UT-UninitInit *)
+    | (Uninit inner_ty, _) ->
+       (match sub ell inner_ty ty2 with
+        | Succ _ -> Fail (PartiallyMovedTypes (ty1, ty2))
+        | Fail err -> Fail err)
+    | (_, _) -> Fail (UnificationFailed (ty1, ty2))
+  and sub_many (ell : loan_env) (tys1 : ty list) (tys2 : ty list) : loan_env tc =
+    let* tys = combine_tys "subtype_many" tys1 tys2
+    in foldl (fun ell (ty1, ty2) -> sub ell ty1 ty2) ell tys
+  and sub_opt (ell : loan_env) (ty1 : ty option) (ty2 : ty option) : loan_env tc =
+    match (ty1, ty2) with
+    | (Some ty1, Some ty2) -> sub ell ty1 ty2
+    | (Some _, None) | (None, Some _) | (None, None) -> Succ ell
+  in sub ell ty1 ty2
+
 (* use the path to decompose a type into a context and an inner type *)
 let rec decompose (ty : ty) (path : path) : (ty_ctx * ty) tc =
   let (loc, ty) = ty
@@ -98,23 +206,29 @@ let rec decompose (ty : ty) (path : path) : (ty_ctx * ty) tc =
 (* find the type of the expr path based on the original type in a context *)
 (* this will error if the context doesn't allow the operation,
    e.g. dereferencing a shared reference in a unique context *)
-let rec compute_ty_in (ctx : owned) (ty : ty) (path : expr_path) : ty tc =
-  let (loc, ty) = ty
-  in match (ty, path) with
-  | (ty, []) -> Succ (loc, ty)
-  | (Ref (_, omega, ty), Deref :: path) ->
-    if is_at_least ctx omega then compute_ty_in ctx ty path
-    else Fail (PermissionErr (ty, path, ctx))
-  | (Rec pairs, (Field f) :: path) -> compute_ty_in ctx (List.assoc f pairs) path
-  | (Tup tys, (Index n) :: path) -> compute_ty_in ctx (List.nth tys n) path
-  | (Struct (_, _, _, Some ty), path) -> compute_ty_in ctx ty path
-  | (Uninit ty, path) ->
-    let* _ = compute_ty_in ctx ty path
-    in Fail (PartiallyMovedExprPath (ty, path))
-  | (ty, path) -> Fail (InvalidOperationOnTypeEP (path, (loc, ty)))
+let compute_ty_in (ctx : owned) (ell : loan_env) (ty : ty) (path : expr_path) : ty tc =
+  let rec compute (passed : prov list) (ty : ty) (path : expr_path) : ty tc =
+    let (loc, ty) = ty
+    in match (ty, path) with
+    | (ty, []) -> Succ (loc, ty)
+    | (Ref (prov, omega, ty), Deref :: path) ->
+      if is_at_least ctx omega then
+        let* () = for_each passed
+                           (fun prv -> let* _ = subtype_prov Combine ell prv prov in Succ ())
+        in compute (List.cons prov passed) ty path
+      else Fail (PermissionErr (ty, path, ctx))
+    | (Rec pairs, (Field f) :: path) -> compute passed (List.assoc f pairs) path
+    | (Tup tys, (Index n) :: path) -> compute passed (List.nth tys n) path
+    | (Struct (_, _, _, Some ty), path) -> compute passed ty path
+    | (Uninit ty, path) ->
+      let* _ = compute passed ty path
+      in Fail (PartiallyMovedExprPath (ty, path))
+    | (ty, path) -> Fail (InvalidOperationOnTypeEP (path, (loc, ty)))
+  in compute [] ty path
 
 (* find the type of the expr path based on the original type, assuming a shared use context*)
-let compute_ty (ty : ty) (path : expr_path) : ty tc =  compute_ty_in Shared ty path
+let compute_ty (ell : loan_env) (ty : ty) (path : expr_path) : ty tc =
+  compute_ty_in Shared ell ty path
 
 let rec plug (fill : ty) (ctx : ty_ctx) : ty =
   let (loc, ctx) = ctx

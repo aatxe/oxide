@@ -3,114 +3,6 @@ open Edsl
 open Meta
 open Util
 
-let subtype_prov (mode : subtype_modality) (ell : loan_env)
-    (prov1 : prov) (prov2 : prov) : loan_env tc =
-  match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
-  | (Combine, Some rep1, Some rep2) ->
-    (* UP-CombineLocalProvenances*)
-    let ellPrime = loan_env_exclude ell prov2
-    in Succ (loan_env_include ellPrime prov2 (list_union rep1 rep2))
-  | (Override, Some rep1, Some _) ->
-    (* UP-OverrideLocalProvenances *)
-    let ellPrime = loan_env_exclude ell prov2
-    in Succ (loan_env_include ellPrime prov2 rep1)
-  | (_, None, Some _) ->
-    (* UP-AbstractProvLocalProv *)
-    if not (loan_env_is_abs ell prov1) then Fail (InvalidProv prov1)
-    else if loan_env_abs_sub ell prov1 prov2 then Succ ell
-    else Fail (InvalidProv prov1)
-  | (_, Some _, None) ->
-    (* UP-LocalProvAbstractProv *)
-    if not (loan_env_is_abs ell prov2) then Fail (InvalidProv prov2)
-    else let ellPrime = loan_env_add_abs_sub ell prov1 prov2
-    in Succ ellPrime
-  | (_, None, None) ->
-    (* UP-AbstractProvenances *)
-    if not (loan_env_is_abs ell prov1) then
-      Fail (InvalidProv prov1)
-    else if not (loan_env_is_abs ell prov2) then
-      Fail (InvalidProv prov2)
-    else if not (loan_env_abs_sub ell prov1 prov2) then
-      Fail (AbsProvsNotSubtype (prov1, prov2))
-    else Succ ell
-
-let subtype_prov_many (mode : subtype_modality) (ell : loan_env)
-    (provs1 : provs) (provs2 : provs) : loan_env tc =
-  let* provs = combine_prov "subtype_prov_many" provs1 provs2
-  in foldl (fun ell (prov1, prov2) -> subtype_prov mode ell prov1 prov2) ell provs
-
-let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
-  let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
-    match (snd ty1, snd ty2) with
-    (* UT-Refl for base types *)
-    | (BaseTy bt1, BaseTy bt2) ->
-      if bt1 = bt2 then Succ ell
-      else Fail (UnificationFailed (ty1, ty2))
-    (* UT-Refl for type variables *)
-    | (TyVar v1, TyVar v2) ->
-      if v1 = v2 then Succ ell
-      else Fail (UnificationFailed (ty1, ty2))
-    (* UT-Array *)
-    | (Array (t1, m), Array (t2, n)) ->
-      if m = n then sub ell t1 t2
-      else Fail (UnificationFailed (ty1, ty2))
-    (* UT-Slice *)
-    | (Slice t1, Slice t2) -> sub ell t1 t2
-    (* UT-SharedRef *)
-    | (Ref (v1, Shared, t1), Ref (v2, Shared, t2)) ->
-      let* ellPrime = subtype_prov mode ell v1 v2
-      in sub ellPrime t1 t2
-    (* UT-UniqueRef *)
-    | (Ref (v1, Unique, t1), Ref (v2, _, t2)) ->
-      let* ellPrime = subtype_prov mode ell v1 v2
-      in let* ell1 = sub ellPrime t1 t2
-      in let* ell2 = sub ellPrime t2 t1
-      in if ell1 = ell2 then Succ ell1
-      else Fail (UnificationFailed (t1, t2))
-    (* UT-Tuple *)
-    | (Tup tys1, Tup tys2) -> sub_many ell tys1 tys2
-    (* UT-Record *)
-    | (Rec fields1, Rec fields2) ->
-      let fields1 = List.sort (fun x y -> compare (fst x) (fst y)) fields1
-      in let fields2 = List.sort (fun x y -> compare (fst x) (fst y)) fields2
-      in sub_many ell (List.map snd fields1) (List.map snd fields2)
-    (* UT-Struct *)
-    | (Struct (name1, provs1, tys1, tagged_ty1), Struct (name2, provs2, tys2, tagged_ty2)) ->
-      if name1 = name2 then
-        let* ell_provs = subtype_prov_many mode ell provs1 provs2
-        in let* ell_tys = sub_many ell_provs tys1 tys2
-        in sub_opt ell_tys tagged_ty1 tagged_ty2
-      else Fail (UnificationFailed (ty1, ty2))
-    (* UT-Function *)
-    | (Fun (prov1, tyvar1, tys1, _, ret_ty1), Fun (prov2, tyvar2, tys2, _, ret_ty2)) ->
-      let tyvar_for_sub = List.map (fun x -> (inferred, TyVar x)) tyvar1
-      in let* prov_sub = combine_prov "UT-Function" prov1 prov2
-      in let* ty_sub = combine_ty "UT-Function" tyvar_for_sub tyvar2
-      in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
-      in let alpharenamed_tys2 = List.map do_sub tys2
-      in let* ell_prime = sub_many ell alpharenamed_tys2 tys1
-      in sub ell_prime ret_ty1 ret_ty2
-    (* UT-Bottom *)
-    | (Any, _) -> Succ ell
-    (* UT-Uninit *)
-    | (Uninit ty1, Uninit ty2) -> sub ell ty1 ty2
-    (* UT-InitUninit *)
-    | (_, Uninit inner_ty) -> sub ell ty1 inner_ty
-    (* UT-UninitInit *)
-    | (Uninit inner_ty, _) ->
-       (match sub ell inner_ty ty2 with
-        | Succ _ -> Fail (PartiallyMovedTypes (ty1, ty2))
-        | Fail err -> Fail err)
-    | (_, _) -> Fail (UnificationFailed (ty1, ty2))
-  and sub_many (ell : loan_env) (tys1 : ty list) (tys2 : ty list) : loan_env tc =
-    let* tys = combine_tys "subtype_many" tys1 tys2
-    in foldl (fun ell (ty1, ty2) -> sub ell ty1 ty2) ell tys
-  and sub_opt (ell : loan_env) (ty1 : ty option) (ty2 : ty option) : loan_env tc =
-    match (ty1, ty2) with
-    | (Some ty1, Some ty2) -> sub ell ty1 ty2
-    | (Some _, None) | (None, Some _) | (None, None) -> Succ ell
-  in sub ell ty1 ty2
-
 let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
   let* ell1 = subtype Combine ell ty1 ty2
   in let* ell2 = subtype Combine ell ty2 ty1
@@ -178,7 +70,7 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
       in let place_exprs = List.map snd (loan_env_lookup ell prov)
       in let check_ty (pi : place_expr) : unit tc =
         let* ty_root = var_env_lookup gamma (fst pi, (sndfst pi, []))
-        in let* ty_pi = compute_ty ty_root (sndsnd pi)
+        in let* ty_pi = compute_ty ell ty_root (sndsnd pi)
         in if snd ty_pi = snd ty then Succ ()
         else Fail (TypeMismatch (ty, ty_pi))
       in for_each_rev check_ty place_exprs
@@ -217,7 +109,7 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
        in match res with
        | None ->
           let* root_ty = var_env_lookup_expr_root gamma (snd loan)
-          in let* res_ty = compute_ty_in omega root_ty (expr_path_of (snd loan))
+          in let* res_ty = compute_ty_in omega ell root_ty (expr_path_of (snd loan))
           in Succ (Some res_ty, loan)
        | Some possible_conflicts ->
          (* the reason these are only _possible_ conflicts is essentially reborrows *)
@@ -231,12 +123,12 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
          | None -> (* but here, the only conflict are precisely loans being reborrowed *)
            if possible_conflicts = [] then
              let* root_ty = var_env_lookup_expr_root gamma phi
-             in let* res_ty = compute_ty_in omega root_ty (expr_path_of phi)
+             in let* res_ty = compute_ty_in omega ell root_ty (expr_path_of phi)
              in Succ (Some res_ty, loan)
            else let hd = List.hd possible_conflicts
            in if is_at_least omega (fst hd) then
              let* root_ty = var_env_lookup_expr_root gamma (snd hd)
-             in let* res_ty = compute_ty_in omega root_ty (expr_path_of (snd hd))
+             in let* res_ty = compute_ty_in omega ell root_ty (expr_path_of (snd hd))
              in Succ (Some res_ty, loan)
            else Succ (None, hd)
   in let tmp = List.map safe_then_ty loans
@@ -258,7 +150,7 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
       in if ellPrime = ell then
         if (snd ty) = Any then
           let* init_ty = var_env_lookup_place_expr gamma (fst phi, (expr_root_of phi, []))
-          in let* computed_ty = compute_ty_in omega init_ty (sndsnd phi)
+          in let* computed_ty = compute_ty_in omega ell init_ty (sndsnd phi)
           in Succ (computed_ty, uniq_cons (omega, phi) loans)
         else Succ (ty, uniq_cons (omega, phi) loans)
       else Fail (LoanEnvMismatch (fst phi, ell, ellPrime))
@@ -742,8 +634,10 @@ let wf_global_env (sigma : global_env) : unit tc =
     match entry with
     (* WF-FunctionDef*)
     | FnDef (_, provs, tyvars, params, ret_ty, body) ->
-      let free_provs = (* this lets us get away without letprov *)
-        List.filter (fun prov -> not (List.mem prov provs)) (free_provs body)
+      let not_in_provs (prov : prov) : bool =
+        not (List.mem (snd prov) (List.map snd provs))
+      in let free_provs = (* this lets us get away without letprov *)
+        List.filter not_in_provs (free_provs body)
       in let delta = (List.append provs free_provs, tyvars)
       in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
       in let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
