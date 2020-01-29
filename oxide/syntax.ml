@@ -372,6 +372,13 @@ let for_each_rev (fn : 'a -> unit tc) (lst : 'a list) : unit tc =
 let for_each (lst : 'a list) (fn : 'a -> unit tc) : unit tc =
   foldl (fun () elem -> fn elem) () lst
 
+let find (fn : 'a -> bool tc) (lst : 'a list) : 'a option tc =
+  let worker (acc : 'a option) (elem : 'a) : 'a option tc =
+    match acc with
+    | Some ans -> Succ (Some ans)
+    | None -> let* test = fn elem in if test then Succ (Some elem) else Succ None
+  in foldl worker None lst
+
 let all (fn : 'a -> bool tc) (lst : 'a list) : bool tc =
   let worker (elem : 'a) (acc : 'b tc) : 'b tc =
     let* acc = acc

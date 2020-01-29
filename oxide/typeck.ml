@@ -475,8 +475,13 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
          in let new_params = List.map do_sub params
          in let* ty_pairs = combine_tys "T-App" new_params arg_tys
-         in let types_match (((_, expected), (_, found)) : ty * ty) : bool = expected == found
-         in (match List.find_opt types_match ty_pairs with
+         in let types_mismatch ((expected, found) : ty * ty) : bool tc =
+           match subtype Combine ell expected found with
+           | Succ _ -> Succ false
+           | Fail (UnificationFailed _) -> Succ true
+           | Fail err -> Fail err
+         in let* type_mismatches = find types_mismatch ty_pairs
+         in (match type_mismatches with
              | None ->
                let new_ret_ty = do_sub ret_ty
                in let* () = valid_type sigma delta ellN gammaN new_ret_ty
