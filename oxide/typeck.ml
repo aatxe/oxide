@@ -176,20 +176,17 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
       let* () = valid_prov delta ell gamma prov
       in let* () = valid ty
       in let place_exprs = List.map snd (loan_env_lookup ell prov)
-      in let work (pi : place_expr) (acc : unit tc) : unit tc =
-        let* () = acc
-        in let* ty_root = var_env_lookup gamma (fst pi, (sndfst pi, []))
+      in let check_ty (pi : place_expr) : unit tc =
+        let* ty_root = var_env_lookup gamma (fst pi, (sndfst pi, []))
         in let* ty_pi = compute_ty ty_root (sndsnd pi)
         in if snd ty_pi = snd ty then Succ ()
         else Fail (TypeMismatch (ty, ty_pi))
-      in List.fold_right work place_exprs (Succ ())
+      in for_each_rev check_ty place_exprs
     | Fun (provs, tyvars, param_tys, gamma_c, ret_ty) ->
       let* () = valid_var_env gamma_c
       in let new_delta =
         (List.append (fst delta) provs, List.append (snd delta) tyvars)
-      in let work (ty : ty) (acc : unit tc) =
-        let* () = acc in valid_type sigma new_delta ell gamma ty
-      in let* () = List.fold_right work param_tys (Succ ())
+      in let* () = for_each_rev (valid_type sigma new_delta ell gamma) param_tys
       in valid ret_ty
     | Array (typ, n) ->
       if n >= 0 then valid typ
@@ -198,23 +195,13 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
     | Rec pairs -> valid_many (List.map snd pairs)
     | Tup tys -> valid_many tys
     | Struct _ -> Succ () (* TODO: use sigma *)
-  and valid_many (tys : ty list) : unit tc =
-    let work (ty : ty) (acc : unit tc) =
-      let* () = acc in valid ty
-    in List.fold_right work tys (Succ ())
-  and valid_var_env (gamma : var_env) : unit tc =
-    let work (entry : var * ty) (acc : unit tc) =
-      let* () = acc
-      in let (_, ty) = entry
-      in valid ty
-    in List.fold_right work gamma (Succ ())
+  and valid_many (tys : ty list) : unit tc = for_each_rev valid tys
+  and valid_var_env (gamma : var_env) : unit tc = for_each_rev (fun (_, ty) -> valid ty) gamma
   in valid ty
 
 let valid_types (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
     (tys : ty list) : unit tc =
-  let valid_ty (ty : ty) (acc : unit tc) =
-    let* () = acc in valid_type sigma delta ell gamma ty
-  in List.fold_right valid_ty tys (Succ ())
+  for_each_rev (valid_type sigma delta ell gamma) tys
 
 let type_of (prim : prim) : ty =
   (inferred, match prim with
@@ -394,10 +381,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* ellPrime = subtype Override ell1 ty_update ty_old
       in let place_opts = List.map (fun loan -> place_expr_to_place (snd loan)) loans
       in let places = List.map unwrap (List.filter (fun opt -> opt != None) place_opts)
-      in let work (acc : var_env tc) (pi : place) : var_env tc =
-          let* gamma = acc
-          in var_env_type_update gamma pi ty_update
-      in let* gammaPrime = List.fold_left work (Succ gamma1) places
+      in let* gammaPrime =
+        foldl (fun gamma pi -> var_env_type_update gamma pi ty_update) gamma1 places
       in Succ ((inferred, BaseTy Unit), ellPrime, gammaPrime)
     (* T-Abort *)
     | Abort _ -> Succ ((inferred, Any), ell, gamma)
@@ -481,9 +466,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
          in let new_params = List.map do_sub params
          in let* ty_pairs = combine_tys "T-App" new_params arg_tys
-         in let types_match (tys : ty * ty) : bool =
-              let (expected, found) = tys
-              in (snd expected) == (snd found)
+         in let types_match (((_, expected), (_, found)) : ty * ty) : bool = expected == found
          in (match List.find_opt types_match ty_pairs with
              | None ->
                let new_ret_ty = do_sub ret_ty
@@ -517,13 +500,12 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
          in let expected_tys = List.map (fun x -> do_sub (snd x)) dfn_fields_sorted
          in let* pairs = combine_expr "T-RecStruct" exprs expected_tys
-         in let tc_exp (acc : (loan_env * var_env) tc) (p : expr * ty) =
-           let* (ell, gamma) = acc
-           in let (expr, expected_ty) = p
+         in let tc_exp ((ell, gamma) : loan_env * var_env) (p : expr * ty) =
+           let (expr, expected_ty) = p
            in let* (found_ty, ell_prime, gamma_prime) = tc delta ell gamma expr
            in let* ell_final = subtype Combine ell_prime found_ty expected_ty
            in Succ (ell_final, gamma_prime)
-         in let* (ell_prime, gamma_prime) = List.fold_left tc_exp (Succ (ell, gamma)) pairs
+         in let* (ell_prime, gamma_prime) = foldl tc_exp (ell, gamma) pairs
          in let tagged_ty : ty option = Some (inferred, Rec dfn_fields_sorted)
          in Succ ((inferred, Struct (name, provs, tys, tagged_ty)), ell_prime, gamma_prime)
        | Some (Tup _) -> Fail (WrongStructConstructor (fst expr, name, Rec))
@@ -537,13 +519,12 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
          in let expected_tys = List.map (fun x -> do_sub x) dfn_tys
          in let* pairs = combine_expr "T-TupStruct" exprs expected_tys
-         in let tc_exp (acc : (loan_env * var_env) tc) (p : expr * ty) =
-           let* (ell, gamma) = acc
-           in let (expr, expected_ty) = p
+         in let tc_exp ((ell, gamma) : (loan_env * var_env)) (p : expr * ty) =
+           let (expr, expected_ty) = p
            in let* (found_ty, ell_prime, gamma_prime) = tc delta ell gamma expr
            in let* ell_final = subtype Combine ell_prime found_ty expected_ty
            in Succ (ell_final, gamma_prime)
-         in let* (ell_prime, gamma_prime) = List.fold_left tc_exp (Succ (ell, gamma)) pairs
+         in let* (ell_prime, gamma_prime) = foldl tc_exp (ell, gamma) pairs
          in let tagged_ty : ty option = Some (inferred, Tup dfn_tys)
          in Succ ((inferred, Struct (name, provs, tys, tagged_ty)), ell_prime, gamma_prime)
        | Some (Rec _) -> Fail (WrongStructConstructor (fst expr, name, Tup))
@@ -554,11 +535,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Ptr _ -> failwith "unimplemented: T-Pointer"
   and tc_many (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
       (exprs : expr list) : (ty list * loan_env * var_env) tc =
-    let work (e : expr) (acc : (ty list * loan_env * var_env) tc) =
-      let* (curr_tys, curr_ell, curr_gamma) = acc
-      in let* (ty, ellPrime, gammaPrime) = tc delta curr_ell curr_gamma e
+    let tc_next (e : expr) ((curr_tys, curr_ell, curr_gamma) : ty list * loan_env * var_env) =
+      let* (ty, ellPrime, gammaPrime) = tc delta curr_ell curr_gamma e
       in Succ (List.cons ty curr_tys, ellPrime, gammaPrime)
-    in List.fold_right work exprs (Succ ([], ell, gamma))
+    in foldr tc_next exprs ([], ell, gamma)
   in tc delta ell gamma expr
 
 (* populate the tagged section of struct types based on the global environment *)
@@ -690,33 +670,29 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       in let uninit : prety = Uninit ty
       in Succ (loc, uninit)
   and do_exprs (ctx : struct_var list) (exprs : expr list) : expr list tc =
-    let do_lifted (expr : expr) (acc : expr list tc) : expr list tc =
-      let* so_far = acc
-      in let* expr = do_expr ctx expr
-      in Succ (List.cons expr so_far)
-    in List.fold_right do_lifted exprs (Succ [])
+    let do_lifted (expr : expr) (exprs : expr list) : expr list tc =
+      let* expr = do_expr ctx expr
+      in Succ (List.cons expr exprs)
+    in foldr do_lifted exprs []
   and do_args (ctx : struct_var list) (args : (field * expr) list) : (field * expr) list tc =
-    let do_lifted (arg : field * expr) (acc : (field * expr) list tc) : (field * expr) list tc =
-      let* so_far = acc
-      in let* expr = do_expr ctx (snd arg)
+    let do_lifted (arg : field * expr) (so_far : (field * expr) list) : (field * expr) list tc =
+      let* expr = do_expr ctx (snd arg)
       in Succ (List.cons (fst arg, expr) so_far)
-    in List.fold_right do_lifted args (Succ [])
+    in foldr do_lifted args []
   and do_tys (ctx : struct_var list) (tys : ty list) : ty list tc =
-    let do_lifted (ty : ty) (acc : ty list tc) : ty list tc =
-      let* so_far = acc
-      in let* ty = do_ty ctx ty
-      in Succ (List.cons ty so_far)
-    in List.fold_right do_lifted tys (Succ [])
+    let do_lifted (ty : ty) (tys : ty list) : ty list tc =
+      let* ty = do_ty ctx ty
+      in Succ (List.cons ty tys)
+    in foldr do_lifted tys []
   and do_opt_ty (ctx : struct_var list) (ty : ty option) : ty option tc =
     match ty with
     | Some ty -> let* ty = do_ty ctx ty in Succ (Some ty)
     | None -> Succ None
   and do_params (ctx : struct_var list) (params : (var * ty) list) : (var * ty) list tc =
-    let do_lifted (param : var * ty) (acc : (var * ty) list tc) : (var * ty) list tc =
-      let* so_far = acc
-      in let* ty = do_ty ctx (snd param)
+    let do_lifted (param : var * ty) (so_far : (var * ty) list) : (var * ty) list tc =
+      let* ty = do_ty ctx (snd param)
       in Succ (List.cons (fst param, ty) so_far)
-    in List.fold_right do_lifted params (Succ [])
+    in foldr do_lifted params []
   and do_global_entry (ctx : struct_var list) (entry : global_entry) : global_entry tc =
     match entry with
     | FnDef (fn, provs, tyvars, params, ret_ty, body) ->
@@ -731,18 +707,16 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       let* tys = do_tys ctx tys
       in Succ (TupStructDef (copyable, sn, provs, tyvars, tys))
   and do_global_entries (ctx : struct_var list) (entries : global_entry list) : global_entry list tc =
-    let do_lifted (entry : global_entry) (acc : global_entry list tc) : global_entry list tc =
-      let* so_far = acc
-      in let* entry = do_global_entry ctx entry
-      in Succ (List.cons entry so_far)
-    in List.fold_right do_lifted entries (Succ [])
+    let do_lifted (entry : global_entry) (entries : global_entry list) : global_entry list tc =
+      let* entry = do_global_entry ctx entry
+      in Succ (List.cons entry entries)
+    in foldr do_lifted entries []
   in do_global_entries [] sigma
 
 let wf_global_env (sigma : global_env) : unit tc =
   let* sigma = struct_to_tagged (List.cons drop sigma)
-  in let valid_global_entry (acc : unit tc) (entry : global_entry) : unit tc =
-    let* () = acc
-    in match entry with
+  in let valid_global_entry (entry : global_entry) : unit tc =
+    match entry with
     (* WF-FunctionDef*)
     | FnDef (_, provs, tyvars, params, ret_ty, body) ->
       let free_provs = (* this lets us get away without letprov *)
@@ -781,4 +755,4 @@ let wf_global_env (sigma : global_env) : unit tc =
       in let* () = valid_copy_impl sigma (unwrap (global_env_find_struct sigma name))
       in let* () = valid_types sigma delta ell empty_gamma tys
       in Succ ()
-  in List.fold_left valid_global_entry (Succ ()) sigma
+  in for_each sigma valid_global_entry

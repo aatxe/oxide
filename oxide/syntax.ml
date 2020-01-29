@@ -361,6 +361,16 @@ let foldr (fn : 'a -> 'b -> 'b tc) (lst : 'a list) (acc : 'b) : 'b tc =
     let* acc = acc in fn elem acc
   in List.fold_right worker lst (Succ acc)
 
+let map (fn : 'a -> 'b tc) (lst : 'a list) : ('b list) tc =
+  foldr (fun elem acc -> let* elem = elem in Succ (List.cons elem acc))
+        (List.map fn lst) []
+
+let for_each_rev (fn : 'a -> unit tc) (lst : 'a list) : unit tc =
+  foldr (fun elem () -> fn elem) lst ()
+
+let for_each (lst : 'a list) (fn : 'a -> unit tc) : unit tc =
+  foldl (fun () elem -> fn elem) () lst
+
 let all (fn : 'a -> bool tc) (lst : 'a list) : bool tc =
   let worker (elem : 'a) (acc : 'b tc) : 'b tc =
     let* acc = acc
