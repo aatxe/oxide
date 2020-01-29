@@ -210,8 +210,8 @@ let type_of (prim : prim) : ty =
   | True | False -> BaseTy Bool)
 
 let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : owned)
-    (pi : place_expr) : (ty * loans) tc =
-  let* loans = eval_place_expr ell gamma omega pi
+    (phi : place_expr) : (ty * loans) tc =
+  let* loans = eval_place_expr ell gamma omega phi
   in let safe_then_ty (loan : loan) : (ty option * loan) tc =
        let* res = is_safe ell gamma omega (snd loan)
        in match res with
@@ -226,7 +226,7 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
          | Some loan -> Succ (None, loan) (* in this case, we've found a _real_ conflict *)
          | None -> (* but here, the only conflict are precisely loans being reborrowed *)
            let hd = List.hd possible_conflicts
-           in if not (place_expr_is_place pi) && is_at_least omega (fst hd) then
+           in if not (place_expr_is_place phi) && is_at_least omega (fst hd) then
              let* res_ty = var_env_lookup_place_expr gamma (snd hd)
              in Succ (Some res_ty, loan)
            else Succ (None, hd)
@@ -238,21 +238,21 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
   | Some (Succ _) -> failwith "unreachable"
   | None ->
     match List.assoc_opt None opt_tys with
-    | Some (o, place) -> Fail (SafetyErr ((omega, pi), (o, place)))
+    | Some conflicting_loan -> Fail (SafetyErr ((omega, phi), conflicting_loan))
     | None ->
       let tys = List.map (fun pair -> unwrap (fst pair)) opt_tys
-      in let* (ellPrime, ty) = unify_many (fst pi) ell tys
+      in let* (ellPrime, ty) = unify_many (fst phi) ell tys
       in let* _ =
         let* noncopy = noncopyable sigma ty
-        in if noncopy then eval_place_expr ell gamma omega pi
+        in if noncopy then eval_place_expr ell gamma omega phi
         else Succ []
       in if ellPrime = ell then
         if (snd ty) = Any then
-          let* init_ty = var_env_lookup_place_expr gamma (fst pi, (root_of pi, []))
-          in let* computed_ty = compute_ty_in omega init_ty (sndsnd pi)
-          in Succ (computed_ty, uniq_cons (omega, pi) loans)
-        else Succ (ty, uniq_cons (omega, pi) loans)
-      else Fail (LoanEnvMismatch (fst pi, ell, ellPrime))
+          let* init_ty = var_env_lookup_place_expr gamma (fst phi, (expr_root_of phi, []))
+          in let* computed_ty = compute_ty_in omega init_ty (sndsnd phi)
+          in Succ (computed_ty, uniq_cons (omega, phi) loans)
+        else Succ (ty, uniq_cons (omega, phi) loans)
+      else Fail (LoanEnvMismatch (fst phi, ell, ellPrime))
 
 let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
                (expr : expr) : (ty * loan_env * var_env) tc =

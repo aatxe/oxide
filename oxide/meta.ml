@@ -177,17 +177,25 @@ let all_loans (omega : owned) (ell : loan_env) : loans =
   List.filter (fun loan -> is_at_least omega (fst loan)) (List.flatten (List.map snd (fst ell)))
 
 (* find the root of a given place expr *)
-let root_of (pi : place_expr) : var = sndfst pi
+let root_of (pi : place) : var = sndfst pi
+(* find the path for the given place *)
+let path_of (pi : place) : path = sndsnd pi
 
-(* find all at-least-omega loans in gamma that have to do with pi *)
-let find_loans (omega : owned) (ell : loan_env) (pi : place_expr) : loans =
+(* find the root of a given place expr *)
+let expr_root_of (phi : place_expr) : var = sndfst phi
+(* find the path for the given place_expr *)
+let expr_path_of (phi : place_expr) : expr_path = sndsnd phi
+
+
+(* find all at-least-omega loans in gamma that have to do with phi *)
+let find_loans (omega : owned) (ell : loan_env) (phi : place_expr) : loans =
   (* n.b. this is actually too permissive because of reborrowing and deref *)
-  let root_of_pi = root_of pi
+  let root_of_phi = expr_root_of phi
   in let relevant (loan : loan) : bool =
     (* a loan is relevant if it is a descendant of any subplace of pi *)
-    let (_, pi_prime) = loan
+    let (_, phi_prime) = loan
        (* the easiest way to check is to check if their roots are the same *)
-    in root_of_pi = root_of pi_prime
+    in root_of_phi = expr_root_of phi_prime
   in List.filter relevant (all_loans omega ell)
 
 (* evaluates the place expression down to a collection of possible places *)
@@ -227,37 +235,45 @@ let norm_place_expr (ell : loan_env) (gamma : var_env) (phi : place_expr) : plac
     in foldl continue complete still_to_norm
   in norm phi
 
-let rec is_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
+(* is path2 a prefix of path1? *)
+let rec is_prefix_of (path1 : path) (path2 : path) : bool =
   match (path1, path2) with
   | (_, []) -> true
   | ([], _) -> false
   | (Field f1 :: path1, Field f2 :: path2) -> if f1 = f2 then is_prefix_of path1 path2 else false
   | (Index i1 :: path1, Index i2 :: path2) -> if i1 = i2 then is_prefix_of path1 path2 else false
-  | (Deref :: path1, Deref :: path2) -> is_prefix_of path1 path2
   | (_, _) -> false
 
-(* this definition of disjoint essentially only works on places *)
-let not_disjoint (pi : place_expr * place_expr) : bool =
-  let (pi1, pi2) = pi
-  in if sndfst pi1 = sndfst pi2 then
-    is_prefix_of (sndsnd pi1) (sndsnd pi2) || is_prefix_of (sndsnd pi2) (sndsnd pi1)
+(* are the given places disjoint? *)
+let disjoint (pi1 : place) (pi2 : place) : bool =
+  (* two places are not disjoint if their roots are equal... *)
+  if root_of pi1 = root_of pi2 then
+    (* ... and one path is a prefix of the other  *)
+    not (is_prefix_of (path_of pi1) (path_of pi2) || is_prefix_of (path_of pi2) (path_of pi1))
   else true
 
-(* given a gamma, determines whether it is safe to use pi according to omega *)
+(* is the place expression phi disjoint from pi in the given environments? *)
+let expr_disjoint (ell : loan_env) (gamma : var_env) (phi : place_expr) (pi : place) : bool tc =
+  (* a place expression is disjoint from pi if... *)
+  let* pis = norm_place_expr ell gamma phi (* we can normalize it*)
+  in Succ (List.for_all (disjoint pi) pis) (* and all resulting pis are disjoint from pi *)
+
+(* is the given place expression phi omega safe in the given environments? *)
 let is_safe (ell : loan_env) (gamma : var_env) (omega : owned) (phi : place_expr) : loans option tc =
-  let relevant (acc : loans) ((omega, phi_prime) : loan) : loans tc =
+  let next_loan (loans : loans) ((omega, phi_prime) : loan) : loans tc =
     let* pis = norm_place_expr ell gamma phi_prime
-    in if List.for_all not_disjoint (List.map (fun pi -> (phi, place_to_place_expr pi)) pis) then
-      Succ (List.cons (omega, phi_prime) acc)
-    else Succ acc
+    in let* should_include =
+      all (fun pi -> let* disjoint = expr_disjoint ell gamma phi pi in Succ (not disjoint)) pis
+    in if should_include then Succ (List.cons (omega, phi_prime) loans)
+    else Succ loans
   in match omega with
   | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
-    let* res = foldl relevant [] (find_loans Shared ell phi)
+    let* res = foldl next_loan [] (find_loans Shared ell phi)
     in (match res with
         | [] -> Succ None
         | loans -> Succ (Some loans))
   | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
-    let* res = foldl relevant [] (find_loans Unique ell phi)
+    let* res = foldl next_loan [] (find_loans Unique ell phi)
     in (match res with
         | [] -> Succ None
         | loans -> Succ (Some loans))
