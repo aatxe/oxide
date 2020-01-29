@@ -512,7 +512,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let* prov_sub = combine_prov "T-RecStruct" provs dfn_provs
          in let* ty_sub = combine_ty "T-RecStruct" tys tyvars
          in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
-         in let expected_tys = List.map (fun x -> do_sub (snd x)) dfn_fields_sorted
+         in let expected_fields = List.map (fun (f, ty) -> (f, do_sub ty)) dfn_fields_sorted
+         in let expected_tys = List.map snd expected_fields
          in let* pairs = combine_expr "T-RecStruct" exprs expected_tys
          in let tc_exp ((ell, gamma) : loan_env * var_env) (p : expr * ty) =
            let (expr, expected_ty) = p
@@ -520,7 +521,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
            in let* ell_final = subtype Combine ell_prime found_ty expected_ty
            in Succ (ell_final, gamma_prime)
          in let* (ell_prime, gamma_prime) = foldl tc_exp (ell, gamma) pairs
-         in let tagged_ty : ty option = Some (inferred, Rec dfn_fields_sorted)
+         in let tagged_ty : ty option = Some (inferred, Rec expected_fields)
          in Succ ((inferred, Struct (name, provs, tys, tagged_ty)), ell_prime, gamma_prime)
        | Some (Tup _) -> Fail (WrongStructConstructor (fst expr, name, Rec))
        | None -> Fail (UnknownStruct (fst expr, name)))
@@ -531,7 +532,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          let* prov_sub = combine_prov "T-TupStruct" provs dfn_provs
          in let* ty_sub = combine_ty "T-TupStruct" tys tyvars
          in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
-         in let expected_tys = List.map (fun x -> do_sub x) dfn_tys
+         in let expected_tys = List.map do_sub dfn_tys
          in let* pairs = combine_expr "T-TupStruct" exprs expected_tys
          in let tc_exp ((ell, gamma) : (loan_env * var_env)) (p : expr * ty) =
            let (expr, expected_ty) = p
@@ -638,13 +639,21 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       let* tys = do_tys ctx tys
       in if List.mem sn ctx then Succ (loc, Struct (sn, provs, tys, None))
       else (match global_env_find_struct sigma sn with
-      | Some (Rec (_, _, _, _, fields)) ->
+      | Some (Rec (_, _, dfn_provs, tyvars, fields)) ->
         let fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) fields
-        in let* fields = do_params (List.cons sn ctx) fields_sorted
+        in let* prov_sub = combine_prov "T-RecStruct" provs dfn_provs
+        in let* ty_sub = combine_ty "T-RecStruct" tys tyvars
+        in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
+        in let fields_fixed = List.map (fun (f, ty) -> (f, do_sub ty)) fields_sorted
+        in let* fields = do_params (List.cons sn ctx) fields_fixed
         in let ty : ty = (inferred, Rec fields)
         in Succ (loc, Struct (sn, provs, tys, Some ty))
-      | Some (Tup (_, _, _, _, tup_tys)) ->
-        let* tup_tys = do_tys ctx tup_tys
+      | Some (Tup (_, _, dfn_provs, tyvars, tup_tys)) ->
+        let* prov_sub = combine_prov "T-TupStruct" provs dfn_provs
+        in let* ty_sub = combine_ty "T-TupStruct" tys tyvars
+        in let do_sub (ty : ty) : ty = subst_many (subst_many_prov ty prov_sub) ty_sub
+        in let tup_tys = List.map do_sub tup_tys
+        in let* tup_tys = do_tys ctx tup_tys
         in let ty : ty = (inferred, Tup tup_tys)
         in Succ (loc, Struct (sn, provs, tys, Some ty))
       | None -> Fail (UnknownStruct (loc, sn)))
