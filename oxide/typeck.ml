@@ -216,19 +216,27 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
        let* res = is_safe ell gamma omega (snd loan)
        in match res with
        | None ->
-         let* root_ty = var_env_lookup_expr_root gamma (snd loan)
-         in let* res_ty = compute_ty_in omega root_ty (expr_path_of (snd loan))
+          let* root_ty = var_env_lookup_expr_root gamma (snd loan)
+          in let* res_ty = compute_ty_in omega root_ty (expr_path_of (snd loan))
           in Succ (Some res_ty, loan)
        | Some possible_conflicts ->
          (* the reason these are only _possible_ conflicts is essentially reborrows *)
-         let is_in (loan : loan) (other_loan : loan) : bool = (snd other_loan) = (snd loan)
+         let possible_conflicts =
+           List.filter (fun (_, phi_prime) -> not (expr_disjoint phi phi_prime))
+                       possible_conflicts
+         in let is_in (loan : loan) (other_loan : loan) : bool = (snd other_loan) = (snd loan)
          in let is_real (loan : loan) : bool = not (List.exists (is_in loan) loans)
          in match List.find_opt is_real possible_conflicts with
          | Some loan -> Succ (None, loan) (* in this case, we've found a _real_ conflict *)
          | None -> (* but here, the only conflict are precisely loans being reborrowed *)
-           let hd = List.hd possible_conflicts
-           in if not (place_expr_is_place phi) && is_at_least omega (fst hd) then
-             let* res_ty = var_env_lookup_place_expr gamma (snd hd)
+           if possible_conflicts = [] then
+             let* root_ty = var_env_lookup_expr_root gamma phi
+             in let* res_ty = compute_ty_in omega root_ty (expr_path_of phi)
+             in Succ (Some res_ty, loan)
+           else let hd = List.hd possible_conflicts
+           in if is_at_least omega (fst hd) then
+             let* root_ty = var_env_lookup_expr_root gamma (snd hd)
+             in let* res_ty = compute_ty_in omega root_ty (expr_path_of (snd hd))
              in Succ (Some res_ty, loan)
            else Succ (None, hd)
   in let tmp = List.map safe_then_ty loans

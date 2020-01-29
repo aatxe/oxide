@@ -265,6 +265,18 @@ let rec is_prefix_of (path1 : path) (path2 : path) : bool =
   | (Index i1 :: path1, Index i2 :: path2) -> if i1 = i2 then is_prefix_of path1 path2 else false
   | (_, _) -> false
 
+(* is path2 a prefix of path1? *)
+let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
+  match (path1, path2) with
+  | (_, []) -> true
+  | ([], _) -> false
+  | (Field f1 :: path1, Field f2 :: path2) ->
+    if f1 = f2 then is_expr_prefix_of path1 path2 else false
+  | (Index i1 :: path1, Index i2 :: path2) ->
+    if i1 = i2 then is_expr_prefix_of path1 path2 else false
+  | (Deref :: path1, Deref :: path2) -> is_expr_prefix_of path1 path2
+  | (_, _) -> false
+
 (* are the given places disjoint? *)
 let disjoint (pi1 : place) (pi2 : place) : bool =
   (* two places are not disjoint if their roots are equal... *)
@@ -273,8 +285,17 @@ let disjoint (pi1 : place) (pi2 : place) : bool =
     not (is_prefix_of (path_of pi1) (path_of pi2) || is_prefix_of (path_of pi2) (path_of pi1))
   else true
 
+(* are the given place expressions disjoint? *)
+let expr_disjoint (phi1 : place_expr) (phi2 : place_expr) : bool =
+  (* two place exprsesions are not disjoint if their roots are equal... *)
+  if expr_root_of phi1 = expr_root_of phi2 then
+    (* ... and one path is a prefix of the other  *)
+    not (is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2) ||
+         is_expr_prefix_of (expr_path_of phi2) (expr_path_of phi1))
+  else true
+
 (* is the place expression phi disjoint from pi in the given environments? *)
-let expr_disjoint (ell : loan_env) (gamma : var_env) (phi : place_expr) (pi : place) : bool tc =
+let disjoint_from (ell : loan_env) (gamma : var_env) (phi : place_expr) (pi : place) : bool tc =
   (* a place expression is disjoint from pi if... *)
   let* pis = norm_place_expr ell gamma phi (* we can normalize it*)
   in Succ (List.for_all (disjoint pi) pis) (* and all resulting pis are disjoint from pi *)
@@ -284,7 +305,7 @@ let is_safe (ell : loan_env) (gamma : var_env) (omega : owned) (phi : place_expr
   let next_loan (loans : loans) ((omega, phi_prime) : loan) : loans tc =
     let* pis = norm_place_expr ell gamma phi_prime
     in let* should_include =
-      all (fun pi -> let* disjoint = expr_disjoint ell gamma phi pi in Succ (not disjoint)) pis
+      all (fun pi -> let* disjoint = disjoint_from ell gamma phi pi in Succ (not disjoint)) pis
     in if should_include then Succ (List.cons (omega, phi_prime) loans)
     else Succ loans
   in match omega with
