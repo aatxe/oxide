@@ -71,6 +71,8 @@ type loan = owned * place_expr [@@deriving show]
 type loans = loan list [@@deriving show]
 type prov = source_loc * prov_var [@@deriving show]
 type provs = prov list [@@deriving show]
+type bound = prov * prov [@@deriving show]
+type bounds = bound list [@@deriving show]
 
 type kind = Star | Prov [@@deriving show]
 type base_ty = Bool | U32 | Unit [@@deriving show]
@@ -89,6 +91,8 @@ type prety =
 [@@deriving show]
 and ty = source_loc * prety [@@deriving show]
 and var_env = (var * ty) list [@@deriving show]
+
+type tys = ty list [@@deriving show]
 
 (* invariant: a type context should only ever include one hole *)
 type prety_ctx =
@@ -202,7 +206,8 @@ type value =
 
 type store = (var * value) list [@@deriving show]
 
-type fn_def = fn_var * prov list * ty_var list * (var * ty) list * ty * expr
+            (* name * prov vars * type vars * parameters * return type * bounds * body *)
+type fn_def = fn_var * prov list * ty_var list * (var * ty) list * ty * bounds * expr
 [@@deriving show]
 type rec_struct_def = bool * struct_var * prov list * ty_var list * (field * ty) list
 [@@deriving show]
@@ -224,7 +229,7 @@ let empty_sigma : global_env = []
 let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
   let is_right_fn (entry : global_entry) : bool =
     match entry with
-    | FnDef (fn_here, _, _, _, _, _) -> fn_here = fn
+    | FnDef (fn_here, _, _, _, _, _, _) -> fn_here = fn
     (* we treat tuple structs as having defined a function to construct them *)
     | TupStructDef (_, fn_here, _, _, _) -> fn_here = fn
     | _ -> false
@@ -277,7 +282,8 @@ let loan_env_bindall (ell : loan_env) (vars : prov list) : loan_env =
   (fst ell, (List.append (List.map snd vars) (sndfst ell), sndsnd ell))
 let loan_env_add_abs_sub (ell : loan_env) (v1 : prov) (v2 : prov) : loan_env =
   let trans_extend (cs : subty list) (lhs : prov_var) (rhs : prov_var) : subty list =
-    let into_lhs = List.filter (fun cx -> (snd cx) = lhs) cs
+    let cs = List.cons (lhs, rhs) cs
+    in let into_lhs = List.filter (fun cx -> (snd cx) = lhs) cs
     in let from_rhs = List.filter (fun cx -> (fst cx) = rhs) cs
     in let new_cs = List.append (List.map (fun cx -> (fst cx, rhs)) into_lhs)
            (List.map (fun cx -> (lhs, snd cx)) from_rhs)

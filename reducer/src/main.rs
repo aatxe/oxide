@@ -243,7 +243,7 @@ trait PrettyPrintPlaceExpr {
 
 impl PrettyPrint for Item {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
-        if let Item::Fn(item) = self {
+        if let Item::Fn(mut item) = self {
             return Doc::text("fn")
                 .append(Doc::space())
                 .append(Doc::text(format!("\"{}\"", item.ident)))
@@ -254,16 +254,7 @@ impl PrettyPrint for Item {
                     Doc::text("[")
                         .append(
                             Doc::intersperse(
-                                item.decl.generics.lifetimes().map(|lft| {
-                                    parenthesize(
-                                        lft.lifetime.span().to_doc()
-                                            .append(Doc::text(","))
-                                            .append(Doc::space())
-                                            .append(Doc::text(
-                                                format!("\"{}\"", lft.lifetime.ident)
-                                            ))
-                                    )
-                                }),
+                                item.decl.generics.lifetimes().map(|lft| lft.clone().to_doc()),
                                 Doc::text(";").append(Doc::space())
                             )
                         )
@@ -311,6 +302,19 @@ impl PrettyPrint for Item {
                         .group(),
                     ReturnType::Type(_, ty) => ty.to_doc(),
                 }))
+                // where bounds (provenances only)
+                .append(Doc::space())
+                .append(
+                    Doc::text("[")
+                        .append(Doc::intersperse(
+                            item.decl.generics.make_where_clause()
+                                .predicates.iter()
+                                .map(|pred| pred.clone().to_doc()),
+                            Doc::text(";").append(Doc::space())
+                        ))
+                        .append(Doc::text("]"))
+                        .group()
+                )
                 // body
                 .append(Doc::space())
                 .append(item.block.to_doc().nest(2))
@@ -333,12 +337,7 @@ impl PrettyPrint for Item {
                                     Doc::text("[")
                                         .append(Doc::intersperse(
                                             item.generics.lifetimes().map(|lft| {
-                                                lft.lifetime.span().to_doc()
-                                                    .append(Doc::text(","))
-                                                    .append(Doc::space())
-                                                    .append(Doc::text(
-                                                        format!("\"{}\"", lft.lifetime.ident)
-                                                    ))
+                                                lft.clone().to_doc()
                                             }),
                                             Doc::text(";").append(Doc::space())
                                         ))
@@ -397,7 +396,7 @@ impl PrettyPrint for Item {
                                     Doc::text("[")
                                         .append(Doc::intersperse(
                                             item.generics.lifetimes().map(|lft| {
-                                                Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                                lft.clone().to_doc()
                                             }),
                                             Doc::text(";").append(Doc::space())
                                         ))
@@ -448,7 +447,7 @@ impl PrettyPrint for Item {
                                     Doc::text("[")
                                         .append(Doc::intersperse(
                                             item.generics.lifetimes().map(|lft| {
-                                                Doc::text(format!("\"{}\"", lft.lifetime.ident))
+                                                lft.clone().to_doc()
                                             }),
                                             Doc::text(";").append(Doc::space())
                                         ))
@@ -1462,6 +1461,51 @@ impl PrettyPrint for Expr {
     }
 }
 
+impl PrettyPrint for Lifetime {
+  fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+    parenthesize(
+     self.span().to_doc()
+        .append(Doc::text(","))
+        .append(Doc::space())
+        .append(quote(Doc::text(format!("{}", self.ident)))),
+    )
+  }
+}
+
+impl PrettyPrint for LifetimeDef {
+  fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+      self.lifetime.to_doc()
+  }
+}
+
+impl PrettyPrint for WherePredicate {
+  fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+        match self {
+            WherePredicate::Type(_) => {
+                panic!("Oxide does not support traits or trait bounds.")
+            },
+            WherePredicate::Eq(_) => {
+                panic!("Rust and Oxide do not support equality predicates in where clauses.")
+            },
+            // lifetime bounds
+            WherePredicate::Lifetime(mut pred) => {
+                if pred.bounds.len() != 1 {
+                    panic!("reducer requires one provenance per bound!");
+                }
+
+                // we swap directions because "b outlives a" means "a flows into b"
+                let lft = pred.bounds.pop().unwrap().into_value();
+                parenthesize(
+                    lft.to_doc()
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(pred.lifetime.to_doc())
+                )
+            }
+        }
+    }
+}
+
 impl PrettyPrint for Path {
     fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         Doc::intersperse(
@@ -1647,12 +1691,7 @@ impl PrettyPrintLifetimeGenerics for PathArguments {
                 bracketed.args.into_iter().filter(|arg| {
                     if let GenericArgument::Lifetime(_) = arg { true } else { false }
                 }).map(|arg| match arg {
-                    GenericArgument::Lifetime(lft) => parenthesize(
-                        lft.span().to_doc()
-                            .append(Doc::text(","))
-                            .append(Doc::space())
-                            .append(quote(Doc::text(format!("{}", lft.ident))))
-                    ),
+                    GenericArgument::Lifetime(lft) => lft.to_doc(),
                     _ => unreachable!()
                 }),
                 Doc::text(";").append(Doc::space())

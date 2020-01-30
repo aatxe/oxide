@@ -276,8 +276,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
       in Succ (ty2, ell2Prime, gamma2Prime)
     (* T-Assign *)
-    | Assign (pi, e) -> (* FIXME: this case needs to be fixed when the typing rule is fixed *)
-      let* (ty_old, loans) = omega_safe sigma ell gamma Unique pi
+    | Assign (phi, e) -> (* FIXME: this case needs to be fixed when the typing rule is fixed *)
+      let* (ty_old, loans) = omega_safe sigma ell gamma Unique phi
       in let* (ty_update, ell1, gamma1) = tc delta ell gamma e
       in let* ellPrime = subtype Override ell1 ty_update ty_old
       in let place_opts = List.map (fun loan -> place_expr_to_place (snd loan)) loans
@@ -321,7 +321,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     (* T-Function *)
     | Fn fn ->
       (match global_env_find_fn sigma fn with
-       | Some (_, provs, tyvars, params, ret_ty, _) ->
+       | Some (_, provs, tyvars, params, ret_ty, _, _) ->
          let fn_ty : ty = (inferred, Fun (provs, tyvars, List.map snd params, [], ret_ty))
          in Succ (fn_ty, ell, gamma)
        | None ->
@@ -610,19 +610,19 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
     in foldr do_lifted params []
   and do_global_entry (ctx : struct_var list) (entry : global_entry) : global_entry tc =
     match entry with
-    | FnDef (fn, provs, tyvars, params, ret_ty, body) ->
+    | FnDef (fn, provs, tyvars, params, ret_ty, bounds, body) ->
       let* params = do_params ctx params
       in let* ret_ty = do_ty ctx ret_ty
       in let* body = do_expr ctx body
-      in Succ (FnDef (fn, provs, tyvars, params, ret_ty, body))
+      in Succ (FnDef (fn, provs, tyvars, params, ret_ty, bounds, body))
     | RecStructDef (copyable, sn, provs, tyvars, fields) ->
       let* fields = do_params ctx fields
       in Succ (RecStructDef (copyable, sn, provs, tyvars, fields))
     | TupStructDef (copyable, sn, provs, tyvars, tys) ->
       let* tys = do_tys ctx tys
       in Succ (TupStructDef (copyable, sn, provs, tyvars, tys))
-  and do_global_entries (ctx : struct_var list) (entries : global_entry list) : global_entry list tc =
-    let do_lifted (entry : global_entry) (entries : global_entry list) : global_entry list tc =
+  and do_global_entries (ctx : struct_var list) (entries : global_env) : global_env tc =
+    let do_lifted (entry : global_entry) (entries : global_env) : global_env tc =
       let* entry = do_global_entry ctx entry
       in Succ (List.cons entry entries)
     in foldr do_lifted entries []
@@ -633,13 +633,15 @@ let wf_global_env (sigma : global_env) : unit tc =
   in let valid_global_entry (entry : global_entry) : unit tc =
     match entry with
     (* WF-FunctionDef*)
-    | FnDef (_, provs, tyvars, params, ret_ty, body) ->
+    | FnDef (_, provs, tyvars, params, ret_ty, bounds, body) ->
       let not_in_provs (prov : prov) : bool =
         not (List.mem (snd prov) (List.map snd provs))
       in let free_provs = (* this lets us get away without letprov *)
         List.filter not_in_provs (free_provs body)
       in let delta = (List.append provs free_provs, tyvars)
       in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
+      in let ell = List.fold_left (fun ell (prov1, prov2) -> loan_env_add_abs_sub ell prov1 prov2)
+                                  ell bounds
       in let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
         var_env_include gamma (fst pair) (snd pair)
       in let gamma = List.fold_left var_include_fold [] params

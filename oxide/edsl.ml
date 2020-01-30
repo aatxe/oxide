@@ -25,8 +25,8 @@ let (gimmie) = ("gimmie")
 
 (* short-hand for use in programs *)
 let fn (name : fn_var) (provs : prov list) (tyvars : ty_var list)
-    (params : (var * ty) list) (ret_ty : ty) (body : expr) : global_entry =
-  FnDef (name, provs, tyvars, params, ret_ty, body)
+    (params : (var * ty) list) (ret_ty : ty) (bounds : bounds) (body : expr) : global_entry =
+  FnDef (name, provs, tyvars, params, ret_ty, bounds, body)
 let (@:) (var : var) (ty : ty) : var * ty = (var, ty)
 let structy (tag : struct_var) (provs : prov list) (tys : ty list) : prety =
   Struct (tag, provs, tys, None)
@@ -80,5 +80,5 @@ let (<==) (pi : place_expr) (e : expr) : expr = (loc(), Assign (pi, e))
 let (>>) (e1 : expr) (e2 : expr) : expr = (loc(), Seq (e1, e2))
 
 let drop : global_entry =
-  (fn "drop" [] ["T"] ["x" @: (static, TyVar "T")] (static, BaseTy Unit)
+  (fn "drop" [] ["T"] ["x" @: (static, TyVar "T")] (static, BaseTy Unit) []
      (static, Prim Unit))
