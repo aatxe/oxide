@@ -275,11 +275,9 @@ let var_env_lookup_place_expr (gamma : var_env) (pi : place_expr) : ty tc =
   | Some pi -> var_env_lookup gamma pi
   | None -> Fail (PlaceExprNotAPlace pi)
 let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
-  match place_expr_to_place pi with
-  | Some (_, (root, _)) ->
-    (match List.assoc_opt root gamma with
-    | Some _ -> true
-    | None -> false)
+  let (root, _) = snd pi
+  in match List.assoc_opt root gamma with
+  | Some _ -> true
   | None -> false
 
 let var_env_type_update (gamma : var_env) (pi : place) (ty : ty) : var_env tc =
