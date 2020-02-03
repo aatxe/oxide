@@ -650,7 +650,10 @@ let wf_global_env (sigma : global_env) : unit tc =
         var_env_include gamma (fst pair) (snd pair)
       in let gamma = List.fold_left var_include_fold [] params
       in let* (output_ty, ellPrime, gammaPrime) = type_check sigma delta ell gamma body
-      in (match valid_type sigma delta ellPrime gammaPrime output_ty with
+      in let* (ellFinal, gammaFinal) =
+        foldl (fun (ell, gamma) (var, _) -> envs_minus ell gamma (dummy, (var, [])))
+              (ellPrime, gammaPrime) params
+      in (match valid_type sigma delta ellFinal gammaFinal output_ty with
       | Succ () -> let* _ = subtype Combine ellPrime output_ty ret_ty in Succ ()
       (* this is caused by a provenance being killed by its loans dropping out of scope *)
       (* in other words: references to temporaries cause an InvalidReturnType *)

@@ -470,7 +470,7 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
   and loops (tys : ty list) (envs : loan_env * var_env) =
     foldr loop (List.map (fun x -> Some x) tys) envs
   in let* opt = var_env_lookup_opt gamma pi
-  in loop opt (ell, gamma)
+  in loop opt (ell, var_env_exclude gamma (sndfst pi))
 
 let rec path_prefixed_by (target : path) (in_path : path) : bool =
   match (target, in_path) with
