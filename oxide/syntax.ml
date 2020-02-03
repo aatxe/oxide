@@ -306,8 +306,8 @@ let loan_env_exclude (ell : loan_env) (var : prov) : loan_env =
 let loan_env_exclude_all (ell : loan_env) (provs : provs) : loan_env =
   let vars = List.map snd provs
   in (List.fold_right (fun var ell -> List.remove_assoc var ell) vars (fst ell),
-   (List.filter (fun v -> List.mem v vars) (sndfst ell),
-    List.filter (fun cs -> List.mem (fst cs) vars || List.mem (snd cs) vars) (sndsnd ell)))
+   (List.filter (fun v -> not (List.mem v vars)) (sndfst ell),
+    List.filter (fun cs -> not (List.mem (fst cs) vars || List.mem (snd cs) vars)) (sndsnd ell)))
 
 let canonize (ell : loan_env) : loan_env =
   (List.sort_uniq compare (fst ell),

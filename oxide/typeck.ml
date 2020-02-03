@@ -48,7 +48,8 @@ let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) 
   if loan_env_mem ell prov then
     match loan_env_lookup_opt ell prov with
     | Some loans ->
-      let invalid_loans = List.filter (fun p -> var_env_contains_place_expr gamma (snd p)) loans
+      let invalid_loans =
+        List.filter (fun (_, phi) -> not (var_env_contains_place_expr gamma phi)) loans
       in (match invalid_loans with
       | [] -> Succ ()
       | (omega, pi) :: _ -> Fail (InvalidLoan (omega, pi)))
