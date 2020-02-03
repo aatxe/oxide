@@ -354,6 +354,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let ellPrime = loan_env_bindall ell provs
       in let* (ret_ty, _, _) = tc deltaPrime ellPrime gammaPrime body
       in let* free_vars = free_vars body
+      in let free_vars = List.filter (fun var -> not (List.mem_assoc var params)) free_vars
       in let* moved_vars = free_nc_vars sigma gamma body
       in let gamma_c = List.map (fun var -> (var, List.assoc var gamma)) free_vars
       in let gammaPrime = var_env_uninit_many gamma moved_vars
