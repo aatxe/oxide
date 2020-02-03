@@ -39,7 +39,7 @@ This repository is split into six parts:
     - Run reducer with `RUSTFLAGS='--cfg procmacro2_semver_exempt'` for source filename tracking.
 6. [`runner/`](runner/) — a test harness for driving the reducer/typechecker. 
     - This requires the following opam packages:
-    `opam install opam shexp stdio yojson`
+    `opam install opam shexp stdio yojson utop ppx_deriving`
 
 
 ## Related Works
