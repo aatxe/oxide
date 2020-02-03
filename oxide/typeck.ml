@@ -177,12 +177,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | _ -> failwith "unreachable")
     (* T-Move and T-Copy *)
     | Move pi ->
-      let* places = norm_place_expr ell gamma pi
-      in let* tys = var_env_lookup_many gamma places
-      in let* (ell_prime, unified_ty) = unify_many (fst expr) ell tys
+      let* root_ty = var_env_lookup_expr_root gamma pi
+      in let* unified_ty = compute_ty ell root_ty (expr_path_of pi)
       in let* copy = copyable sigma unified_ty
       in let omega = if copy then Shared else Unique
-      in (match omega_safe sigma ell_prime gamma omega pi with
+      in (match omega_safe sigma ell gamma omega pi with
        | Succ (ty, [(Unique, pi)]) ->
          let* (ellPrime, gammaPrime) =
            match place_expr_to_place pi with
@@ -192,14 +191,14 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
                if noncopy then
                  let* gammaPrime = var_env_type_update gamma pi (uninit ty)
                  in Succ (ell, gammaPrime)
-               else Succ (ell_prime, gamma)
+               else Succ (ell, gamma)
              else Fail (PartiallyMoved (pi, ty))
            | None ->
              let* copy = copyable sigma ty
-             in if copy then Succ (ell_prime, gamma) else failwith "unreachable"
+             in if copy then Succ (ell, gamma) else failwith "unreachable"
          in Succ (ty, ellPrime, gammaPrime)
        | Succ (ty, _) ->
-         if copy then Succ (ty, ell_prime, gamma)
+         if copy then Succ (ty, ell, gamma)
          else failwith "unreachable"
        | Fail err -> Fail err)
     (* T-Borrow *)
