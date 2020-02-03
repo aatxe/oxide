@@ -277,16 +277,18 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* (ty2, ell2, gamma2) = tc delta ell1Prime gamma1Prime e2
       in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
       in Succ (ty2, ell2Prime, gamma2Prime)
-    (* T-Assign *)
-    | Assign (phi, e) -> (* FIXME: this case needs to be fixed when the typing rule is fixed *)
-      let* (ty_old, loans) = omega_safe sigma ell gamma Unique phi
+    (* T-Assign and T-AssignDeref *)
+    | Assign (phi, e) ->
+      let* (ty_old, _) = omega_safe sigma ell gamma Unique phi
       in let* (ty_update, ell1, gamma1) = tc delta ell gamma e
       in let* ellPrime = subtype Override ell1 ty_update ty_old
-      in let place_opts = List.map (fun loan -> place_expr_to_place (snd loan)) loans
-      in let places = List.map unwrap (List.filter (fun opt -> opt != None) place_opts)
-      in let* gammaPrime =
-        foldl (fun gamma pi -> var_env_type_update gamma pi ty_update) gamma1 places
-      in Succ ((inferred, BaseTy Unit), ellPrime, gammaPrime)
+      in (match place_expr_to_place phi with
+       (* T-Assign *)
+       | Some pi ->
+         let* gammaPrime = var_env_type_update gamma1 pi ty_update
+         in Succ ((inferred, BaseTy Unit), ellPrime, gammaPrime)
+       (* T-AssignDeref *)
+       | None -> Succ ((inferred, BaseTy Unit), ellPrime, gamma1))
     (* T-Abort *)
     | Abort _ -> Succ ((inferred, Any), ell, gamma)
     (* T-While *)
