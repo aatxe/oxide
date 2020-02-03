@@ -142,19 +142,13 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
     match List.assoc_opt None opt_tys with
     | Some conflicting_loan -> Fail (SafetyErr ((omega, phi), conflicting_loan))
     | None ->
-      let tys = List.map (fun pair -> unwrap (fst pair)) opt_tys
-      in let* (ellPrime, ty) = unify_many (fst phi) ell tys
+      let* root_ty = var_env_lookup_expr_root gamma phi
+      in let* ty = compute_ty_in omega ell root_ty (expr_path_of phi)
       in let* _ =
         let* noncopy = noncopyable sigma ty
         in if noncopy then eval_place_expr ell gamma omega phi
         else Succ []
-      in if ellPrime = ell then
-        if (snd ty) = Any then
-          let* init_ty = var_env_lookup_place_expr gamma (fst phi, (expr_root_of phi, []))
-          in let* computed_ty = compute_ty_in omega ell init_ty (sndsnd phi)
-          in Succ (computed_ty, uniq_cons (omega, phi) loans)
-        else Succ (ty, uniq_cons (omega, phi) loans)
-      else Fail (LoanEnvMismatch (fst phi, ell, ellPrime))
+      in Succ (ty, uniq_cons (omega, phi) loans)
 
 let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
                (expr : expr) : (ty * loan_env * var_env) tc =
