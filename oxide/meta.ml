@@ -79,8 +79,8 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
   match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
   | (Combine, Some rep1, Some rep2) ->
     (* UP-CombineLocalProvenances*)
-    let ellPrime = loan_env_exclude ell prov2
-    in Succ (loan_env_include ellPrime prov2 (list_union rep1 rep2))
+    let ellPrime = loan_env_exclude_all ell [prov1; prov2]
+    in Succ (loan_env_include_all ellPrime [prov1; prov2] (list_union rep1 rep2))
   | (Override, Some rep1, Some _) ->
     (* UP-OverrideLocalProvenances *)
     let ellPrime = loan_env_exclude ell prov2
@@ -136,7 +136,7 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
       let* ellPrime = subtype_prov mode ell v1 v2
       in let* ell1 = sub ellPrime t1 t2
       in let* ell2 = sub ellPrime t2 t1
-      in if ell1 = ell2 then Succ ell1
+      in if (canonize ell1) = (canonize ell2) then Succ ell2
       else Fail (UnificationFailed (t1, t2))
     (* UT-Tuple *)
     | (Tup tys1, Tup tys2) -> sub_many ell tys1 tys2
