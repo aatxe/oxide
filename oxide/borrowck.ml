@@ -69,6 +69,12 @@ let disjoint (pi1 : place) (pi2 : place) : bool =
     not (is_prefix_of (path_of pi1) (path_of pi2) || is_prefix_of (path_of pi2) (path_of pi1))
   else true
 
+(* are the places pi and place expression phi disjoint? *)
+let expr_disjoint_place (pi : place) (phi : place_expr) : bool =
+  (* they are disjoint if and only if the inner place of phi is disjoint from pi *)
+  let (inner_pi, _) = decompose_place_expr phi
+  in disjoint pi inner_pi
+
 let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : owned)
                    (tl_phi : place_expr) : (ty * loans) tc =
   let check_permission (ty : ty) (suffix : expr_path) : unit tc =
@@ -81,15 +87,18 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
     match suffix with
     | Deref :: path -> path
     | _ -> failwith "unreachable: skip_deref called with non_suffix path"
+  in let refine (exclusions : preplace list) (places : (place * ty) list) : (place * ty) list =
+    List.filter (fun ((_, pi), _) -> not (List.mem pi exclusions)) places
+  in let ref_places = keep_if_ref omega (collect_places (expand_closures gamma))
   in let rec impl_safe (exclusions : preplace list) (phi : place_expr) : (ty * loans) tc =
     match place_expr_to_place phi with
     (* O-UniqueSafety, O-SharedSafety *)
     | Some (loc, pi) ->
-      let ref_places = keep_if_ref omega (collect_places (expand_closures gamma))
-      in let exclusions = List.cons pi exclusions
-      in let refined_places =
-        List.filter (fun ((_, pi), _) -> not (List.mem pi exclusions)) ref_places
+      let exclusions = List.cons pi exclusions
+      in let refined_places = refine exclusions ref_places
       in let not_disjoint_from (pi : place) : place -> bool = compose not (disjoint pi)
+      in let expr_not_disjoint_from (pi : place) : place_expr -> bool =
+        compose not (expr_disjoint_place pi)
       in let safety_test ((_, ty) : place * ty) : unit tc =
         match snd ty with
         | Ref (prov, _, _) ->
@@ -97,10 +106,10 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
           in let loan_to_place : loan -> place option = compose place_expr_to_place snd
           in let places_with_loans = List.map (fun loan -> (loan_to_place loan, loan)) loans
           in let conflicts =
-            List.find_all (fun (opt_pi, (_, _)) ->
+            List.find_all (fun (opt_pi, (_, phi)) ->
                              match opt_pi with
                              | Some loan_pi -> not_disjoint_from (loc, pi) loan_pi
-                             | None -> false)
+                             | None -> expr_not_disjoint_from (loc, pi) phi)
                           places_with_loans
           in if is_empty conflicts then Succ ()
           else Fail (SafetyErr ((omega, tl_phi), snd (List.hd conflicts)))
@@ -122,6 +131,19 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
         in let* safe_results =
           map (impl_safe exclusions)
               (List.map (fun (_, phi) -> apply_suffix phi (skip_deref suffix)) loans)
+        in let refined_places = refine exclusions ref_places
+      in let expr_not_disjoint_from (phi : place_expr) : place_expr -> bool =
+        compose not (expr_disjoint phi)
+        in let safety_test ((_, ty) : place * ty) : unit tc =
+          match snd ty with
+          | Ref (prov, _, _) ->
+            let loans = loan_env_lookup ell prov
+            in let conflicts =
+              List.find_all (fun (_, loan_phi) -> expr_not_disjoint_from phi loan_phi) loans
+            in if is_empty conflicts then Succ ()
+            else Fail (SafetyErr ((omega, tl_phi), List.hd conflicts))
+          | _ -> failwith "O-Deref/O-DerefAbs: unreachable"
+        in let* () = for_each refined_places safety_test
         in let loans = flat_map snd safe_results
         in let* root_ty = var_env_lookup_expr_root gamma phi
         in let* ty = compute_ty_in omega ell root_ty (expr_path_of phi)
