@@ -1,6 +1,7 @@
 open Syntax
 open Edsl
 open Meta
+open Borrowck
 open Util
 
 let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
@@ -181,7 +182,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* unified_ty = compute_ty ell root_ty (expr_path_of pi)
       in let* copy = copyable sigma unified_ty
       in let omega = if copy then Shared else Unique
-      in (match omega_safe sigma ell gamma omega pi with
+      in (match ownership_safe sigma ell gamma omega pi with
        | Succ (ty, [(Unique, pi)]) ->
          let* (ellPrime, gammaPrime) =
            match place_expr_to_place pi with
@@ -203,13 +204,13 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Fail err -> Fail err)
     (* T-Borrow *)
     | Borrow (prov, omega, pi) ->
-      let* (ty, loans) = omega_safe sigma ell gamma omega pi
+      let* (ty, loans) = ownership_safe sigma ell gamma omega pi
       in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include ell prov loans, gamma)
     (* T-BorrowIndex *)
     | BorrowIdx (prov, omega, pi, e) ->
       (match tc delta ell gamma e with
        | Succ ((_, BaseTy U32), ell1, gamma1) ->
-         let* (ty, loans) = omega_safe sigma ell1 gamma1 omega pi
+         let* (ty, loans) = ownership_safe sigma ell1 gamma1 omega pi
          in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include ell prov loans, gamma)
        | Succ (found, _, _) -> Fail (TypeMismatch ((dummy, BaseTy U32), found))
        | Fail err -> Fail err)
@@ -219,7 +220,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ ((_, BaseTy U32), ell1, gamma1) ->
          (match tc delta ell1 gamma1 e2 with
           | Succ ((_, BaseTy U32), ell2, gamma2) ->
-            let* (ty, loans) = omega_safe sigma ell2 gamma2 omega pi
+            let* (ty, loans) = ownership_safe sigma ell2 gamma2 omega pi
             in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include ell prov loans, gamma)
           | Succ (found, _, _) -> Fail (TypeMismatch ((dummy, BaseTy U32), found))
           | Fail err -> Fail err)
@@ -229,7 +230,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | Idx (pi, e) ->
       (match tc delta ell gamma e with
        | Succ ((_, BaseTy U32), ell1, gamma1) ->
-         (match omega_safe sigma ell1 gamma1 Shared pi with
+         (match ownership_safe sigma ell1 gamma1 Shared pi with
           | Succ ((_, Array (ty, _)), _) ->
             let* copy = copyable sigma ty
             in if copy then Succ (ty, ell1, gamma1)
@@ -272,7 +273,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in Succ (ty2, ell2Prime, gamma2Prime)
     (* T-Assign and T-AssignDeref *)
     | Assign (phi, e) ->
-      let* (ty_old, _) = omega_safe sigma ell gamma Unique phi
+      let* (ty_old, _) = ownership_safe sigma ell gamma Unique phi
       in let* (ty_update, ell1, gamma1) = tc delta ell gamma e
       in let* ellPrime = subtype Override ell1 ty_update ty_old
       in (match place_expr_to_place phi with
@@ -328,7 +329,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          (match List.assoc_opt fn gamma with
           (* T-Move for a closure *)
           | Some (_, Fun _) ->
-            (match omega_safe sigma ell gamma Unique (fst expr, (fn, [])) with
+            (match ownership_safe sigma ell gamma Unique (fst expr, (fn, [])) with
             | Succ (ty, [(Unique, _)]) ->
               let* gammaPrime = var_env_type_update gamma (fst expr, (fn, [])) (uninit ty)
               in Succ (ty, ell, gammaPrime)

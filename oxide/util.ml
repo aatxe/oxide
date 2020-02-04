@@ -17,6 +17,8 @@ let replace xs i x =
 let replace_assoc xs key new_value =
   List.map (fun (k, v) -> if k = key then (k, new_value) else (k, v)) xs
 
+let compose (g : 'b -> 'c) (f : 'a -> 'b) : 'a -> 'c = fun x -> g (f x)
+
 let unwrap (opt : 'a option) : 'a =
   match opt with
   | Some x -> x
@@ -36,6 +38,15 @@ let rec drop_while (pred : 'a -> bool) (lst : 'a list) : 'a list =
   match lst with
   | hd :: tl when pred hd -> drop_while pred tl
   | lst -> lst
+
+let flat_map (oper : 'a -> 'b list) (lst : 'a list) : 'b list =
+  List.flatten (List.map oper lst)
+
+let flatten_opts (lst : 'a option list) : 'a list =
+  flat_map (fun opt -> match opt with Some x -> [x] | None -> []) lst
+
+let flat_mapi (oper : int -> 'a -> 'b list) (lst : 'a list) : 'b list =
+  List.flatten (List.mapi oper lst)
 
 (* splits the list into a prefix and a suffix such that:
    - forall x in prefix. pred x = true
