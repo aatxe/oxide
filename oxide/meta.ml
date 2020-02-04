@@ -1,9 +1,6 @@
 open Syntax
 open Util
 
-(* checks if the given list is empty *)
-let is_empty (lst : 'a list) : bool = List.length lst = 0
-
 (* checks that omega_prime is at least omega *)
 let is_at_least (omega : owned) (omega_prime : owned) : bool =
   match (omega, omega_prime) with
