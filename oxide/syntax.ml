@@ -316,6 +316,9 @@ let canonize (ell : loan_env) : loan_env =
 (* var_env is mutually recursive with ty and as such, is defined above *)
 let empty_gamma : var_env = []
 
+(* useful for pretty-printing in ownership safety *)
+type place_env = (place * ty) list [@@deriving show]
+
 type struct_kind = Rec | Tup [@@deriving show]
 
 type tc_error =

@@ -151,6 +151,53 @@ let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : 
         else Succ []
       in Succ (ty, uniq_cons (omega, phi) loans)
 
+(* flows closed environments forward in otherwise structurally the same types *)
+let flow_closed_envs_forward (computed : ty) (annotated : ty) : ty tc =
+  let rec flow (computed : ty) (annotated : ty) : ty tc =
+    match (snd computed, snd annotated) with
+    | (Any, Any)
+    | (BaseTy _, BaseTy _)
+    | (TyVar _, TyVar _) -> Succ annotated
+    | (Ref (_, _, computed_inner), Ref (prov, omega, annotated_inner)) ->
+      let* forward = flow computed_inner annotated_inner
+      in Succ (fst annotated, Ref (prov, omega, forward))
+    | (Fun (_, _, comp_tys, gamma_c, comp_ret), Fun (provs, tyvars, ann_tys, _, ann_ret)) ->
+      let* forward_tys = flow_many comp_tys ann_tys
+      in let* forward_ret = flow comp_ret ann_ret
+      in let fn_ty : prety = Fun (provs, tyvars, forward_tys, gamma_c, forward_ret)
+      in Succ (fst annotated, fn_ty)
+    | (Array (computed_inner, _), Array (annotated_inner, len)) ->
+      let* forward = flow computed_inner annotated_inner
+      in let ty : prety = Array (forward, len)
+      in Succ (fst annotated, ty)
+    | (Slice computed_inner, Slice annotated_inner) ->
+      let* forward = flow computed_inner annotated_inner
+      in Succ (fst annotated, Slice forward)
+    | (Rec comp_fields, Rec ann_fields) ->
+      let flow_assoc (field, ann_ty) =
+        let* forward = flow (List.assoc field comp_fields) ann_ty
+        in Succ (field, forward)
+      in let* forward_fields = map flow_assoc ann_fields
+      in let ty : prety = Rec forward_fields
+      in Succ (fst annotated, ty)
+    | (Tup comp_tys, Tup ann_tys) ->
+      let* forward_tys = flow_many comp_tys ann_tys
+      in let ty : prety = Tup forward_tys
+      in Succ (fst annotated, ty)
+    | (Struct (_, _, comp_tys, comp_opt), Struct (name, provs, ann_tys, ann_opt)) ->
+      let* forward_tys = flow_many comp_tys ann_tys
+      in let* forward = flow (unwrap comp_opt) (unwrap ann_opt)
+      in let ty : prety = Struct (name, provs, forward_tys, Some forward)
+      in Succ (fst annotated, ty)
+    | (Uninit computed_inner, Uninit annotated_inner) ->
+      let* forward = flow computed_inner annotated_inner
+      in Succ (fst annotated, Uninit forward)
+    | _ -> Fail (TypeMismatch (annotated, computed))
+  and flow_many (computed : ty list) (annotated : ty list) : ty list tc =
+    let* combined_tys = combine_tys "flow_closed_envs_forward" computed annotated
+    in map (fun (comp, ann) -> flow comp ann) combined_tys
+  in flow computed annotated
+
 let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
                (expr : expr) : (ty * loan_env * var_env) tc =
   let rec tc (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
@@ -267,6 +314,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       let* (ty1, ell1, gamma1) = tc delta ell gamma e1
       in let* () = valid_type sigma delta ell1 gamma ty1
       in let* ell1Prime = subtype Combine ell1 ty1 ann_ty
+      in let* ann_ty = flow_closed_envs_forward ty1 ann_ty
       in let gamma1Prime = var_env_include gamma1 var ann_ty
       in let* (ty2, ell2, gamma2) = tc delta ell1Prime gamma1Prime e2
       in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
