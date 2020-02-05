@@ -15,6 +15,37 @@ let prov_to_loans (ell : loan_env) (prov : prov) : loans =
   | None -> []
 
 (* substitutes this for that in ty *)
+let subst_env_var (ty : ty) (this : env) (that : env_var) : ty =
+  let rec sub (ty : ty) : ty =
+    let loc = fst ty
+    in match snd ty with
+    | Any | BaseTy _ | TyVar _ -> ty
+    | Uninit ty -> (loc, Uninit (sub ty))
+    | Ref (prov, omega, ty) -> (loc, Ref (prov, omega, sub ty))
+    | Fun (evs, pvs, tvs, tys, gamma, ret_ty) ->
+      if not (List.mem that evs) then
+        let gammaPrime =
+          match gamma with
+          | EnvVar ev -> if ev = that then this else gamma
+          | Env _ -> gamma
+        in (loc, Fun (evs, pvs, tvs, sub_many tys, gammaPrime, sub ret_ty))
+      else ty
+    | Array (ty, n) -> (loc, Array (sub ty, n))
+    | Slice ty -> (loc, Slice (sub ty))
+    | Rec pairs -> (loc, Rec (sub_many_pairs pairs))
+    | Tup tys -> (loc, Tup (sub_many tys))
+    | Struct (name, provs, tys, tagged_ty) ->
+      (loc, Struct (name, provs, sub_many tys, sub_opt tagged_ty))
+  and sub_many (tys : ty list) : ty list = List.map sub tys
+  and sub_many_pairs (pairs : (field * ty) list) : (field * ty) list =
+    List.map (fun (f, ty) -> (f, sub ty)) pairs
+  and sub_opt (ty : ty option) : ty option = Option.map sub ty
+  in sub ty
+
+let subst_many_env_var (pairs : (env * env_var) list) (ty : ty) : ty =
+  List.fold_right (fun pair ty -> subst_env_var ty (fst pair) (snd pair)) pairs ty
+
+(* substitutes this for that in ty *)
 let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
   let rec sub (ty : ty) : ty =
     let loc = fst ty
@@ -24,8 +55,8 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
     | Ref (pv, omega, ty) ->
       let prov = if (snd pv) = (snd that) then this else pv
       in (loc, Ref (prov, omega, sub ty))
-    | Fun (pvs, tvs, tys, gamma, ret_ty) ->
-      if not (List.mem that pvs) then (loc, Fun (pvs, tvs, sub_many tys, gamma, sub ret_ty))
+    | Fun (evs, pvs, tvs, tys, gamma, ret_ty) ->
+      if not (List.mem that pvs) then (loc, Fun (evs, pvs, tvs, sub_many tys, gamma, sub ret_ty))
       else ty
     | Array (ty, n) -> (loc, Array (sub ty, n))
     | Slice ty -> (loc, Slice (sub ty))
@@ -42,7 +73,7 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
   and sub_opt (ty : ty option) : ty option = Option.map sub ty
   in sub ty
 
-let subst_many_prov (ty : ty) (pairs : (prov * prov) list) : ty =
+let subst_many_prov (pairs : (prov * prov) list) (ty : ty) : ty =
   List.fold_right (fun pair ty -> subst_prov ty (fst pair) (snd pair)) pairs ty
 
 let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
@@ -53,8 +84,8 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
     | TyVar tv -> if tv = that then this else ty
     | Uninit ty -> (loc, Uninit (sub ty))
     | Ref (pv, omega, ty) -> (loc, Ref (pv, omega, sub ty))
-    | Fun (pvs, tvs, tys, gamma, ret_ty) ->
-      if not (List.mem that tvs) then (loc, Fun (pvs, tvs, sub_many tys, gamma, sub ret_ty))
+    | Fun (evs, pvs, tvs, tys, gamma, ret_ty) ->
+      if not (List.mem that tvs) then (loc, Fun (evs, pvs, tvs, sub_many tys, gamma, sub ret_ty))
       else ty
     | Array (ty, n) -> (loc, Array (sub ty, n))
     | Slice ty -> (loc, Slice (sub ty))
@@ -68,7 +99,7 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
   and sub_opt (ty : ty option) : ty option = Option.map sub ty
   in sub ty
 
-let subst_many (ty : ty) (pairs : (ty * ty_var) list) : ty =
+let subst_many (pairs : (ty * ty_var) list) (ty : ty) : ty =
   List.fold_right (fun pair ty -> subst ty (fst pair) (snd pair)) pairs ty
 
 let subtype_prov (mode : subtype_modality) (ell : loan_env)
@@ -150,11 +181,15 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
         in sub_opt ell_tys tagged_ty1 tagged_ty2
       else Fail (UnificationFailed (ty1, ty2))
     (* UT-Function *)
-    | (Fun (prov1, tyvar1, tys1, _, ret_ty1), Fun (prov2, tyvar2, tys2, _, ret_ty2)) ->
+    | (Fun (evs1, prov1, tyvar1, tys1, _, ret_ty1),
+       Fun (evs2, prov2, tyvar2, tys2, _, ret_ty2)) ->
       let tyvar_for_sub = List.map (fun x -> (inferred, TyVar x)) tyvar1
+      in let* ev_sub = combine_evs "UT-Function" evs1 evs2
+      in let ev_sub = List.map (fun (ev1, ev2) -> (EnvVar ev1, ev2)) ev_sub
       in let* prov_sub = combine_prov "UT-Function" prov1 prov2
       in let* ty_sub = combine_ty "UT-Function" tyvar_for_sub tyvar2
-      in let do_sub (ty : ty) : ty = (subst_many (subst_many_prov ty prov_sub) ty_sub)
+      in let do_sub : ty -> ty =
+         subst_many_prov prov_sub >> subst_many ty_sub >> subst_many_env_var ev_sub
       in let alpharenamed_tys2 = List.map do_sub tys2
       in let* ell_prime = sub_many ell alpharenamed_tys2 tys1
       in sub ell_prime ret_ty1 ret_ty2
@@ -449,9 +484,10 @@ let rec contains_prov (gamma : var_env) (prov : prov) : bool =
     match snd ty with
     | Any | BaseTy _ | TyVar _ -> false
     | Ref (pv, _, ty) -> pv = prov || ty_contains ty
-    | Fun (pvs, _, tys, gam, ret_ty) ->
+    | Fun (_, pvs, _, tys, gam, ret_ty) ->
       if not (List.mem prov pvs) then
-        ty_contains ret_ty || tys_contains tys || contains_prov gam prov
+        ty_contains ret_ty || tys_contains tys ||
+        match gam with Env gam -> contains_prov gam prov | EnvVar _ -> false
       else false
     | Uninit ty | Array (ty, _) | Slice ty -> ty_contains ty
     | Rec pairs -> tys_contains (List.map snd pairs)
@@ -500,7 +536,7 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   | Uninit _ -> Succ true (* probably never ask this question anyway *)
   | Ref (_, Unique, _) -> Succ true
   | Ref (_, Shared, _) -> Succ false
-  | Fun (_, _, _, _, _) -> Succ false
+  | Fun (_, _, _, _, _, _) -> Succ false
   | Array (typPrime, _) -> noncopyable sigma typPrime
   | Slice typPrime -> noncopyable sigma typPrime
   | Rec pairs ->
@@ -555,7 +591,7 @@ let rec free_provs_ty (ty : ty) : provs =
   | Any | BaseTy _ | TyVar _ -> []
   | Uninit ty -> free_provs_ty ty
   | Ref (prov, _, ty) -> List.cons prov (free_provs_ty ty)
-  | Fun (provs, _, tys, _, ty) ->
+  | Fun (_, provs, _, tys, _, ty) ->
     let free_in_tys = List.flatten (List.map free_provs_ty tys)
     in let free_in_ret = free_provs_ty ty
     in List.filter (fun prov -> not (List.mem prov provs)) (List.append free_in_tys free_in_ret)

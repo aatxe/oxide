@@ -5,11 +5,13 @@ type source_loc = string * linecol * linecol [@@deriving show]
 let inferred : source_loc = ("<inferred>", (-1, -1), (-1, -1))
 let dummy : source_loc = ("<dummy>", (-1, -1), (-1, -1))
 type var = string [@@deriving show]
-type vars = string list [@@deriving show]
+type vars = var list [@@deriving show]
 type ty_var = string [@@deriving show]
 type fn_var = string [@@deriving show]
 type prov_var = string [@@deriving show]
 type struct_var = string [@@deriving show]
+type env_var = string [@@deriving show]
+type env_vars = env_var list [@@deriving show]
 type field = string [@@deriving show]
 
 type subtype_modality = Combine | Override [@@deriving show]
@@ -81,7 +83,7 @@ type prety =
   | BaseTy of base_ty
   | TyVar of ty_var
   | Ref of prov * owned * ty
-  | Fun of prov list * ty_var list * ty list * var_env * ty
+  | Fun of env_vars * provs * ty_var list * ty list * env * ty
   | Array of ty * int
   | Slice of ty
   | Rec of (field * ty) list
@@ -90,6 +92,10 @@ type prety =
   | Uninit of ty
 [@@deriving show]
 and ty = source_loc * prety [@@deriving show]
+and env =
+  | EnvVar of env_var
+  | Env of var_env
+[@@deriving show]
 and var_env = (var * ty) list [@@deriving show]
 
 type tys = ty list [@@deriving show]
@@ -117,7 +123,7 @@ let rec is_init (typ : ty) : bool =
   match snd typ with
   | Any | BaseTy _ | TyVar _ -> true
   | Ref (_, _, ty) -> is_init ty (* invariant: this should always be true *)
-  | Fun (_, _, tys, gamma, ty) ->
+  | Fun (_, _, _, tys, gamma, ty) ->
     all_init tys && var_env_init gamma && is_init ty
   | Array (ty, _) | Slice ty -> is_init ty
   | Rec fields -> all_init (List.map snd fields)
@@ -127,8 +133,10 @@ let rec is_init (typ : ty) : bool =
   | Uninit _ -> false
 and all_init (tys : ty list) : bool =
   List.fold_right (fun ty acc -> acc && is_init ty) tys true
-and var_env_init (gamma : var_env) : bool =
-  all_init (List.map snd gamma)
+and var_env_init (gamma : env) : bool =
+  match gamma with
+  | EnvVar _ -> true
+  | Env gamma -> all_init (List.map snd gamma)
 
 type prim =
   | Unit
@@ -206,8 +214,8 @@ type value =
 
 type store = (var * value) list [@@deriving show]
 
-            (* name * prov vars * type vars * parameters * return type * bounds * body *)
-type fn_def = fn_var * prov list * ty_var list * (var * ty) list * ty * bounds * expr
+(* name * env vars * prov vars * type vars * parameters * return type * bounds * body *)
+type fn_def = fn_var * env_vars * provs * ty_var list * (var * ty) list * ty * bounds * expr
 [@@deriving show]
 type rec_struct_def = bool * struct_var * prov list * ty_var list * (field * ty) list
 [@@deriving show]
@@ -229,7 +237,7 @@ let empty_sigma : global_env = []
 let global_env_find_fn (sigma : global_env) (fn : fn_var) : fn_def option =
   let is_right_fn (entry : global_entry) : bool =
     match entry with
-    | FnDef (fn_here, _, _, _, _, _, _) -> fn_here = fn
+    | FnDef (fn_here, _, _, _, _, _, _, _) -> fn_here = fn
     (* we treat tuple structs as having defined a function to construct them *)
     | TupStructDef (_, fn_here, _, _, _) -> fn_here = fn
     | _ -> false
@@ -248,11 +256,27 @@ let global_env_find_struct (sigma : global_env) (name : struct_var) : struct_def
   | Some (TupStructDef defn) -> Some (Tup defn)
   | _ -> None
 
-type tyvar_env = prov list * ty_var list [@@deriving show]
-let empty_delta : tyvar_env = ([], [])
+type tyvar_env = env_vars * provs * ty_var list [@@deriving show]
+let empty_delta : tyvar_env = ([], [], [])
 
-let tyvar_env_prov_mem (delta : tyvar_env) (var : prov) : bool = List.mem var (fst delta)
-let tyvar_env_ty_mem (delta : tyvar_env) (var : ty_var) : bool = List.mem var (snd delta)
+let env_vars_of (delta : tyvar_env) : env_vars = match delta with (evs, _, _) -> evs
+let provs_of (delta : tyvar_env) : provs = match delta with (_, provs, _) -> provs
+let ty_vars_of (delta : tyvar_env) : ty_var list = match delta with (_, _, tyvars) -> tyvars
+
+let tyvar_env_add_env_vars (evs : env_vars) (delta : tyvar_env) : tyvar_env =
+  match delta with
+  | (curr_evs, provs, tyvars) -> (list_union curr_evs evs, provs, tyvars)
+let tyvar_env_add_provs (provs : provs) (delta : tyvar_env) : tyvar_env =
+  match delta with
+  | (evs, curr_provs, tyvars) -> (evs, list_union curr_provs provs, tyvars)
+let tyvar_env_add_ty_vars (tyvars : ty_var list) (delta : tyvar_env) : tyvar_env =
+  match delta with
+  | (evs, provs, curr_tyvars) -> (evs, provs, list_union curr_tyvars tyvars)
+
+let tyvar_env_prov_mem (var : prov) (delta : tyvar_env) : bool = List.mem var (provs_of delta)
+let tyvar_env_ty_mem (var : ty_var) (delta : tyvar_env) : bool = List.mem var (ty_vars_of delta)
+let tyvar_env_env_var_mem (var : env_var) (delta : tyvar_env) : bool =
+  List.mem var (env_vars_of delta)
 
 type subty = prov_var * prov_var [@@deriving show]
 type loan_env = (prov_var * loans) list * (prov_var list * subty list) [@@deriving show]
@@ -345,6 +369,7 @@ type tc_error =
   | WrongStructConstructor of source_loc * struct_var * struct_kind
   | InvalidReturnType of ty * prov (* return type * invalidated provenance *)
   | InvalidType of ty
+  | InvalidEnvVar of env_var * ty (* invalid env var * the type it was found in *)
   | InvalidProv of prov
   | InvalidLoan of owned * place_expr
   | InvalidArrayLen of ty * int
@@ -356,6 +381,7 @@ type tc_error =
   | UnboundPlaceExpr of place_expr
   | PlaceExprNotAPlace of place_expr
   | AbsProvsNotSubtype of prov * prov
+  | EnvVarArityMismatch of string * env_vars * env_vars
   | ProvArityMismatch of string * provs * provs
   | TysArityMismatch of string * ty list * ty list
   | TyArityMismatch of string * ty list * ty_var list
@@ -418,6 +444,10 @@ let any (fn : 'a -> bool tc) (lst : 'a list) : bool tc =
   in List.fold_right worker lst (Succ false)
 
 (* combine helpers *)
+
+let combine_evs (ctx : string) (ev1 : env_vars) (ev2 : env_vars) : (env_var * env_var) list tc =
+  if List.length ev1 != List.length ev2 then Fail (EnvVarArityMismatch (ctx, ev1, ev2))
+  else Succ (List.combine ev1 ev2)
 
 let combine_prov (ctx : string) (prov1 : provs) (prov2 : provs) : (prov * prov) list tc =
   if List.length prov1 != List.length prov2 then Fail (ProvArityMismatch (ctx, prov1, prov2))

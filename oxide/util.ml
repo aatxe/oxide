@@ -18,6 +18,8 @@ let replace_assoc xs key new_value =
   List.map (fun (k, v) -> if k = key then (k, new_value) else (k, v)) xs
 
 let compose (g : 'b -> 'c) (f : 'a -> 'b) : 'a -> 'c = fun x -> g (f x)
+let (>>) = compose
+let (|>) (x : 'a) (f : 'a -> 'b) : 'b = f x
 
 let unwrap (opt : 'a option) : 'a =
   match opt with

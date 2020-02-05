@@ -248,6 +248,9 @@ impl PrettyPrint for Item {
                 .append(Doc::space())
                 .append(Doc::text(format!("\"{}\"", item.ident)))
                 .group()
+                // environment variables
+                .append(Doc::space())
+                .append("[]")
                 // provenance variables
                 .append(Doc::space())
                 .append(
@@ -591,7 +594,7 @@ impl PrettyPrint for Pat {
 }
 
 impl PrettyPrint for Type {
-    fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
+  fn to_doc(self) -> Doc<'static, BoxDoc<'static, ()>> {
         if let Type::Reference(ty) = self {
             let lft = match ty.lifetime.as_ref() {
                 Some(lft) => lft,
@@ -659,8 +662,13 @@ impl PrettyPrint for Type {
                     .append(Doc::text("Fun"))
                     .append(Doc::space())
                     .append(parenthesize(
-                        // lifetime variables
-                        Doc::text("[]")
+                        Doc::nil()
+                            // environment variables
+                            .append(Doc::text("[]"))
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            // lifetime variables
+                            .append(Doc::text("[]"))
                             .append(Doc::text(","))
                             .append(Doc::space())
                             // type variables
@@ -680,7 +688,11 @@ impl PrettyPrint for Type {
                             .append(Doc::text(","))
                             .append(Doc::space())
                             // captured environment
-                            .append(Doc::text("[]"))
+                            .append(
+                                Doc::text("Env")
+                                    .append(Doc::space())
+                                    .append(Doc::text("[]"))
+                            )
                             .append(Doc::text(","))
                             .append(Doc::space())
                             // return type

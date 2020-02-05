@@ -14,7 +14,7 @@ let borrowck_access_permissions_4b_variant : expr =
 let (borrowed_local_error_sigma, borrowed_local_error) : global_env * expr =
   reset "borrowed_local_error.rs"; (
     [
-      fn gimmie [(loc(), p1)] [] [x @: (~&p1 shrd (prod [u32]))] (~&p1 shrd u32) [] (
+      fn gimmie [] [(loc(), p1)] [] [x @: (~&p1 shrd (prod [u32]))] (~&p1 shrd u32) [] (
         borrow p1 shrd ((var x) $. 0)
       )
     ],
