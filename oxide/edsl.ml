@@ -68,8 +68,9 @@ let ($.$) (pi : place_expr) (field : string) : place_expr =
   in (loc, (root, List.append path [Field field]))
 let num (n : int) : expr = (loc(), Prim (Num n))
 let tup (exprs : expr list) : expr = (loc(), Tup exprs)
-let app (fn : expr) (provs : prov_var list) (tys : ty list) (args : expr list) : expr =
-  (loc(), App (fn, List.map (fun v -> (loc(), v)) provs, tys, args))
+let app (fn : expr) (envs : env list) (provs : prov_var list) (tys : ty list)
+        (args : expr list) : expr =
+  (loc(), App (fn, envs, List.map (fun v -> (loc(), v)) provs, tys, args))
 let (~@) (fn : fn_var) : expr = (loc(), Fn fn)
 let (~@@) (mv : expr) : expr =
   match mv with

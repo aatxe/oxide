@@ -1503,6 +1503,14 @@ impl PrettyPrint for Expr {
                                         )
                                             .append(Doc::text(","))
                                             .append(Doc::space())
+                                            // environment arguments
+                                            .append(
+                                                Doc::text("[")
+                                                    .append(Doc::text("]"))
+                                                    .group()
+                                            )
+                                            .append(Doc::text(","))
+                                            .append(Doc::space())
                                             // provenance variable arguments
                                             .append(
                                                 Doc::text("[")
@@ -1516,7 +1524,8 @@ impl PrettyPrint for Expr {
                                             // type variable arguments
                                             .append(
                                                 Doc::text("[")
-                                                    .append(last_args2.to_type_generics_doc(st.clone()))
+                                                    .append(last_args2
+                                                            .to_type_generics_doc(st.clone()))
                                                     .append(Doc::text("]"))
                                                     .group()
                                             )

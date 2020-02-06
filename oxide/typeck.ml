@@ -414,13 +414,15 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
             in Succ (fn_ty ann_ret_ty, ellFinal, gammaPrime)
           | None -> Succ (fn_ty ret_ty, ell, gammaPrime))
     (* T-App *)
-    | App (fn, new_provs, new_tys, args) ->
+    | App (fn, envs, new_provs, new_tys, args) ->
       (match tc delta ell gamma fn with
-       | Succ ((_, Fun (_, provs, tyvars, params, _, ret_ty)), ellF, gammaF) ->
+       | Succ ((_, Fun (evs, provs, tyvars, params, _, ret_ty)), ellF, gammaF) ->
          let* (arg_tys, ellN, gammaN) = tc_many delta ellF gammaF args
+         in let* env_sub = combine_evs "T-App" envs evs
          in let* prov_sub = combine_prov "T-App" new_provs provs
          in let* ty_sub = combine_ty "T-App" new_tys tyvars
-         in let do_sub : ty -> ty = subst_many_prov prov_sub >> subst_many ty_sub
+         in let do_sub : ty -> ty =
+           subst_many_prov prov_sub >> subst_many_env_var env_sub >> subst_many ty_sub
          in let new_params = List.map do_sub params
          in let* ty_pairs = combine_tys "T-App" new_params arg_tys
          in let types_mismatch ((expected, found) : ty * ty) : bool tc =
@@ -542,11 +544,11 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       in let* body = do_expr ctx body
       in let fn : preexpr = Fun (provs, tyvars, params, res, body)
       in Succ (loc, fn)
-    | App (fn, provs, tys, args) ->
+    | App (fn, envs, provs, tys, args) ->
       let* fn = do_expr ctx fn
       in let* tys = do_tys ctx tys
       in let* args = do_exprs ctx args
-      in Succ (loc, App (fn, provs, tys, args))
+      in Succ (loc, App (fn, envs, provs, tys, args))
     | Idx (p, e) ->
       let* e = do_expr ctx e
       in Succ (loc, Idx (p, e))

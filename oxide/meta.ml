@@ -184,8 +184,7 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
     | (Fun (evs1, prov1, tyvar1, tys1, _, ret_ty1),
        Fun (evs2, prov2, tyvar2, tys2, _, ret_ty2)) ->
       let tyvar_for_sub = List.map (fun x -> (inferred, TyVar x)) tyvar1
-      in let* ev_sub = combine_evs "UT-Function" evs1 evs2
-      in let ev_sub = List.map (fun (ev1, ev2) -> (EnvVar ev1, ev2)) ev_sub
+      in let* ev_sub = combine_evs "UT-Function" (List.map (fun ev -> EnvVar ev) evs1) evs2
       in let* prov_sub = combine_prov "UT-Function" prov1 prov2
       in let* ty_sub = combine_ty "UT-Function" tyvar_for_sub tyvar2
       in let do_sub : ty -> ty =
@@ -622,7 +621,7 @@ and free_provs (expr : expr) : provs =
     in let free_in_body = free_provs body
     in List.filter (fun prov -> not (List.mem prov provs))
                    (List.concat [free_in_params; free_in_ret; free_in_body])
-  | App (e1, provs, tys, es) ->
+  | App (e1, _, provs, tys, es) ->
     List.concat [free_provs e1; provs;
                  List.flatten (List.map free_provs_ty tys);
                  List.flatten (List.map free_provs es)]
@@ -668,7 +667,7 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
        in let* free2 = free e2
        in Succ (List.append free1 (List.filter ((<>) x) free2))
      | Fun _ -> Succ [] (* FIXME: actually implement *)
-     | App (e1, _, _, exprs) ->
+     | App (e1, _, _, _, exprs) ->
        let* frees = free_many exprs
        in let* free1 = free e1
        in Succ (List.append free1 frees)

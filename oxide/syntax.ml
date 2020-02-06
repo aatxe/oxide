@@ -189,7 +189,7 @@ type preexpr =
   | Seq of expr * expr
   | Fn of fn_var
   | Fun of prov list * ty_var list * (var * ty) list * (ty option) * expr
-  | App of expr * prov list * ty list * expr list
+  | App of expr * env list * prov list * ty list * expr list
   | Idx of place_expr * expr
   | Abort of string
   | Branch of expr * expr * expr
@@ -381,7 +381,7 @@ type tc_error =
   | UnboundPlaceExpr of place_expr
   | PlaceExprNotAPlace of place_expr
   | AbsProvsNotSubtype of prov * prov
-  | EnvVarArityMismatch of string * env_vars * env_vars
+  | EnvArityMismatch of string * env list * env_vars
   | ProvArityMismatch of string * provs * provs
   | TysArityMismatch of string * ty list * ty list
   | TyArityMismatch of string * ty list * ty_var list
@@ -445,8 +445,8 @@ let any (fn : 'a -> bool tc) (lst : 'a list) : bool tc =
 
 (* combine helpers *)
 
-let combine_evs (ctx : string) (ev1 : env_vars) (ev2 : env_vars) : (env_var * env_var) list tc =
-  if List.length ev1 != List.length ev2 then Fail (EnvVarArityMismatch (ctx, ev1, ev2))
+let combine_evs (ctx : string) (ev1 : env list) (ev2 : env_vars) : (env * env_var) list tc =
+  if List.length ev1 != List.length ev2 then Fail (EnvArityMismatch (ctx, ev1, ev2))
   else Succ (List.combine ev1 ev2)
 
 let combine_prov (ctx : string) (prov1 : provs) (prov2 : provs) : (prov * prov) list tc =

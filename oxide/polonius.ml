@@ -18,7 +18,7 @@ let (borrowed_local_error_sigma, borrowed_local_error) : global_env * expr =
         borrow p1 shrd ((var x) $. 0)
       )
     ],
-    (letexp x ~:(~&p2 shrd u32) (*=*) (app (~@ gimmie) [p2] [] [
+    (letexp x ~:(~&p2 shrd u32) (*=*) (app (~@ gimmie) [] [p2] [] [
         (letexp v ~:(prod [u32]) (*=*) (tup [num 22])
         (borrow p2 shrd (var v)))
       ]) (* at this point, the scope of v ends, and the prov p2 is invalid *)
