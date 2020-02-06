@@ -93,8 +93,9 @@ type prety =
 [@@deriving show]
 and ty = source_loc * prety [@@deriving show]
 and env =
-  | EnvVar of env_var
-  | Env of var_env
+  | EnvVar of env_var (* a quantified environment variable *)
+  | Env of var_env (* a concrete environment *)
+  | EnvOf of var (* the environment of a specific bound function at closure type *)
 [@@deriving show]
 and var_env = (var * ty) list [@@deriving show]
 
@@ -137,6 +138,7 @@ and var_env_init (gamma : env) : bool =
   match gamma with
   | EnvVar _ -> true
   | Env gamma -> all_init (List.map snd gamma)
+  | EnvOf _ -> true
 
 type prim =
   | Unit
@@ -366,6 +368,7 @@ type tc_error =
   | UnificationFailed of ty * ty
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var
+  | UnevaluatedEnvOf of var
   | WrongStructConstructor of source_loc * struct_var * struct_kind
   | InvalidReturnType of ty * prov (* return type * invalidated provenance *)
   | InvalidType of ty

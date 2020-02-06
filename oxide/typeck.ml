@@ -98,6 +98,7 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
       if tyvar_env_env_var_mem ev delta then Succ ()
       else Fail (InvalidEnvVar (ev, ty))
     | Env gamma -> for_each_rev (fun (_, ty) -> valid ty) gamma
+    | EnvOf var -> Fail (UnevaluatedEnvOf var)
   in valid ty
 
 let valid_types (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
@@ -204,6 +205,13 @@ let flow_closed_envs_forward (computed : ty) (annotated : ty) : ty tc =
     let* combined_tys = combine_tys "flow_closed_envs_forward" computed annotated
     in map (fun (comp, ann) -> flow comp ann) combined_tys
   in flow computed annotated
+
+let rec eval_env_of (gamma : var_env) (env : env) : env tc =
+  match env with
+  | EnvVar _ | Env _ -> Succ env
+  | EnvOf var ->
+    let* env = env_of var gamma
+    in eval_env_of gamma env
 
 let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
                (expr : expr) : (ty * loan_env * var_env) tc =
@@ -418,7 +426,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       (match tc delta ell gamma fn with
        | Succ ((_, Fun (evs, provs, tyvars, params, _, ret_ty)), ellF, gammaF) ->
          let* (arg_tys, ellN, gammaN) = tc_many delta ellF gammaF args
-         in let* env_sub = combine_evs "T-App" envs evs
+         in let* evaled_envs = map (eval_env_of gammaF) envs
+         in let* env_sub = combine_evs "T-App" evaled_envs evs
          in let* prov_sub = combine_prov "T-App" new_provs provs
          in let* ty_sub = combine_ty "T-App" new_tys tyvars
          in let do_sub : ty -> ty =

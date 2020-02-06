@@ -1506,6 +1506,7 @@ impl PrettyPrint for Expr {
                                             // environment arguments
                                             .append(
                                                 Doc::text("[")
+                                                    .append(expr.attrs.to_env_doc(st.clone()))
                                                     .append(Doc::text("]"))
                                                     .group()
                                             )
@@ -1900,4 +1901,42 @@ impl PrettyPrintTypeGenerics for PathArguments {
             )
         }
     }
+}
+
+trait PrettyPrintEnvironments {
+    fn to_env_doc(self, st: CompilerState) -> Doc<'static, BoxDoc<'static, ()>>;
+}
+
+impl PrettyPrintEnvironments for Vec<Attribute> {
+  fn to_env_doc(self, _: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
+    let envs = self
+      .iter()
+      .filter(|attr| attr.path.segments.len() == 1)
+      .filter(|attr| {
+        let attr_id = attr.path.segments.clone().pop().unwrap().into_value();
+        attr_id.ident == "envs"
+      })
+      .flat_map(|attr| {
+        match attr
+          .parse_meta()
+          .expect("malformed input to envs annotations")
+        {
+          Meta::List(lst) => lst.nested,
+          _ => panic!("envs attribute should be a structured list"),
+        }
+      });
+
+      Doc::intersperse(
+          envs.map(|meta| match meta {
+              NestedMeta::Meta(Meta::Path(path)) => Doc::text("EnvOf")
+                  .append(Doc::space())
+                  .append(Doc::text(format!("\"{}\"",
+                      path.get_ident().expect("envs annotations should only use identifiers")
+                  ))),
+              NestedMeta::Meta(_) => panic!("malformed envs annotation input"),
+              NestedMeta::Lit(_) => panic!("envs annotations should not contain literals"),
+          }),
+          Doc::text(";").append(Doc::space())
+      )
+  }
 }

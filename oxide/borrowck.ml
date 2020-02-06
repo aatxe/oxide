@@ -33,6 +33,7 @@ let rec expand_closures (gamma : var_env) : var_env =
     | Ref (_, _, ty) -> expand_closure ty
     | Fun (_, _, _, _, EnvVar _, _) -> []
     | Fun (_, _, _, _, Env gamma_c, _) -> expand_closures gamma_c
+    | Fun (_, _, _, _, EnvOf _, _) -> failwith "expand_closure: unreachable"
     | Array (ty, _) | Slice ty -> expand_closure ty
     | Rec fields -> flat_map (compose expand_closure snd) fields
     | Tup tys -> flat_map expand_closure tys

@@ -8,6 +8,13 @@ let is_at_least (omega : owned) (omega_prime : owned) : bool =
   | (Unique, Unique) -> true
   | (Unique, Shared) -> false
 
+(* looks up var in gamma, and if the type is a closure, returns its closed over environment *)
+let env_of (var : var) (gamma : var_env) : env tc =
+  match List.assoc_opt var gamma with
+  | Some (_, Fun (_, _, _, _, gamma_c, _)) -> Succ gamma_c
+  | Some ty -> Fail (TypeMismatchFunction ty)
+  | None -> Fail (UnboundPlace ((dummy, (var, []))))
+
 (* extract all the specific loans from a given region *)
 let prov_to_loans (ell : loan_env) (prov : prov) : loans =
   match loan_env_lookup_opt ell prov with
@@ -27,7 +34,7 @@ let subst_env_var (ty : ty) (this : env) (that : env_var) : ty =
         let gammaPrime =
           match gamma with
           | EnvVar ev -> if ev = that then this else gamma
-          | Env _ -> gamma
+          | Env _ | EnvOf _ -> gamma
         in (loc, Fun (evs, pvs, tvs, sub_many tys, gammaPrime, sub ret_ty))
       else ty
     | Array (ty, n) -> (loc, Array (sub ty, n))
@@ -486,7 +493,8 @@ let rec contains_prov (gamma : var_env) (prov : prov) : bool =
     | Fun (_, pvs, _, tys, gam, ret_ty) ->
       if not (List.mem prov pvs) then
         ty_contains ret_ty || tys_contains tys ||
-        match gam with Env gam -> contains_prov gam prov | EnvVar _ -> false
+        match gam with
+        | Env gam -> contains_prov gam prov | EnvVar _ | EnvOf _ -> false
       else false
     | Uninit ty | Array (ty, _) | Slice ty -> ty_contains ty
     | Rec pairs -> tys_contains (List.map snd pairs)
