@@ -267,12 +267,8 @@ fn fun_bound_to_fun_ty(st: CompilerState, env_name: Ident, mut bound: TraitBound
     let bound_id = format!("{}", segment.ident);
     if FNS.contains(&&bound_id[..]) {
         if let PathArguments::Parenthesized(arguments) = segment.arguments {
-            let ty_span = bound.span();
             return parenthesize(
-                ty_span.to_doc(st.clone())
-                    .append(Doc::text(","))
-                    .append(Doc::space())
-                    .append(Doc::text("Fun"))
+                    Doc::text("Fun")
                     .append(Doc::space())
                     .append(parenthesize(
                         Doc::nil()
@@ -304,14 +300,14 @@ fn fun_bound_to_fun_ty(st: CompilerState, env_name: Ident, mut bound: TraitBound
                             .append(
                                 Doc::text("EnvVar")
                                     .append(Doc::space())
-                                    .append(Doc::text(format!("{}", env_name)))
+                                    .append(Doc::text(format!("\"{}\"", env_name)))
                             )
                             .append(Doc::text(","))
                             .append(Doc::space())
                             // return type
                             .append(parenthesize(match arguments.output {
                                 ReturnType::Default =>
-                                    ty_span.to_doc(st.clone())
+                                    Doc::text("inferred")
                                     .append(Doc::text(","))
                                     .append(Doc::space())
                                     .append(Doc::text("BaseTy")
