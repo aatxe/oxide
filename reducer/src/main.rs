@@ -728,9 +728,18 @@ impl PrettyPrint for Block {
 }
 
 impl PrettyPrint for Pat {
-    fn to_doc(self, _: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
+    fn to_doc(self, st: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
         if let Pat::Ident(pat) = self {
             return Doc::text(format!("\"{}\"", pat.ident))
+        }
+
+        if let Pat::Type(pat) = self {
+            return pat.pat.to_doc(st.clone())
+                .append(Doc::space())
+                .append(Doc::text("@:"))
+                .append(Doc::space())
+                .append(parenthesize(pat.ty.to_doc(st.clone())))
+                .group()
         }
 
         if let Pat::Wild(_) = self {
