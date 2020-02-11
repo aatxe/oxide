@@ -685,6 +685,7 @@ let wf_global_env (sigma : global_env) : unit tc =
       in let* (output_ty, ellPrime, gammaPrime) = type_check sigma delta ell gamma body
       in (match valid_type sigma delta ellPrime gammaPrime output_ty with
       | Succ () ->
+        (* find_refs_to_params corresponds to the return type validity: WF-ReturnRef *)
         let* () = find_refs_to_params ellPrime output_ty params
         in let* _ = subtype Combine ellPrime output_ty ret_ty
         in Succ ()
