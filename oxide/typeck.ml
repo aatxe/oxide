@@ -111,54 +111,6 @@ let type_of (prim : prim) : ty =
   | Num _ -> BaseTy U32
   | True | False -> BaseTy Bool)
 
-let omega_safe (sigma : global_env) (ell : loan_env) (gamma : var_env) (omega : owned)
-    (phi : place_expr) : (ty * loans) tc =
-  let* loans = eval_place_expr ell gamma omega phi
-  in let safe_then_ty (loan : loan) : (ty option * loan) tc =
-       let* res = is_safe ell gamma omega (snd loan)
-       in match res with
-       | None ->
-          let* root_ty = var_env_lookup_expr_root gamma (snd loan)
-          in let* res_ty = compute_ty_in omega ell root_ty (expr_path_of (snd loan))
-          in Succ (Some res_ty, loan)
-       | Some possible_conflicts ->
-         (* the reason these are only _possible_ conflicts is essentially reborrows *)
-         let possible_conflicts =
-           List.filter (fun (_, phi_prime) -> not (expr_disjoint phi phi_prime))
-                       possible_conflicts
-         in let is_in (loan : loan) (other_loan : loan) : bool = (snd other_loan) = (snd loan)
-         in let is_real (loan : loan) : bool = not (List.exists (is_in loan) loans)
-         in match List.find_opt is_real possible_conflicts with
-         | Some loan -> Succ (None, loan) (* in this case, we've found a _real_ conflict *)
-         | None -> (* but here, the only conflict are precisely loans being reborrowed *)
-           if possible_conflicts = [] then
-             let* root_ty = var_env_lookup_expr_root gamma phi
-             in let* res_ty = compute_ty_in omega ell root_ty (expr_path_of phi)
-             in Succ (Some res_ty, loan)
-           else let hd = List.hd possible_conflicts
-           in if is_at_least omega (fst hd) then
-             let* root_ty = var_env_lookup_expr_root gamma (snd hd)
-             in let* res_ty = compute_ty_in omega ell root_ty (expr_path_of (snd hd))
-             in Succ (Some res_ty, loan)
-           else Succ (None, hd)
-  in let tmp = List.map safe_then_ty loans
-  in let opt_tys =
-       List.flatten (List.map (fun tc -> match tc with Succ x -> [x] | Fail _ -> []) tmp)
-  in match List.find_opt (fun tc -> match tc with Succ _ -> false | Fail _ -> true) tmp with
-  | Some (Fail err) -> Fail err
-  | Some (Succ _) -> failwith "unreachable"
-  | None ->
-    match List.assoc_opt None opt_tys with
-    | Some conflicting_loan -> Fail (SafetyErr ((omega, phi), conflicting_loan))
-    | None ->
-      let* root_ty = var_env_lookup_expr_root gamma phi
-      in let* ty = compute_ty_in omega ell root_ty (expr_path_of phi)
-      in let* _ =
-        let* noncopy = noncopyable sigma ty
-        in if noncopy then eval_place_expr ell gamma omega phi
-        else Succ []
-      in Succ (ty, uniq_cons (omega, phi) loans)
-
 (* flows closed environments forward in otherwise structurally the same types *)
 let flow_closed_envs_forward (computed : ty) (annotated : ty) : ty tc =
   let rec flow (computed : ty) (annotated : ty) : ty tc =

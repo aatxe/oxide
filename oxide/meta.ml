@@ -15,12 +15,6 @@ let env_of (var : var) (gamma : var_env) : env tc =
   | Some ty -> Fail (TypeMismatchFunction ty)
   | None -> Fail (UnboundPlace ((dummy, (var, []))))
 
-(* extract all the specific loans from a given region *)
-let prov_to_loans (ell : loan_env) (prov : prov) : loans =
-  match loan_env_lookup_opt ell prov with
-  | Some loans -> loans
-  | None -> []
-
 (* substitutes this for that in ty *)
 let subst_env_var (ty : ty) (this : env) (that : env_var) : ty =
   let rec sub (ty : ty) : ty =
@@ -335,10 +329,6 @@ let var_env_include (gamma : var_env) (x : var) (typ : ty) = List.cons (x, typ) 
 let var_env_append (gamma1 : var_env) (gamma2 : var_env) = List.append gamma1 gamma2
 let var_env_exclude (gamma : var_env) (x : var) = List.remove_assoc x gamma
 
-(* compute all the at-least-omega loans in a given gamma *)
-let all_loans (omega : owned) (ell : loan_env) : loans =
-  List.filter (fun loan -> is_at_least omega (fst loan)) (List.flatten (List.map snd (fst ell)))
-
 (* find the root of a given place expr *)
 let root_of (pi : place) : var = sndfst pi
 (* find the path for the given place *)
@@ -348,63 +338,6 @@ let path_of (pi : place) : path = sndsnd pi
 let expr_root_of (phi : place_expr) : var = sndfst phi
 (* find the path for the given place_expr *)
 let expr_path_of (phi : place_expr) : expr_path = sndsnd phi
-
-
-(* find all at-least-omega loans in gamma that have to do with phi *)
-let find_loans (omega : owned) (ell : loan_env) (phi : place_expr) : loans =
-  (* n.b. this is actually too permissive because of reborrowing and deref *)
-  let root_of_phi = expr_root_of phi
-  in let relevant (loan : loan) : bool =
-    (* a loan is relevant if it is a descendant of any subplace of pi *)
-    let (_, phi_prime) = loan
-       (* the easiest way to check is to check if their roots are the same *)
-    in root_of_phi = expr_root_of phi_prime
-  in List.filter relevant (all_loans omega ell)
-
-(* evaluates the place expression to a collection of its constituent loans *)
-let eval_place_expr (ell : loan_env) (gamma : var_env) (omega : owned) (phi : place_expr) : loans tc =
-  let rec eval_place_expr (phi : place_expr) : loans tc =
-    let (prefix, suffix) = partition ((!=) Deref) (expr_path_of phi)
-    in match suffix with
-    | [] -> Succ [(omega, phi)]
-    | Deref :: path ->
-        (* invariant: this is definitionally the first deref, and thus, the prefix is a place *)
-        let* ty = var_env_lookup gamma
-                                 (fst phi, (expr_root_of phi, unwrap (expr_path_to_path prefix)))
-        in (match snd ty with
-        | Ref (prov, _, _) ->
-          let loans = loan_env_lookup ell prov
-          in let add_path_to_back (loan : loan) : place_expr =
-            let (_, (loc, (root, loan_path))) = loan
-            in (loc, (root, List.append loan_path path))
-          in let current_loans = List.map add_path_to_back loans
-          in let follow (phi : place_expr) (loans_so_far : loans) =
-            let* new_loans = eval_place_expr phi
-            in Succ (List.append loans_so_far new_loans)
-          in foldr follow current_loans [(omega, phi)]
-        | Uninit (loc, Ref (prov, omega, ty)) ->
-          let pi = (fst phi, (expr_root_of phi, unwrap (expr_path_to_path prefix)))
-          in Fail (PartiallyMoved (pi, (loc, Ref (prov, omega, ty))))
-        | _ -> Fail (TypeMismatchRef ty))
-    | _ :: _ -> failwith "unreachable"
-  in eval_place_expr phi
-
-(* normalizes the place expression to the places it may point to *)
-let norm_place_expr (ell : loan_env) (gamma : var_env) (phi : place_expr) : places tc =
-  let rec norm (phi : place_expr) : places tc =
-    let* loans = eval_place_expr ell gamma Shared phi
-    in let progress = List.map (fun loan -> (place_expr_to_place (snd loan), snd loan)) loans
-    in let still_to_norm =
-         List.map (fun pair -> snd pair) (List.filter (fun pair -> fst pair = None) progress)
-    in let complete =
-         List.map (fun pair -> unwrap (fst pair)) (List.filter (fun pair -> fst pair != None) progress)
-    in let continue (completed : places) (phi_prime : place_expr) : places tc =
-      if phi_prime != phi then
-         let* newly_completed = norm phi_prime
-         in Succ (List.append completed newly_completed)
-      else Succ completed (* don't normalize the same phi again! *)
-    in foldl continue complete still_to_norm
-  in norm phi
 
 (* is path2 a prefix of path1? *)
 let rec is_prefix_of (path1 : path) (path2 : path) : bool =
@@ -441,49 +374,6 @@ let kill_loans_for (phi : place_expr) (ell : loan_env) : loan_env =
 (* kill all the loans for pi in ell *)
 let kill_loans_for_place (pi : place) (ell : loan_env) : loan_env =
   kill_loans_for (place_to_place_expr pi) ell
-
-(* are the given places disjoint? *)
-let disjoint (pi1 : place) (pi2 : place) : bool =
-  (* two places are not disjoint if their roots are equal... *)
-  if root_of pi1 = root_of pi2 then
-    (* ... and one path is a prefix of the other  *)
-    not (is_prefix_of (path_of pi1) (path_of pi2) || is_prefix_of (path_of pi2) (path_of pi1))
-  else true
-
-(* are the given place expressions disjoint? *)
-let expr_disjoint (phi1 : place_expr) (phi2 : place_expr) : bool =
-  (* two place exprsesions are not disjoint if their roots are equal... *)
-  if expr_root_of phi1 = expr_root_of phi2 then
-    (* ... and one path is a prefix of the other  *)
-    not (is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2) ||
-         is_expr_prefix_of (expr_path_of phi2) (expr_path_of phi1))
-  else true
-
-(* is the place expression phi disjoint from pi in the given environments? *)
-let disjoint_from (ell : loan_env) (gamma : var_env) (phi : place_expr) (pi : place) : bool tc =
-  (* a place expression is disjoint from pi if... *)
-  let* pis = norm_place_expr ell gamma phi (* we can normalize it*)
-  in Succ (List.for_all (disjoint pi) pis) (* and all resulting pis are disjoint from pi *)
-
-(* is the given place expression phi omega safe in the given environments? *)
-let is_safe (ell : loan_env) (gamma : var_env) (omega : owned) (phi : place_expr) : loans option tc =
-  let next_loan (loans : loans) ((omega, phi_prime) : loan) : loans tc =
-    let* pis = norm_place_expr ell gamma phi_prime
-    in let* should_include =
-      all (fun pi -> let* disjoint = disjoint_from ell gamma phi pi in Succ (not disjoint)) pis
-    in if should_include then Succ (List.cons (omega, phi_prime) loans)
-    else Succ loans
-  in match omega with
-  | Unique -> (* for unique use to be safe, we need _no_ relevant loans *)
-    let* res = foldl next_loan [] (find_loans Shared ell phi)
-    in (match res with
-        | [] -> Succ None
-        | loans -> Succ (Some loans))
-  | Shared -> (* for shared use, we only care that there are no relevant _unique_ loans *)
-    let* res = foldl next_loan [] (find_loans Unique ell phi)
-    in (match res with
-        | [] -> Succ None
-        | loans -> Succ (Some loans))
 
 let rec contains_prov (gamma : var_env) (prov : prov) : bool =
   let rec ty_contains (ty : ty) : bool =
@@ -524,16 +414,6 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
     foldr loop (List.map (fun x -> Some x) tys) envs
   in let* opt = var_env_lookup_opt gamma pi
   in loop opt (ell, var_env_exclude gamma (sndfst pi))
-
-let rec path_prefixed_by (target : path) (in_path : path) : bool =
-  match (target, in_path) with
-  | ([], _) -> true
-  | (_, []) -> false
-  | (x :: target, y :: in_path) -> x = y && path_prefixed_by target in_path
-
-let prefixed_by (target : place) (in_pi : place) : bool =
-  let (target, in_pi) = (snd target, snd in_pi)
-  in fst target = fst in_pi && path_prefixed_by (snd target) (snd in_pi)
 
 let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   match snd typ with

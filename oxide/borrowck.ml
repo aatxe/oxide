@@ -71,6 +71,15 @@ let disjoint (pi1 : place) (pi2 : place) : bool =
     not (is_prefix_of (path_of pi1) (path_of pi2) || is_prefix_of (path_of pi2) (path_of pi1))
   else true
 
+(* are the given place expressions disjoint? *)
+let expr_disjoint (phi1 : place_expr) (phi2 : place_expr) : bool =
+  (* two place exprsesions are not disjoint if their roots are equal... *)
+  if expr_root_of phi1 = expr_root_of phi2 then
+    (* ... and one path is a prefix of the other  *)
+    not (is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2) ||
+         is_expr_prefix_of (expr_path_of phi2) (expr_path_of phi1))
+  else true
+
 (* are the places pi and place expression phi disjoint? *)
 let expr_disjoint_place (pi : place) (phi : place_expr) : bool =
   (* they are disjoint if and only if the inner place of phi is disjoint from pi *)
