@@ -294,12 +294,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        (* T-Assign *)
        | Some pi ->
          let* gammaPrime = var_env_type_update gamma1 pi ty_update
-         in let ellPrime = kill_loans_for_place pi ellPrime
          in Succ ((inferred, BaseTy Unit), ellPrime, gammaPrime)
        (* T-AssignDeref *)
-       | None ->
-         let ellPrime = kill_loans_for phi ellPrime
-         in Succ ((inferred, BaseTy Unit), ellPrime, gamma1))
+       | None -> Succ ((inferred, BaseTy Unit), ellPrime, gamma1))
     (* T-Abort *)
     | Abort _ -> Succ ((inferred, Any), ell, gamma)
     (* T-While *)
