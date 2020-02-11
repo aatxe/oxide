@@ -402,6 +402,8 @@ let bind (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc =
   | Succ x -> f x
   | Fail err -> Fail err
 
+let succ (elem : 'a) : 'a tc = Succ elem
+let fail (err : tc_error) : 'a tc = Fail err
 let (let*) (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc = bind tc f
 
 (* lifting normal list operations to tc monad *)

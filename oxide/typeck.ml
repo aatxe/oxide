@@ -49,8 +49,7 @@ let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) 
   if loan_env_mem ell prov then
     match loan_env_lookup_opt ell prov with
     | Some loans ->
-      let invalid_loans =
-        List.filter (fun (_, phi) -> not (var_env_contains_place_expr gamma phi)) loans
+      let invalid_loans = List.filter (not >> var_env_contains_place_expr gamma >> snd) loans
       in (match invalid_loans with
       | [] -> Succ ()
       | (omega, pi) :: _ -> Fail (InvalidLoan (omega, pi)))
@@ -193,7 +192,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     (* T-Move and T-Copy *)
     | Move pi ->
       let* root_ty = var_env_lookup_expr_root gamma pi
-      in let* unified_ty = compute_ty ell root_ty (expr_path_of pi)
+      in let* unified_ty = expr_path_of pi |> compute_ty ell root_ty
       in let* copy = copyable sigma unified_ty
       in let omega = if copy then Shared else Unique
       in (match ownership_safe sigma ell gamma omega pi with
@@ -672,9 +671,9 @@ let wf_global_env (sigma : global_env) : unit tc =
     (* WF-FunctionDef*)
     | FnDef (_, evs, provs, tyvars, params, ret_ty, bounds, body) ->
       let not_in_provs (prov : prov) : bool =
-        not (List.mem (snd prov) (List.map snd provs))
+        provs |> List.map snd |> List.mem (snd prov) |> not
       in let free_provs = (* this lets us infer provenances not bound in letprov *)
-        List.filter not_in_provs (free_provs body)
+         free_provs body |> List.filter not_in_provs
       in let delta : tyvar_env = (evs, List.append provs free_provs, tyvars)
       in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
       in let ell = List.fold_left (fun ell (prov1, prov2) -> loan_env_add_abs_sub ell prov1 prov2)
