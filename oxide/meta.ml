@@ -360,21 +360,6 @@ let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
   | (Deref :: path1, Deref :: path2) -> is_expr_prefix_of path1 path2
   | (_, _) -> false
 
-(* kill all the loans for phi in ell *)
-let kill_loans_for (phi : place_expr) (ell : loan_env) : loan_env =
-  let (concrete, abstract) = ell
-  in let not_prefix_of_phi (loan : loan) : bool =
-    let (_, phi_prime) = loan
-    in not (expr_root_of phi = expr_root_of phi_prime &&
-            is_expr_prefix_of (expr_path_of phi_prime) (expr_path_of phi))
-  in let concretePrime =
-    List.map (fun (prov, loans) -> (prov, List.filter not_prefix_of_phi loans)) concrete
-  in (concretePrime, abstract)
-
-(* kill all the loans for pi in ell *)
-let kill_loans_for_place (pi : place) (ell : loan_env) : loan_env =
-  kill_loans_for (place_to_place_expr pi) ell
-
 let rec contains_prov (gamma : var_env) (prov : prov) : bool =
   let rec ty_contains (ty : ty) : bool =
     match snd ty with

@@ -287,7 +287,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in Succ (ty2, ell2Prime, gamma2Prime)
     (* T-Assign and T-AssignDeref *)
     | Assign (phi, e) ->
-      let* (ty_old, _) = ownership_safe sigma ell gamma Unique phi
+      let ell = kill_loans_for phi ell
+      in let* (ty_old, _) = ownership_safe sigma ell gamma Unique phi
       in let* (ty_update, ell1, gamma1) = tc delta ell gamma e
       in let* ellPrime = subtype Override ell1 ty_update ty_old
       in (match place_expr_to_place phi with
@@ -644,6 +645,26 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
     in foldr do_lifted entries []
   in do_global_entries [] sigma
 
+(* produces an error if the loans in the given type are found in the parameter list *)
+let find_refs_to_params (ell : loan_env) (ty : ty) (params : (var * ty) list) : unit tc =
+  let place_in_params (pi : place) : bool = List.mem_assoc (root_of pi) params
+  in let rec impl (ty : ty) : unit tc =
+    match snd ty with
+    | Any | BaseTy _ | TyVar _ -> Succ ()
+    | Ref (prov, _, ty) ->
+      let loans = loan_env_lookup ell prov
+      in let borrow_loans = loans |> List.map snd |> List.filter_map place_expr_to_place
+      in let param_loans = borrow_loans |> List.filter place_in_params
+      in if is_empty param_loans then impl ty
+      else Fail (NoReferenceToParameter (List.hd param_loans))
+    | Fun _ -> Succ ()
+    | Array (ty, _) | Slice ty -> impl ty
+    | Rec fields -> fields |> List.map snd |> for_each_rev impl
+    | Tup tys -> for_each_rev impl tys
+    | Struct (_, _, _, Some ty) -> impl ty
+    | Struct _ | Uninit _ -> Succ ()
+  in impl ty
+
 let wf_global_env (sigma : global_env) : unit tc =
   let* sigma = struct_to_tagged (List.cons drop sigma)
   in let valid_global_entry (entry : global_entry) : unit tc =
@@ -652,7 +673,7 @@ let wf_global_env (sigma : global_env) : unit tc =
     | FnDef (_, evs, provs, tyvars, params, ret_ty, bounds, body) ->
       let not_in_provs (prov : prov) : bool =
         not (List.mem (snd prov) (List.map snd provs))
-      in let free_provs = (* this lets us get away without letprov *)
+      in let free_provs = (* this lets us infer provenances not bound in letprov *)
         List.filter not_in_provs (free_provs body)
       in let delta : tyvar_env = (evs, List.append provs free_provs, tyvars)
       in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
@@ -662,11 +683,11 @@ let wf_global_env (sigma : global_env) : unit tc =
         var_env_include gamma (fst pair) (snd pair)
       in let gamma = List.fold_left var_include_fold [] params
       in let* (output_ty, ellPrime, gammaPrime) = type_check sigma delta ell gamma body
-      in let* (ellFinal, gammaFinal) =
-        foldl (fun (ell, gamma) (var, _) -> envs_minus ell gamma (dummy, (var, [])))
-              (ellPrime, gammaPrime) params
-      in (match valid_type sigma delta ellFinal gammaFinal output_ty with
-      | Succ () -> let* _ = subtype Combine ellPrime output_ty ret_ty in Succ ()
+      in (match valid_type sigma delta ellPrime gammaPrime output_ty with
+      | Succ () ->
+        let* () = find_refs_to_params ellPrime output_ty params
+        in let* _ = subtype Combine ellPrime output_ty ret_ty
+        in Succ ()
       (* this is caused by a provenance being killed by its loans dropping out of scope *)
       (* in other words: references to temporaries cause an InvalidReturnType *)
       | Fail (InvalidProv prov) -> Fail (InvalidReturnType (output_ty, prov))

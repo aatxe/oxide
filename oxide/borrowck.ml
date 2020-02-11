@@ -63,6 +63,18 @@ let decompose_place_expr (phi : place_expr) : place * expr_path =
 let apply_suffix (phi : place_expr) (suffix : expr_path) : place_expr =
   (fst phi, (expr_root_of phi, List.append (expr_path_of phi) suffix))
 
+(* kill all the loans for phi in ell *)
+let kill_loans_for (phi : place_expr) (ell : loan_env) : loan_env =
+  let (concrete, abstract) = ell
+  in let phi = apply_suffix phi [Deref]
+  in let not_killed (loan : loan) : bool =
+    let (_, phi_prime) = loan
+    in not (expr_root_of phi = expr_root_of phi_prime &&
+            is_expr_prefix_of (expr_path_of phi_prime) (expr_path_of phi))
+  in let concretePrime =
+    List.map (fun (prov, loans) -> (prov, List.filter not_killed loans)) concrete
+  in (concretePrime, abstract)
+
 (* are the given places disjoint? *)
 let disjoint (pi1 : place) (pi2 : place) : bool =
   (* two places are not disjoint if their roots are equal... *)
@@ -73,7 +85,7 @@ let disjoint (pi1 : place) (pi2 : place) : bool =
 
 (* are the given place expressions disjoint? *)
 let expr_disjoint (phi1 : place_expr) (phi2 : place_expr) : bool =
-  (* two place exprsesions are not disjoint if their roots are equal... *)
+  (* two place expressions are not disjoint if their roots are equal... *)
   if expr_root_of phi1 = expr_root_of phi2 then
     (* ... and one path is a prefix of the other  *)
     not (is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2) ||

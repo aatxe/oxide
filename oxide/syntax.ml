@@ -359,6 +359,7 @@ type tc_error =
                 (* attempted access * conflicting loan *)
   | PermissionErr of ty * expr_path * owned
                      (* type not allowing access * operation being performed * context *)
+  | NoReferenceToParameter of place
   | CannotMove of place_expr
   | MovedFunction of expr * ty (* expr in function position * the uninitialized type *)
   | PartiallyMoved of place * ty (* place that was moved * the type for it *)
