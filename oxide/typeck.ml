@@ -690,7 +690,7 @@ let wf_global_env (sigma : global_env) : unit tc =
         in Succ ()
       (* this is caused by a provenance being killed by its loans dropping out of scope *)
       (* in other words: references to temporaries cause an InvalidReturnType *)
-      | Fail (InvalidProv prov) -> Fail (InvalidReturnType (output_ty, prov))
+      | Fail (InvalidProv prov) -> InvalidReturnType (output_ty, prov) |> fail
       | Fail err -> Fail err)
     (* T-RecordStructDef *)
     | RecStructDef (_, name, provs, tyvars, fields) ->
@@ -706,12 +706,12 @@ let wf_global_env (sigma : global_env) : unit tc =
         else (List.cons pair acc_lst, acc_opt)
       in (match List.fold_right find_dup fields ([], None) with
           | (_, None) -> Succ ()
-          | (_, Some (p1, p2)) -> Fail (DuplicateFieldsInStructDef (name, p1, p2)))
+          | (_, Some (p1, p2)) -> DuplicateFieldsInStructDef (name, p1, p2) |> fail)
     (* T-TupleStructDef *)
     | TupStructDef (_, name, provs, tyvars, tys) ->
       let delta : tyvar_env = ([], provs, tyvars)
       in let ell = ([], (List.map snd provs, []))
-      in let* () = valid_copy_impl sigma (unwrap (global_env_find_struct sigma name))
+      in let* () = name |> global_env_find_struct sigma |> unwrap |> valid_copy_impl sigma
       in let* () = valid_types sigma delta ell empty_gamma tys
       in Succ ()
   in for_each sigma valid_global_entry

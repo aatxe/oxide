@@ -40,7 +40,7 @@ let rec expand_closures (gamma : var_env) : var_env =
     | Struct (_, _, _, Some ty) -> expand_closure ty
     | Struct (_, _, _, None) -> failwith "expand_closure: unreachable"
     | Uninit _ -> []
-  in List.append gamma (flat_map (compose expand_closure snd) gamma)
+  in gamma |> flat_map (expand_closure >> snd) |> List.append gamma
 
 (* keep all the places whose type is a reference type significant in some context *)
 (* i.e. if context is unique, all references are significant for checking safety, and
@@ -155,15 +155,15 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
           loans |> List.map (skip_deref suffix |> apply_suffix >> snd)
                 |> map (impl_safe exclusions)
         in let refined_places = refine exclusions ref_places
-      in let expr_not_disjoint_from (phi : place_expr) : place_expr -> bool =
-        compose not (expr_disjoint phi)
+        in let expr_not_disjoint_from (phi : place_expr) : place_expr -> bool =
+          not >> expr_disjoint phi
         in let safety_test ((_, ty) : place * ty) : unit tc =
           match snd ty with
           | Ref (prov, _, _) ->
             let loans = loan_env_lookup ell prov
             in let conflicts = List.find_all (expr_not_disjoint_from phi >> snd) loans
             in if is_empty conflicts then Succ ()
-            else Fail (SafetyErr ((omega, tl_phi), List.hd conflicts))
+            else SafetyErr ((omega, tl_phi), List.hd conflicts) |> fail
           | _ -> failwith "O-Deref/O-DerefAbs: unreachable"
         in let* () = for_each refined_places safety_test
         in let loans = flat_map snd safe_results
@@ -171,6 +171,6 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
         in let* ty = expr_path_of phi |> compute_ty_in omega ell root_ty
         in Succ (ty, List.cons (omega, phi) loans)
       | Uninit (loc, Ref (prov, omega, ty)) ->
-        Fail (PartiallyMoved (inner_pi, (loc, Ref (prov, omega, ty))))
-      | _ -> Fail (TypeMismatchRef ty)
+        PartiallyMoved (inner_pi, (loc, Ref (prov, omega, ty))) |> fail
+      | _ -> TypeMismatchRef ty |> fail
   in impl_safe [] tl_phi
