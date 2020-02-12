@@ -71,9 +71,10 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
       in let place_exprs = List.map snd (loan_env_lookup ell prov)
       in let check_ty (pi : place_expr) : unit tc =
         let* ty_root = var_env_lookup gamma (fst pi, (sndfst pi, []))
-        in let* ty_pi = compute_ty ell ty_root (sndsnd pi)
-        in if snd ty_pi = snd ty then Succ ()
-        else TypeMismatch (ty, ty_pi) |> fail
+        in let* _ = compute_ty ell ty_root (sndsnd pi)
+        in Succ () (* FIXME: check if ty_pi is reachable via some projections from ty *)
+        (* in if snd ty_pi = snd ty then Succ ()
+         * else TypeMismatch (ty, ty_pi) |> fail *)
       in for_each_rev check_ty place_exprs
     | Fun (evs, provs, tyvars, param_tys, gamma_c, ret_ty) ->
       let* () = valid_env gamma_c
