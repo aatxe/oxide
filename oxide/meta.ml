@@ -15,6 +15,25 @@ let env_of (var : var) (gamma : var_env) : env tc =
   | Some ty -> Fail (TypeMismatchFunction ty)
   | None -> Fail (UnboundPlace ((dummy, (var, []))))
 
+let loan_env_add_abs_sub (ell : loan_env) (v1 : prov) (v2 : prov) : loan_env tc =
+  let into_prov (var : prov_var) : prov = (dummy, var) (* FIXME: provs in loan_env *)
+  in let is_abs (var : prov_var) : bool = loan_env_is_abs ell (dummy, var)
+  in let both_abs ((lhs, rhs) : prov_var * prov_var) : bool = is_abs lhs && is_abs rhs
+  in let already_sub ((lhs, rhs) : prov_var * prov_var) : bool =
+    loan_env_abs_sub ell (dummy, lhs) (dummy, rhs)
+  in let trans_extend (cs : subty list) (lhs : prov_var) (rhs : prov_var) : subty list tc =
+    let cs = List.cons (lhs, rhs) cs
+    in let into_lhs = List.filter (fun cx -> (snd cx) = lhs) cs
+    in let from_rhs = List.filter (fun cx -> (fst cx) = rhs) cs
+    in let new_cs = List.append (List.map (fun cx -> (fst cx, rhs)) into_lhs)
+           (List.map (fun cx -> (lhs, snd cx)) from_rhs)
+    in let bad_pairs = new_cs |> List.filter both_abs |> List.filter (not >> already_sub)
+    in if is_empty bad_pairs then List.append new_cs cs |> succ
+    else let (lhs, rhs) = List.hd bad_pairs
+    in AbsProvsNotSubtype (into_prov lhs, into_prov rhs) |> fail
+  in let* constraints = trans_extend (sndsnd ell) (snd v1) (snd v2)
+  in (fst ell, (sndfst ell, constraints)) |> succ
+
 (* substitutes this for that in ty *)
 let subst_env_var (ty : ty) (this : env) (that : env_var) : ty =
   let rec sub (ty : ty) : ty =
@@ -122,7 +141,7 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
   | (_, Some _, None) ->
     (* UP-LocalProvAbstractProv *)
     if not (loan_env_is_abs ell prov2) then Fail (InvalidProv prov2)
-    else let ellPrime = loan_env_add_abs_sub ell prov1 prov2
+    else let* ellPrime = loan_env_add_abs_sub ell prov1 prov2
     in Succ ellPrime
   | (_, None, None) ->
     (* UP-AbstractProvenances *)

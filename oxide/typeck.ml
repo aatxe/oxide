@@ -690,8 +690,8 @@ let wf_global_env (sigma : global_env) : unit tc =
          free_provs body |> List.filter not_in_provs
       in let delta : tyvar_env = (evs, List.append provs free_provs, tyvars)
       in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
-      in let ell = List.fold_left (fun ell (prov1, prov2) -> loan_env_add_abs_sub ell prov1 prov2)
-                                  ell bounds
+      in let* ell = foldl (fun ell (prov1, prov2) -> loan_env_add_abs_sub ell prov1 prov2)
+                          ell bounds
       in let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
         var_env_include gamma (fst pair) (snd pair)
       in let gamma = List.fold_left var_include_fold [] params
