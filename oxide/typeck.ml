@@ -290,6 +290,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let gamma1Prime = var_env_include gamma1 var ann_ty
       in let* (ty2, ell2, gamma2) = tc delta ell1Prime gamma1Prime e2
       in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
+      in let* () = valid_type sigma delta ell2Prime gamma2Prime ty2
       in Succ (ty2, ell2Prime, gamma2Prime)
     (* T-Assign and T-AssignDeref *)
     | Assign (phi, e) ->
