@@ -525,7 +525,9 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
        let* free1 = free e1
        in let* free2 = free e2
        in free2 |> List.filter ((<>) x) |> List.append free1 |> succ
-     | Fun _ -> Succ [] (* FIXME: actually implement *)
+     | Fun (_, _, params, _, body) ->
+       let* free = free body
+       in free |> List.filter (fun var -> params |> List.map fst |> List.mem var |> not) |> succ
      | App (e1, _, _, _, exprs) ->
        let* frees = free_many exprs
        in let* free1 = free e1
