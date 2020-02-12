@@ -8,7 +8,7 @@ let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env 
   let* ell1 = subtype Combine ell ty1 ty2
   in let* ell2 = subtype Combine ell ty2 ty1
   in if ell1 = ell2 then Succ (ell2, ty2)
-  else Fail (LoanEnvMismatch (loc, ell1, ell2))
+  else LoanEnvMismatch (loc, ell1, ell2) |> fail
 
 let unify_many (loc : source_loc) (ell : loan_env) (tys : ty list) : (loan_env * ty) tc =
   match tys with
@@ -22,9 +22,9 @@ let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
     let (prov, loans) = pair
     in match loan_env_lookup_opt acc (dummy, prov) with
     | Some curr_loans ->
-      loan_env_include (loan_env_exclude acc (dummy, prov))
-        (dummy, prov) (list_union loans curr_loans)
-    | None -> loan_env_include acc (dummy, prov) loans
+      acc |> loan_env_exclude (dummy, prov)
+          |> loan_env_include (dummy, prov) (list_union loans curr_loans)
+    | None -> acc |> loan_env_include (dummy, prov) loans
   in let (prt1, (prt2, prt3)) = List.fold_left work ell1 (fst ell2)
   in (prt1, (list_union prt2 (sndfst ell2), list_union prt3 (sndsnd ell2)))
 
@@ -52,10 +52,10 @@ let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) 
       let invalid_loans = List.filter (not >> var_env_contains_place_expr gamma >> snd) loans
       in (match invalid_loans with
       | [] -> Succ ()
-      | (omega, pi) :: _ -> Fail (InvalidLoan (omega, pi)))
-    | None -> Fail (InvalidProv prov)
+      | (omega, pi) :: _ -> InvalidLoan (omega, pi) |> fail)
+    | None -> InvalidProv prov |> fail
   else if loan_env_is_abs ell prov then Succ ()
-  else Fail (InvalidProv prov)
+  else InvalidProv prov |> fail
 
 let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
                    (ty : ty) : unit tc =
@@ -64,7 +64,7 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
     | Any | BaseTy _ -> Succ ()
     | TyVar tyvar ->
       if tyvar_env_ty_mem tyvar delta then Succ ()
-      else Fail (InvalidType ty)
+      else InvalidType ty |> fail
     | Ref (prov, _, ty) ->
       let* () = valid_prov delta ell gamma prov
       in let* () = valid ty
@@ -73,7 +73,7 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
         let* ty_root = var_env_lookup gamma (fst pi, (sndfst pi, []))
         in let* ty_pi = compute_ty ell ty_root (sndsnd pi)
         in if snd ty_pi = snd ty then Succ ()
-        else Fail (TypeMismatch (ty, ty_pi))
+        else TypeMismatch (ty, ty_pi) |> fail
       in for_each_rev check_ty place_exprs
     | Fun (evs, provs, tyvars, param_tys, gamma_c, ret_ty) ->
       let* () = valid_env gamma_c
@@ -85,7 +85,7 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
       in valid_type sigma new_delta ell gamma ret_ty
     | Array (typ, n) ->
       if n >= 0 then valid typ
-      else Fail (InvalidArrayLen (ty, n))
+      else InvalidArrayLen (ty, n) |> fail
     | Uninit typ | Slice typ -> valid typ
     | Rec pairs -> valid_many (List.map snd pairs)
     | Tup tys -> valid_many tys
@@ -95,9 +95,9 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
     match gamma with
     | EnvVar ev ->
       if tyvar_env_env_var_mem ev delta then Succ ()
-      else Fail (InvalidEnvVar (ev, ty))
+      else InvalidEnvVar (ev, ty) |> fail
     | Env gamma -> for_each_rev (fun (_, ty) -> valid ty) gamma
-    | EnvOf var -> Fail (UnevaluatedEnvOf var)
+    | EnvOf var -> UnevaluatedEnvOf var |> fail
   in valid ty
 
 let valid_types (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
@@ -151,7 +151,7 @@ let flow_closed_envs_forward (computed : ty) (annotated : ty) : ty tc =
     | (Uninit computed_inner, Uninit annotated_inner) ->
       let* forward = flow computed_inner annotated_inner
       in Succ (fst annotated, Uninit forward)
-    | _ -> Fail (TypeMismatch (annotated, computed))
+    | _ -> TypeMismatch (annotated, computed) |> fail
   and flow_many (computed : ty list) (annotated : ty list) : ty list tc =
     let* combined_tys = combine_tys "flow_closed_envs_forward" computed annotated
     in map (fun (comp, ann) -> flow comp ann) combined_tys
@@ -181,8 +181,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
            in if (snd t2) = (snd rhs_ty) then
              let* (ellFinal, _) = unify (fst expr) ell2 t1 t2
              in Succ (out_ty, ellFinal, gamma2)
-           else Fail (TypeMismatch (rhs_ty, t2))
-         else Fail (TypeMismatch (lhs_ty, t1))
+           else TypeMismatch (rhs_ty, t2) |> fail
+         else TypeMismatch (lhs_ty, t1) |> fail
        | (None, None, out_ty) ->
          let* (t1, ell1, gamma1) = tc delta ell gamma e1
          in let* (t2, ell2, gamma2) = tc delta ell1 gamma1 e2
@@ -206,7 +206,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
                  let* gammaPrime = var_env_type_update gamma pi (uninit ty)
                  in Succ (ell, gammaPrime)
                else Succ (ell, gamma)
-             else Fail (PartiallyMoved (pi, ty))
+             else PartiallyMoved (pi, ty) |> fail
            | None ->
              let* copy = copyable sigma ty
              in if copy then Succ (ell, gamma) else failwith "unreachable"
@@ -218,14 +218,14 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     (* T-Borrow *)
     | Borrow (prov, omega, pi) ->
       let* (ty, loans) = ownership_safe sigma ell gamma omega pi
-      in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include ell prov loans, gamma)
+      in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell, gamma)
     (* T-BorrowIndex *)
     | BorrowIdx (prov, omega, pi, e) ->
       (match tc delta ell gamma e with
        | Succ ((_, BaseTy U32), ell1, gamma1) ->
          let* (ty, loans) = ownership_safe sigma ell1 gamma1 omega pi
-         in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include ell prov loans, gamma)
-       | Succ (found, _, _) -> Fail (TypeMismatch ((dummy, BaseTy U32), found))
+         in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell, gamma)
+       | Succ (found, _, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
        | Fail err -> Fail err)
     (* T-BorrowSlice *)
     | BorrowSlice (prov, omega, pi, e1, e2) ->
@@ -234,10 +234,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          (match tc delta ell1 gamma1 e2 with
           | Succ ((_, BaseTy U32), ell2, gamma2) ->
             let* (ty, loans) = ownership_safe sigma ell2 gamma2 omega pi
-            in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include ell prov loans, gamma)
-          | Succ (found, _, _) -> Fail (TypeMismatch ((dummy, BaseTy U32), found))
+            in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell, gamma)
+          | Succ (found, _, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
           | Fail err -> Fail err)
-       | Succ (found, _, _) -> Fail (TypeMismatch ((dummy, BaseTy U32), found))
+       | Succ (found, _, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
        | Fail err -> Fail err)
     (* T-IndexCopy *)
     | Idx (pi, e) ->
@@ -248,9 +248,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
             let* copy = copyable sigma ty
             in if copy then Succ (ty, ell1, gamma1)
             else Fail (CannotMove pi)
-          | Succ (found, _) -> Fail (TypeMismatchArray found)
+          | Succ (found, _) -> TypeMismatchArray found |> fail
           | Fail err -> Fail err)
-       | Succ (found, _, _) -> Fail (TypeMismatch ((dummy, BaseTy U32), found))
+       | Succ (found, _, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
        | Fail err -> Fail err)
     (* T-Seq *)
     | Seq (e1, e2) ->
@@ -305,7 +305,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ ((_, BaseTy Bool), ell1, gamma1) ->
          let* (_, ell2, gamma2) =  tc delta ell1 gamma1 e2
          in tc delta ell2 gamma2 e2
-       | Succ (found, _, _) -> Fail (TypeMismatch ((dummy, BaseTy Bool), found))
+       | Succ (found, _, _) -> TypeMismatch ((dummy, BaseTy Bool), found) |> fail
        | Fail err -> Fail err)
     (* T-ForArray, T-ForSlice *)
     | For (var, e1, e2) ->
@@ -316,19 +316,19 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let* (_, ell2, gamma2) = tc delta ell1 gamma1Prime e2
          in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
          in if gamma2Prime = gamma1 then
-           if ell2Prime = ell1 then Succ ((inferred, BaseTy Unit), ell1, gamma1)
-           else Fail (LoanEnvMismatch (fst e2, ell1, ell2Prime))
-         else Fail (VarEnvMismatch (fst e2, gamma1, gamma2Prime))
+           if ell2Prime = ell1 then ((inferred, BaseTy Unit), ell1, gamma1) |> succ
+           else LoanEnvMismatch (fst e2, ell1, ell2Prime) |> fail
+         else VarEnvMismatch (fst e2, gamma1, gamma2Prime) |> fail
        (* T-ForSlice *)
        | Succ ((_, Ref (prov, omega, (_, Slice elem_ty))), ell1, gamma1) ->
          let gamma1Prime = var_env_include gamma1 var (inferred, Ref (prov, omega, elem_ty))
          in let* (_, ell2, gamma2) = tc delta ell1 gamma1Prime e2
          in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
          in if gamma2Prime = gamma1 then
-           if ell2Prime = ell1 then Succ ((inferred, BaseTy Unit), ell1, gamma1)
-           else Fail (LoanEnvMismatch (fst e2, ell1, ell2Prime))
-         else Fail (VarEnvMismatch (fst e2, gamma1, gamma2Prime))
-       | Succ (found, _, _) -> Fail (TypeMismatchIterable found)
+           if ell2Prime = ell1 then ((inferred, BaseTy Unit), ell1, gamma1) |> succ
+           else LoanEnvMismatch (fst e2, ell1, ell2Prime) |> fail
+         else VarEnvMismatch (fst e2, gamma1, gamma2Prime) |> fail
+       | Succ (found, _, _) -> TypeMismatchIterable found |> fail
        | Fail err -> Fail err)
     (* T-Function *)
     | Fn fn ->
@@ -342,14 +342,14 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
           | Some (_, Fun _) ->
             (match ownership_safe sigma ell gamma Unique (fst expr, (fn, [])) with
             | Succ (ty, [(Unique, _)]) ->
-              let* gammaPrime = var_env_type_update gamma (fst expr, (fn, [])) (uninit ty)
+              let* gammaPrime = uninit ty |> var_env_type_update gamma (fst expr, (fn, []))
               in Succ (ty, ell, gammaPrime)
             | Succ _ -> failwith "unreachable"
             | Fail err -> Fail err)
           | Some ((_, Uninit (_, Fun _)) as uninit_fn_ty) ->
-            Fail (MovedFunction (expr, uninit_fn_ty))
+            MovedFunction (expr, uninit_fn_ty) |> fail
           | Some ty -> Fail (TypeMismatchFunction ty)
-          | None -> Fail (UnknownFunction (fst expr, fn))))
+          | None -> UnknownFunction (fst expr, fn) |> fail))
     (* T-Closure *)
     | Fun (provs, tyvars, params, opt_ret_ty, body) ->
       let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
@@ -394,10 +394,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
                let new_ret_ty = do_sub ret_ty
                in let* () = valid_type sigma delta ellN gammaN new_ret_ty
                in Succ (new_ret_ty, ellN, gammaN)
-             | Some (expected, found) -> Fail (TypeMismatch (expected, found)))
+             | Some (expected, found) -> TypeMismatch (expected, found) |> fail)
        | Succ ((_, Uninit (_, Fun _) as uninit_fn_ty), _, _) ->
-         Fail (MovedFunction (fn, uninit_fn_ty))
-       | Succ (found, _, _) -> Fail (TypeMismatchFunction found)
+         MovedFunction (fn, uninit_fn_ty) |> fail
+       | Succ (found, _, _) -> TypeMismatchFunction found |> fail
        | Fail err -> Fail err)
     (* T-Tuple *)
     | Tup exprs ->
@@ -431,8 +431,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let* (ell_prime, gamma_prime) = foldl tc_exp (ell, gamma) pairs
          in let tagged_ty : ty option = Some (inferred, Rec expected_fields)
          in Succ ((inferred, Struct (name, provs, tys, tagged_ty)), ell_prime, gamma_prime)
-       | Some (Tup _) -> Fail (WrongStructConstructor (fst expr, name, Rec))
-       | None -> Fail (UnknownStruct (fst expr, name)))
+       | Some (Tup _) -> WrongStructConstructor (fst expr, name, Rec) |> fail
+       | None -> UnknownStruct (fst expr, name) |> fail)
     (* T-TupleStruct *)
     | TupStruct (name, provs, tys, exprs) ->
       (match global_env_find_struct sigma name with
@@ -450,10 +450,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let* (ell_prime, gamma_prime) = foldl tc_exp (ell, gamma) pairs
          in let tagged_ty : ty option = Some (inferred, Tup dfn_tys)
          in Succ ((inferred, Struct (name, provs, tys, tagged_ty)), ell_prime, gamma_prime)
-       | Some (Rec _) -> Fail (WrongStructConstructor (fst expr, name, Tup))
+       | Some (Rec _) -> WrongStructConstructor (fst expr, name, Tup) |> fail
        | None ->
-         if global_env_find_struct sigma name == None then Fail (UnknownStruct (fst expr, name))
-         else Fail (WrongStructConstructor (fst expr, name, Tup)))
+         if global_env_find_struct sigma name == None then UnknownStruct (fst expr, name) |> fail
+         else WrongStructConstructor (fst expr, name, Tup) |> fail)
     (* T-Pointer *)
     | Ptr _ -> failwith "unimplemented: T-Pointer"
   and tc_many (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
@@ -564,7 +564,7 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
         in let* tup_tys = do_tys ctx tup_tys
         in let ty : ty = (inferred, Tup tup_tys)
         in Succ (loc, Struct (sn, provs, tys, Some ty))
-      | None -> Fail (UnknownStruct (loc, sn)))
+      | None -> UnknownStruct (loc, sn) |> fail)
     (* structural cases *)
     | Any | BaseTy _ | TyVar _ -> Succ (loc, ty)
     | Ref (prov, omega, ty) ->
@@ -608,21 +608,21 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
   and do_args (ctx : struct_var list) (args : (field * expr) list) : (field * expr) list tc =
     let do_lifted (arg : field * expr) (so_far : (field * expr) list) : (field * expr) list tc =
       let* expr = do_expr ctx (snd arg)
-      in Succ (List.cons (fst arg, expr) so_far)
+      in List.cons (fst arg, expr) so_far |> succ
     in foldr do_lifted args []
   and do_tys (ctx : struct_var list) (tys : ty list) : ty list tc =
     let do_lifted (ty : ty) (tys : ty list) : ty list tc =
       let* ty = do_ty ctx ty
-      in Succ (List.cons ty tys)
+      in List.cons ty tys |> succ
     in foldr do_lifted tys []
   and do_opt_ty (ctx : struct_var list) (ty : ty option) : ty option tc =
     match ty with
-    | Some ty -> let* ty = do_ty ctx ty in Succ (Some ty)
+    | Some ty -> let* ty = do_ty ctx ty in Some ty |> succ
     | None -> Succ None
   and do_params (ctx : struct_var list) (params : (var * ty) list) : (var * ty) list tc =
     let do_lifted (param : var * ty) (so_far : (var * ty) list) : (var * ty) list tc =
       let* ty = do_ty ctx (snd param)
-      in Succ (List.cons (fst param, ty) so_far)
+      in List.cons (fst param, ty) so_far |> succ
     in foldr do_lifted params []
   and do_global_entry (ctx : struct_var list) (entry : global_entry) : global_entry tc =
     match entry with
@@ -640,7 +640,7 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
   and do_global_entries (ctx : struct_var list) (entries : global_env) : global_env tc =
     let do_lifted (entry : global_entry) (entries : global_env) : global_env tc =
       let* entry = do_global_entry ctx entry
-      in Succ (List.cons entry entries)
+      in List.cons entry entries |> succ
     in foldr do_lifted entries []
   in do_global_entries [] sigma
 
@@ -655,7 +655,7 @@ let find_refs_to_params (ell : loan_env) (ty : ty) (params : (var * ty) list) : 
       in let borrow_loans = loans |> List.map snd |> List.filter_map place_expr_to_place
       in let param_loans = borrow_loans |> List.filter place_in_params
       in if is_empty param_loans then impl ty
-      else Fail (NoReferenceToParameter (List.hd param_loans))
+      else NoReferenceToParameter (List.hd param_loans) |> fail
     | Fun _ -> Succ ()
     | Array (ty, _) | Slice ty -> impl ty
     | Rec fields -> fields |> List.map snd |> for_each_rev impl
@@ -696,8 +696,8 @@ let wf_global_env (sigma : global_env) : unit tc =
     | RecStructDef (_, name, provs, tyvars, fields) ->
       let delta : tyvar_env = ([], provs, tyvars)
       in let ell = ([], (List.map snd provs, []))
-      in let* () = valid_copy_impl sigma (unwrap (global_env_find_struct sigma name))
-      in let* () = valid_types sigma delta ell empty_gamma (List.map snd fields)
+      in let* () = name |> global_env_find_struct sigma |> unwrap |> valid_copy_impl sigma
+      in let* () = List.map snd fields |> valid_types sigma delta ell empty_gamma
       in let find_dup (pair : field * ty)
                       (acc : (field * ty) list * ((field * ty) * (field * ty)) option) =
         let (acc_lst, acc_opt) = acc

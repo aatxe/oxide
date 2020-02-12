@@ -19,7 +19,6 @@ let replace_assoc xs key new_value =
 
 let compose (g : 'b -> 'c) (f : 'a -> 'b) : 'a -> 'c = fun x -> g (f x)
 let (>>) = compose
-let (|>) (x : 'a) (f : 'a -> 'b) : 'b = f x
 
 let unwrap (opt : 'a option) : 'a =
   match opt with

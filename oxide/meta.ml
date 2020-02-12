@@ -108,12 +108,12 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
   match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
   | (Combine, Some rep1, Some rep2) ->
     (* UP-CombineLocalProvenances*)
-    let ellPrime = loan_env_exclude_all ell [prov1; prov2]
-    in Succ (loan_env_include_all ellPrime [prov1; prov2] (list_union rep1 rep2))
+    let ellPrime = ell |> loan_env_exclude_all [prov1; prov2]
+    in ellPrime |> loan_env_include_all [prov1; prov2] (list_union rep1 rep2) |> succ
   | (Override, Some rep1, Some _) ->
     (* UP-OverrideLocalProvenances *)
-    let ellPrime = loan_env_exclude ell prov2
-    in Succ (loan_env_include ellPrime prov2 rep1)
+    let ellPrime = ell |> loan_env_exclude prov2
+    in ellPrime |> loan_env_include prov2 rep1 |> succ
   | (_, None, Some _) ->
     (* UP-AbstractProvLocalProv *)
     if not (loan_env_is_abs ell prov1) then Fail (InvalidProv prov1)
@@ -387,7 +387,7 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
     | Some (_, Ref (prov, _, ty)) ->
       let* (ell, gamma) = Some ty |> loop envs
       in let new_gamma = sndfst pi |> var_env_exclude gamma
-      in if not (contains_prov new_gamma prov) then Succ (loan_env_exclude ell prov, new_gamma)
+      in if not (contains_prov new_gamma prov) then Succ (loan_env_exclude prov ell, new_gamma)
       else Succ (ell, new_gamma)
     | Some (_, Any) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
     | Some (_, Struct _) -> Succ envs

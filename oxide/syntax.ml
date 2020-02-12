@@ -300,9 +300,9 @@ let loan_env_filter_dom (ell : loan_env) (provs : provs) : loan_env =
        List.filter (fun x -> List.mem (fst x) prov_vars || List.mem (snd x) prov_vars)
                    (sndsnd ell)))
 
-let loan_env_include (ell : loan_env) (var : prov) (loans : loans) : loan_env =
+let loan_env_include (var : prov) (loans : loans) (ell : loan_env) : loan_env =
   (List.cons (snd var, loans) (List.remove_assoc (snd var) (fst ell)), snd ell)
-let loan_env_include_all (ell : loan_env) (provs : provs) (loans : loans) : loan_env =
+let loan_env_include_all (provs : provs) (loans : loans) (ell : loan_env) : loan_env =
   let vars = List.map snd provs
   in let entries = List.map (fun var -> (var, loans)) vars
   in (List.append entries
@@ -325,11 +325,11 @@ let loan_env_append (ell1 : loan_env) (ell2 : loan_env) : loan_env =
   (List.append (fst ell1) (fst ell2),
    (List.append (sndfst ell1) (sndfst ell2), sndsnd ell2))
 
-let loan_env_exclude (ell : loan_env) (var : prov) : loan_env =
+let loan_env_exclude (var : prov) (ell : loan_env) : loan_env =
   (List.remove_assoc (snd var) (fst ell),
    (List.filter (fun v -> v != (snd var)) (sndfst ell),
     List.filter (fun cs -> fst cs != snd var || snd cs != snd var) (sndsnd ell)))
-let loan_env_exclude_all (ell : loan_env) (provs : provs) : loan_env =
+let loan_env_exclude_all (provs : provs) (ell : loan_env) : loan_env =
   let vars = List.map snd provs
   in (List.fold_right (fun var ell -> List.remove_assoc var ell) vars (fst ell),
    (List.filter (fun v -> not (List.mem v vars)) (sndfst ell),
