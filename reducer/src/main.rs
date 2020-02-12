@@ -260,6 +260,7 @@ fn copyable_doc(attrs: Vec<Attribute>) -> PP {
 }
 
 const FNS: [&'static str; 3] = ["Fn", "FnOnce", "FnMut"];
+const NUMS: [&'static str; 5] = ["u32", "u8", "usize", "isize", "i32"];
 
 fn fun_bound_to_fun_ty(st: CompilerState, env_name: Ident, mut bound: TraitBound) -> PP {
     let segment =
@@ -884,7 +885,7 @@ impl PrettyPrint for Type {
                 ty.span().to_doc(st.clone())
                     .append(Doc::text(","))
                     .append(Doc::space())
-                    .append(if ty_name == "u32" || ty_name == "usize" || ty_name == "isize" || ty_name == "i32" {
+                    .append(if NUMS.contains(&&ty_name[..]) {
                         Doc::text("BaseTy")
                             .append(Doc::space())
                             .append(Doc::text("U32"))
