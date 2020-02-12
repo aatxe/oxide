@@ -458,7 +458,7 @@ let rec free_provs_ty (ty : ty) : provs =
   | Struct (_, provs, tys, _) -> tys |> List.map free_provs_ty |> List.cons provs |> List.flatten
 and free_provs (expr : expr) : provs =
   match snd expr with
-  | Prim _ | Move _ | Fn _ | Abort _ | Ptr _ -> []
+  | Prim _ | Move _ | Drop _ | Fn _ | Abort _ | Ptr _ -> []
   | BinOp (_, e1, e2) -> free_provs_many [e1; e2]
   | Borrow (prov, _, _) -> [prov]
   | BorrowIdx (prov, _, _, e) -> free_provs e |> List.cons prov
@@ -504,6 +504,7 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
        in let* free2 = free e2
        in List.append free1 free2 |> succ
      | Move (_, (root, _))
+     | Drop (_, (root, _))
      | Borrow (_, _, (_, (root, _)))
      | Ptr (_, (_, (root, _))) ->
        let* should_include = should_include root

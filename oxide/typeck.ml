@@ -215,6 +215,13 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          if copy then Succ (ty, ell, gamma)
          else failwith "unreachable"
        | Fail err -> Fail err)
+    (* T-Drop made explicit to eliminate non-determinism *)
+    | Drop pi ->
+      let* ty = var_env_lookup gamma pi
+      in if is_init ty then
+        let* gammaPrime = var_env_type_update gamma pi (uninit ty)
+        in Succ ((inferred, BaseTy Unit), ell, gammaPrime)
+      else PartiallyMoved (pi, ty) |> fail
     (* T-Borrow *)
     | Borrow (prov, omega, pi) ->
       let* (ty, loans) = ownership_safe sigma ell gamma omega pi
@@ -469,7 +476,7 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
   let rec do_expr (ctx : struct_var list) (expr : expr) : expr tc =
     let (loc, expr) = expr
     in match expr with
-    | Prim _ | Move _ | Borrow _ | Fn _ | Abort _ | Ptr _ -> Succ (loc, expr)
+    | Prim _ | Move _ | Drop _ | Borrow _ | Fn _ | Abort _ | Ptr _ -> Succ (loc, expr)
     | BinOp (op, e1, e2) ->
       let* e1 = do_expr ctx e1
       in let* e2 = do_expr ctx e2

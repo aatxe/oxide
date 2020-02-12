@@ -182,6 +182,7 @@ type preexpr =
   | Prim of prim
   | BinOp of binop * expr * expr
   | Move of place_expr
+  | Drop of place (* like move but _always_ drops, even if copyable *)
   | Borrow of prov * owned * place_expr
   | BorrowIdx of prov * owned * place_expr * expr
   | BorrowSlice of prov * owned * place_expr * expr * expr

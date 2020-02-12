@@ -905,6 +905,40 @@ impl PrettyPrint for Type {
     }
 }
 
+impl PrettyPrintPlaceExpr for ExprPath {
+    fn to_place_expr_doc(self, st: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
+        return parenthesize(
+            self.span().to_doc(st.clone())
+                .append(Doc::text(","))
+                .append(Doc::space())
+                .append(parenthesize(
+                    quote(self.path.to_doc(st.clone()))
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(Doc::text("[]"))
+                    .group(),
+                )),
+        );
+    }
+}
+
+impl PrettyPrintPlaceExpr for ExprField {
+    fn to_place_expr_doc(self, st: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
+        return parenthesize(
+            parenthesize(self.base.to_place_expr_doc(st.clone()))
+                .append(Doc::space())
+                .append(match self.member {
+                Member::Named(field) => Doc::text("$.$")
+                    .append(Doc::space())
+                    .append(Doc::text(format!("\"{}\"", field))),
+                Member::Unnamed(idx) => Doc::text("$.")
+                    .append(Doc::space())
+                    .append(Doc::text(format!("{}", idx.index))),
+                })
+        );
+    }
+}
+
 impl PrettyPrintPlaceExpr for Expr {
     fn to_place_expr_doc(self, st: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
         if let Expr::Paren(expr) = self {
@@ -912,18 +946,7 @@ impl PrettyPrintPlaceExpr for Expr {
         }
 
         if let Expr::Path(expr) = self {
-            return parenthesize(
-                expr.span().to_doc(st.clone())
-                    .append(Doc::text(","))
-                    .append(Doc::space())
-                    .append(parenthesize(
-                        quote(expr.path.to_doc(st.clone()))
-                            .append(Doc::text(","))
-                            .append(Doc::space())
-                            .append(Doc::text("[]"))
-                            .group()
-                    ))
-            )
+            return expr.to_place_expr_doc(st.clone())
         }
 
         if let Expr::Unary(expr) = self {
@@ -999,11 +1022,18 @@ impl PrettyPrint for Expr {
         }
 
         if let Expr::Unary(expr) = self {
+            let mut cmd = "Move";
+            for attr in expr.attrs.iter() {
+                if attr.path.is_ident("drop") {
+                    cmd = "Drop"
+                }
+            }
+
             return parenthesize(expr.span().to_doc(st.clone())
                 .append(Doc::text(","))
                 .append(Doc::space())
                 .append(
-                    Doc::text("Move")
+                    Doc::text(cmd)
                         .append(Doc::space())
                         .append(parenthesize(
                             expr.op.to_doc(st.clone())
@@ -1036,17 +1066,44 @@ impl PrettyPrint for Expr {
             )
         }
 
-        if let expr@Expr::Path(_) | expr@Expr::Field(_)  = self {
+      if let Expr::Path(expr) = self {
+            let mut cmd = "Move";
+            for attr in expr.attrs.iter() {
+                if attr.path.is_ident("drop") {
+                    cmd = "Drop"
+                }
+            }
+
             return parenthesize(
                 expr.span().to_doc(st.clone())
                     .append(Doc::text(","))
                     .append(Doc::space())
                     .append(
-                        Doc::text("Move")
+                        Doc::text(cmd)
                             .append(Doc::space())
                             .append(parenthesize(expr.to_place_expr_doc(st.clone())))
                     )
             )
+        }
+
+        if let Expr::Field(expr) = self {
+            let mut cmd = "Move";
+            for attr in expr.attrs.iter() {
+                if attr.path.is_ident("drop") {
+                cmd = "Drop"
+                }
+            }
+
+            return parenthesize(
+                expr.span().to_doc(st.clone())
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text(cmd)
+                        .append(Doc::space())
+                        .append(parenthesize(expr.to_place_expr_doc(st.clone()))),
+                    )
+            );
         }
 
         if let Expr::Index(expr) = self {
