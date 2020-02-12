@@ -105,6 +105,10 @@ let valid_types (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma
     (tys : ty list) : unit tc =
   for_each_rev (valid_type sigma delta ell gamma) tys
 
+let valid_var_env (sigma : global_env) (delta : tyvar_env) (ell : loan_env)
+    (gamma : var_env) : unit tc =
+  gamma |> List.map snd |> valid_types sigma delta ell gamma
+
 let type_of (prim : prim) : ty =
   (inferred, match prim with
   | Unit -> BaseTy Unit
@@ -366,19 +370,20 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let gammaPrime = List.fold_left var_include_fold gamma params
       in let deltaPrime = delta |> tyvar_env_add_provs provs |> tyvar_env_add_ty_vars tyvars
       in let ellPrime = loan_env_bindall ell provs
-      in let* (ret_ty, _, _) = tc deltaPrime ellPrime gammaPrime body
+      in let* (ret_ty, ell_body, _) = tc deltaPrime ellPrime gammaPrime body
       in let* free_vars = free_vars body
       in let free_vars = List.filter (fun var -> not (List.mem_assoc var params)) free_vars
       in let* moved_vars = free_nc_vars sigma gamma body
       in let gamma_c = List.map (fun var -> (var, List.assoc var gamma)) free_vars
+      in let ellPrime = loan_env_exclude_all provs ell_body
       in let gammaPrime = var_env_uninit_many gamma moved_vars
       in let fn_ty (ret_ty : ty) : ty =
            (inferred, Fun ([], provs, tyvars, List.map snd params, Env gamma_c, ret_ty))
       in (match opt_ret_ty with
           | Some ann_ret_ty ->
-            let* ellFinal = subtype Combine ell ret_ty ann_ret_ty
+            let* ellFinal = subtype Combine ellPrime ret_ty ann_ret_ty
             in Succ (fn_ty ann_ret_ty, ellFinal, gammaPrime)
-          | None -> Succ (fn_ty ret_ty, ell, gammaPrime))
+          | None -> Succ (fn_ty ret_ty, ellPrime, gammaPrime))
     (* T-App *)
     | App (fn, envs, new_provs, new_tys, args) ->
       (match tc delta ell gamma fn with
