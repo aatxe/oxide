@@ -384,7 +384,7 @@ let rec contains_prov (gamma : var_env) (prov : prov) : bool =
   let rec ty_contains (ty : ty) : bool =
     match snd ty with
     | Any | BaseTy _ | TyVar _ -> false
-    | Ref (pv, _, ty) -> pv = prov || ty_contains ty
+    | Ref (pv, _, ty) -> snd pv = snd prov || ty_contains ty
     | Fun (_, pvs, _, tys, gam, ret_ty) ->
       if not (List.mem prov pvs) then
         ty_contains ret_ty || tys_contains tys ||
@@ -396,8 +396,7 @@ let rec contains_prov (gamma : var_env) (prov : prov) : bool =
     | Rec pairs -> List.map snd pairs |> tys_contains
     | Tup tys -> tys_contains tys
     | Struct (_, pvs, _, _) -> List.mem prov pvs
-  and tys_contains (tys : ty list) : bool =
-    List.exists ty_contains tys
+  and tys_contains (tys : ty list) : bool = List.exists ty_contains tys
   in List.exists (ty_contains >> snd) gamma
 
 let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var_env) tc =

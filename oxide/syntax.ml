@@ -327,7 +327,7 @@ let loan_env_append (ell1 : loan_env) (ell2 : loan_env) : loan_env =
 let loan_env_exclude (prov : prov) (ell : loan_env) : loan_env =
   (fst ell |> List.filter ((<>) (snd prov) >> fstsnd),
    (sndfst ell |> List.filter (fun v -> snd v <> snd prov),
-    sndsnd ell |> List.filter (fun cs -> fst cs <> snd prov || snd cs <> snd prov)))
+    sndsnd ell |> List.filter (fun cs -> fst cs <> snd prov && snd cs <> snd prov)))
 let loan_env_exclude_all (provs : provs) (ell : loan_env) : loan_env =
   let prov_vars = List.map snd provs
   in (fst ell |> List.filter (fun ((_, prov), _) -> prov_vars |> List.mem prov |> not),
