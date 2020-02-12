@@ -18,13 +18,12 @@ let unify_many (loc : source_loc) (ell : loan_env) (tys : ty list) : (loan_env *
     foldl (fun (curr_ell, curr_ty) new_ty -> unify loc curr_ell curr_ty new_ty) (ell, ty) tys
 
 let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
-  let work (acc : loan_env) (pair : prov_var * loans) : loan_env =
-    let (prov, loans) = pair
-    in match loan_env_lookup_opt acc (dummy, prov) with
-    | Some curr_loans ->
-      acc |> loan_env_exclude (dummy, prov)
-          |> loan_env_include (dummy, prov) (list_union loans curr_loans)
-    | None -> acc |> loan_env_include (dummy, prov) loans
+  let work (acc : loan_env) (entry : prov * loans) : loan_env =
+    let (prov, loans) = entry
+    in match loan_env_lookup_opt acc prov with
+    | Some curr_loans -> acc |> loan_env_exclude prov
+                             |> loan_env_include prov (list_union loans curr_loans)
+    | None -> acc |> loan_env_include prov loans
   in let (prt1, (prt2, prt3)) = List.fold_left work ell1 (fst ell2)
   in (prt1, (list_union prt2 (sndfst ell2), list_union prt3 (sndsnd ell2)))
 
@@ -282,7 +281,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Fail err -> Fail err)
     (* T-LetProv *)
     | LetProv (new_provs, e) ->
-      let to_loan_entry (var : prov) : prov_var * loans = (snd var, [])
+      let to_loan_entry (var : prov) : prov * loans = (var, [])
       in let deltaPrime = tyvar_env_add_provs new_provs delta
       in let ellPrime = loan_env_append (provs_of delta |> List.map to_loan_entry, ([], [])) ell
       in tc deltaPrime ellPrime gamma e
@@ -428,8 +427,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     | RecStruct (name, provs, tys, fields) ->
       (match global_env_find_struct sigma name with
        | Some (Rec (_, _, dfn_provs, tyvars, dfn_fields)) ->
-         let fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) fields
-         in let dfn_fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) dfn_fields
+         let fields_sorted = List.sort compare_keys fields
+         in let dfn_fields_sorted = List.sort compare_keys dfn_fields
          in let exprs = List.map snd fields_sorted
          in let* prov_sub = combine_prov "T-RecStruct" provs dfn_provs
          in let* ty_sub = combine_ty "T-RecStruct" tys tyvars
@@ -562,7 +561,7 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       in if List.mem sn ctx then Succ (loc, Struct (sn, provs, tys, None))
       else (match global_env_find_struct sigma sn with
       | Some (Rec (_, _, dfn_provs, tyvars, fields)) ->
-        let fields_sorted = List.sort (fun x y -> compare (fst x) (fst y)) fields
+        let fields_sorted = List.sort compare_keys fields
         in let* prov_sub = combine_prov "T-RecStruct" provs dfn_provs
         in let* ty_sub = combine_ty "T-RecStruct" tys tyvars
         in let do_sub : ty -> ty = subst_many_prov prov_sub >> subst_many ty_sub
@@ -689,7 +688,7 @@ let wf_global_env (sigma : global_env) : unit tc =
       in let free_provs = (* this lets us infer provenances not bound in letprov *)
          free_provs body |> List.filter not_in_provs
       in let delta : tyvar_env = (evs, List.append provs free_provs, tyvars)
-      in let ell = (List.map (fun p -> (snd p, [])) free_provs, (List.map snd provs, []))
+      in let ell = (List.map (fun p -> (p, [])) free_provs, (provs, []))
       in let* ell = foldl (fun ell (prov1, prov2) -> loan_env_add_abs_sub ell prov1 prov2)
                           ell bounds
       in let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
@@ -709,7 +708,7 @@ let wf_global_env (sigma : global_env) : unit tc =
     (* T-RecordStructDef *)
     | RecStructDef (_, name, provs, tyvars, fields) ->
       let delta : tyvar_env = ([], provs, tyvars)
-      in let ell = ([], (List.map snd provs, []))
+      in let ell = ([], (provs, []))
       in let* () = name |> global_env_find_struct sigma |> unwrap |> valid_copy_impl sigma
       in let* () = List.map snd fields |> valid_types sigma delta ell empty_gamma
       in let find_dup (pair : field * ty)
@@ -724,7 +723,7 @@ let wf_global_env (sigma : global_env) : unit tc =
     (* T-TupleStructDef *)
     | TupStructDef (_, name, provs, tyvars, tys) ->
       let delta : tyvar_env = ([], provs, tyvars)
-      in let ell = ([], (List.map snd provs, []))
+      in let ell = ([], (provs, []))
       in let* () = name |> global_env_find_struct sigma |> unwrap |> valid_copy_impl sigma
       in let* () = valid_types sigma delta ell empty_gamma tys
       in Succ ()

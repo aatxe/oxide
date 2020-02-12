@@ -16,7 +16,7 @@ let env_of (var : var) (gamma : var_env) : env tc =
   | None -> Fail (UnboundPlace ((dummy, (var, []))))
 
 let loan_env_add_abs_sub (ell : loan_env) (v1 : prov) (v2 : prov) : loan_env tc =
-  let into_prov (var : prov_var) : prov = (dummy, var) (* FIXME: provs in loan_env *)
+  let into_prov (var : prov_var) : prov = fst ell |> List.find ((=) var >> fstsnd) |> fst
   in let is_abs (var : prov_var) : bool = loan_env_is_abs ell (dummy, var)
   in let both_abs ((lhs, rhs) : prov_var * prov_var) : bool = is_abs lhs && is_abs rhs
   in let already_sub ((lhs, rhs) : prov_var * prov_var) : bool =
