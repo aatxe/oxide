@@ -542,7 +542,7 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       in Succ (loc, tup)
     | Array exprs ->
       let* exprs = do_exprs ctx exprs
-      in let array : preexpr = Tup exprs
+      in let array : preexpr = Array exprs
       in Succ (loc, array)
     | RecStruct (sn, provs, tys, args) ->
       let* tys = do_tys ctx tys
