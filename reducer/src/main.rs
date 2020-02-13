@@ -1391,6 +1391,7 @@ impl PrettyPrint for Expr {
         }
 
         if let Expr::Range(expr) = self {
+            let span = expr.span().clone();
             // we only support _finite_ ranges (by elaboration into an array)
             if let Some(Expr::Lit(ExprLit { lit: Lit::Int(n1), .. })) = expr.from.map(|x| *x) {
                 if let Some(Expr::Lit(ExprLit { lit: Lit::Int(n2), .. })) = expr.to.map(|x| *x) {
@@ -1400,18 +1401,53 @@ impl PrettyPrint for Expr {
                     let num2: usize = n2.base10_digits()
                             .parse()
                             .expect("encountered non-number literal int");
-                    return match expr.limits {
-                        RangeLimits::HalfOpen(_) =>
-                            Doc::intersperse(
-                                (num1..num2).map(|n| Doc::text(format!("{}", n))),
-                                Doc::text(";").append(Doc::space())
-                            ),
-                        RangeLimits::Closed(_) =>
-                            Doc::intersperse(
-                                (num1..=num2).map(|n| Doc::text(format!("{}", n))),
-                                Doc::text(";").append(Doc::space())
-                            ),
-                    }
+                    return parenthesize(span.to_doc(st.clone())
+                        .append(Doc::text(","))
+                        .append(Doc::space())
+                        .append(Doc::text("Array"))
+                        .append(Doc::space())
+                        .append(parenthesize(
+                            Doc::text("[")
+                                .append(match expr.limits {
+                                    RangeLimits::HalfOpen(range) =>
+                                        Doc::intersperse(
+                                            (num1..num2).map(|n| {
+                                                parenthesize(
+                                                    range.span().to_doc(st.clone())
+                                                        .append(Doc::text(","))
+                                                        .append(Doc::space())
+                                                        .append(Doc::text("Prim"))
+                                                        .append(Doc::space())
+                                                        .append(parenthesize(
+                                                            Doc::text("Num")
+                                                                .append(Doc::space())
+                                                                .append(Doc::text(format!("{}", n)))
+                                                        ))
+                                                )
+                                            }),
+                                            Doc::text(";").append(Doc::space())
+                                        ),
+                                    RangeLimits::Closed(range) =>
+                                        Doc::intersperse(
+                                            (num1..=num2).map(|n| {
+                                                parenthesize(
+                                                    range.span().to_doc(st.clone())
+                                                        .append(Doc::text(","))
+                                                        .append(Doc::space())
+                                                        .append(Doc::text("Prim"))
+                                                        .append(Doc::space())
+                                                        .append(parenthesize(
+                                                            Doc::text("Num")
+                                                                .append(Doc::space())
+                                                                .append(Doc::text(format!("{}", n)))
+                                                        ))
+                                                )
+                                            }),
+                                            Doc::text(";").append(Doc::space())
+                                        ),
+                                })
+                                .append(Doc::text("]"))
+                        )))
                 } else {
                     panic!("we don't support non-literal or non-finite ranges")
                 }
