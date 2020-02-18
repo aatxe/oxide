@@ -301,7 +301,12 @@ fn fun_bound_to_fun_ty(st: CompilerState, env_name: Ident, mut bound: TraitBound
                             .append(
                                 Doc::text("EnvVar")
                                     .append(Doc::space())
-                                    .append(Doc::text(format!("\"{}\"", env_name)))
+                                    .append(parenthesize(
+                                        Doc::text(if bound_id == "Fn" {"Shared"} else {"Unique"})
+                                            .append(Doc::text(","))
+                                            .append(Doc::space())
+                                            .append(Doc::text(format!("\"{}\"", env_name)))
+                                    ))
                             )
                             .append(Doc::text(","))
                             .append(Doc::space())
@@ -389,9 +394,19 @@ impl PrettyPrint for Item {
                     Doc::text("[")
                         .append(
                             Doc::intersperse(
-                                    fn_tyvars.iter().map(|tyvar| {
-                                        Doc::text(format!("\"{}\"", tyvar.ident))
-                                    }),
+                                fn_tyvars.iter().map(|tyvar|
+                                    if let TypeParamBound::Trait(mut bound) = tyvar.bounds.clone()
+                                                                                   .pop().unwrap()
+                                                                                   .into_value() {
+                                        let bound_id = format!("{}",
+                                            bound.path.segments.pop().unwrap()
+                                                    .into_value().ident
+                                        );
+                                        Doc::text(if bound_id == "Fn" {"Shared"} else {"Unique"})
+                                            .append(Doc::text(","))
+                                            .append(Doc::space())
+                                            .append(Doc::text(format!("\"{}\"", tyvar.ident)))
+                                    } else { unreachable!() }),
                                 Doc::text(";").append(Doc::space())
                             )
                         )
@@ -850,11 +865,7 @@ impl PrettyPrint for Type {
                             .append(Doc::text(","))
                             .append(Doc::space())
                             // captured environment
-                            .append(
-                                Doc::text("Env")
-                                    .append(Doc::space())
-                                    .append(Doc::text("[]"))
-                            )
+                            .append(Doc::text("Unboxed"))
                             .append(Doc::text(","))
                             .append(Doc::space())
                             // return type

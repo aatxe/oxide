@@ -47,7 +47,7 @@ let subst_env_var (ty : ty) (this : env) (that : env_var) : ty =
         let gammaPrime =
           match gamma with
           | EnvVar ev -> if ev = that then this else gamma
-          | Env _ | EnvOf _ -> gamma
+          | Unboxed | Env _ | EnvOf _ -> gamma
         in (loc, Fun (evs, pvs, tvs, sub_many tys, gammaPrime, sub ret_ty))
       else ty
     | Array (ty, n) -> (loc, Array (sub ty, n))
@@ -390,7 +390,7 @@ let rec contains_prov (gamma : var_env) (prov : prov) : bool =
         ty_contains ret_ty || tys_contains tys ||
         match gam with
         | Env gam -> contains_prov gam prov
-        | EnvVar _ | EnvOf _ -> false
+        | Unboxed | EnvVar _ | EnvOf _ -> false
       else false
     | Uninit ty | Array (ty, _) | Slice ty -> ty_contains ty
     | Rec pairs -> List.map snd pairs |> tys_contains
@@ -427,11 +427,7 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   | Uninit _ -> Succ true (* probably never ask this question anyway *)
   | Ref (_, Unique, _) -> Succ true
   | Ref (_, Shared, _) -> Succ false
-  | Fun (_, _, _, _, env, _) ->
-    (match env with
-     | EnvVar _ -> Succ true
-     | Env gamma_c -> gamma_c |> List.map snd |> any (noncopyable sigma)
-     | EnvOf _ -> Succ true)
+  | Fun (_, _, _, _, env, _) -> noncopyable_env sigma env
   | Array (typPrime, _) -> noncopyable sigma typPrime
   | Slice typPrime -> noncopyable sigma typPrime
   | Rec pairs -> any (noncopyable sigma >> snd) pairs
@@ -440,10 +436,30 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
     match  global_env_find_struct sigma name with
     | Some (Rec (copyable, _, _, _, _)) | Some (Tup (copyable, _, _, _, _)) -> not copyable |> succ
     | None -> Fail (UnknownStruct (fst typ, name))
+and noncopyable_env (sigma : global_env) (env : env) : bool tc =
+  match env with
+  | Unboxed -> Succ true
+  | EnvVar _ -> Succ true
+  | Env gamma_c -> gamma_c |> List.map snd |> any (noncopyable sigma)
+  | EnvOf _ -> Succ true
 
 let copyable (sigma : global_env) (typ : ty) : bool tc =
   let* res = noncopyable sigma typ
   in Succ (not res)
+
+let copyable_env (sigma : global_env) (env : env) : bool tc =
+  let* res = noncopyable_env sigma env
+  in Succ (not res)
+
+let check_qualifiers (sigma : global_env) (subst : (env * env_var) list) : unit tc =
+  let check_qualifier ((env, ev) : env * env_var) : unit tc =
+    match ev with
+    | (Shared, _) ->
+      let* copyable = copyable_env sigma env
+      in if copyable then Succ ()
+      else UnsatisfiedEnvQualifier (Shared, env) |> fail
+    | (Unique, _) -> Succ () (* everything should be good to treat as if it mutates *)
+  in for_each subst check_qualifier
 
 let valid_copy_impl (sigma : global_env) (def : struct_def) : unit tc =
   let next_copyable (res : ty option) (typ : ty) : (ty option) tc =

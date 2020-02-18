@@ -10,12 +10,14 @@ type ty_var = string [@@deriving show]
 type fn_var = string [@@deriving show]
 type prov_var = string [@@deriving show]
 type struct_var = string [@@deriving show]
-type env_var = string [@@deriving show]
-type env_vars = env_var list [@@deriving show]
 type field = string [@@deriving show]
 
 type subtype_modality = Combine | Override [@@deriving show]
 type owned = Shared | Unique [@@deriving show]
+
+type env_var = owned * string [@@deriving show]
+type env_vars = env_var list [@@deriving show]
+
 type path_entry =
   | Field of field
   | Index of int
@@ -93,6 +95,7 @@ type prety =
 [@@deriving show]
 and ty = source_loc * prety [@@deriving show]
 and env =
+  | Unboxed (* a dummy environment for function pointers, not closures *)
   | EnvVar of env_var (* a quantified environment variable *)
   | Env of var_env (* a concrete environment *)
   | EnvOf of var (* the environment of a specific bound function at closure type *)
@@ -136,7 +139,7 @@ and all_init (tys : ty list) : bool =
   List.fold_right (fun ty acc -> acc && is_init ty) tys true
 and var_env_init (gamma : env) : bool =
   match gamma with
-  | EnvVar _ -> true
+  | Unboxed | EnvVar _ -> true
   | Env gamma -> all_init (List.map snd gamma)
   | EnvOf _ -> true
 
@@ -371,6 +374,7 @@ type tc_error =
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var
   | UnevaluatedEnvOf of var
+  | UnsatisfiedEnvQualifier of owned * env (* the qualifier * the environment used *)
   | WrongStructConstructor of source_loc * struct_var * struct_kind
   | InvalidReturnType of ty * prov (* return type * invalidated provenance *)
   | InvalidType of ty
@@ -454,7 +458,7 @@ let any (fn : 'a -> bool tc) (lst : 'a list) : bool tc =
 
 let combine_evs (ctx : string) (ev1 : env list) (ev2 : env_vars) : (env * env_var) list tc =
   if List.length ev1 != List.length ev2 then Fail (EnvArityMismatch (ctx, ev1, ev2))
-  else Succ (List.combine ev1 ev2)
+  else List.combine ev1 ev2 |> succ
 
 let combine_prov (ctx : string) (prov1 : provs) (prov2 : provs) : (prov * prov) list tc =
   if List.length prov1 != List.length prov2 then Fail (ProvArityMismatch (ctx, prov1, prov2))

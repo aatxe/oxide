@@ -93,6 +93,7 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
   and valid_many (tys : ty list) : unit tc = for_each_rev valid tys
   and valid_env (gamma : env) : unit tc =
     match gamma with
+    | Unboxed -> Succ ()
     | EnvVar ev ->
       if tyvar_env_env_var_mem ev delta then Succ ()
       else InvalidEnvVar (ev, ty) |> fail
@@ -163,7 +164,7 @@ let flow_closed_envs_forward (computed : ty) (annotated : ty) : ty tc =
 
 let rec eval_env_of (gamma : var_env) (env : env) : env tc =
   match env with
-  | EnvVar _ | Env _ -> Succ env
+  | Unboxed | EnvVar _ | Env _ -> Succ env
   | EnvOf var ->
     let* env = env_of var gamma
     in eval_env_of gamma env
@@ -362,6 +363,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
             | Fail err -> Fail err)
           | Some ((_, Uninit (_, Fun _)) as uninit_fn_ty) ->
             MovedFunction (expr, uninit_fn_ty) |> fail
+          | (Some (_, Ref (_, omega, ((_, Fun _))))) ->
+            (match ownership_safe sigma ell gamma omega (fst expr, (fn, [Deref])) with
+            | Succ (ty, _) -> Succ (ty, ell, gamma)
+            | Fail err -> Fail err)
           | Some ty -> Fail (TypeMismatchFunction ty)
           | None -> UnknownFunction (fst expr, fn) |> fail))
     (* T-Closure *)
@@ -392,6 +397,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          let* (arg_tys, ellN, gammaN) = tc_many delta ellF gammaF args
          in let* evaled_envs = map (eval_env_of gammaF) envs
          in let* env_sub = combine_evs "T-App" evaled_envs evs
+         in let* () = check_qualifiers sigma env_sub
          in let* prov_sub = combine_prov "T-App" new_provs provs
          in let* ty_sub = combine_ty "T-App" new_tys tyvars
          in let do_sub : ty -> ty =
