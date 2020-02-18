@@ -591,7 +591,10 @@ impl PrettyPrint for Item {
                 Fields::Unit => {
                     Doc::text("TupStructDef")
                         .append(parenthesize(
-                            quote(Doc::text(format!("{}", item.ident)))
+                            copyable_doc(item.attrs)
+                                .append(Doc::text(","))
+                                .append(Doc::space())
+                                .append(quote(Doc::text(format!("{}", item.ident))))
                                 .append(Doc::text(","))
                                 .append(Doc::space())
                                 // provenance variables
@@ -1506,7 +1509,7 @@ impl PrettyPrint for Expr {
                     acc
                 }
             ).split_off(2);
-            if macro_name == "abort" || macro_name == "panic" {
+            if macro_name == "abort" || macro_name == "panic" || macro_name == "unimplemented" {
                 return parenthesize(
                     expr.span().to_doc(st.clone())
                         .append(Doc::text(","))
@@ -1514,7 +1517,9 @@ impl PrettyPrint for Expr {
                         .append(
                             Doc::text("Abort")
                                 .append(Doc::space())
-                                .append(if expr.mac.tokens.is_empty () {
+                                .append(if macro_name == "unimplemented" {
+                                    quote(Doc::text("abort: unimplemented"))
+                                } else if expr.mac.tokens.is_empty () {
                                     quote(Doc::text("abort: no message provided"))
                                 } else {
                                     match syn::parse2::<Lit>(expr.mac.tokens) {
@@ -1527,7 +1532,7 @@ impl PrettyPrint for Expr {
                         )
                 );
             } else {
-                panic!("we don't support macros besides abort! and panic!");
+                panic!("we don't support macros besides abort!, panic!, and unimplemented!");
             }
         }
 
