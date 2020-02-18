@@ -405,7 +405,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let new_params = List.map do_sub params
          in let* ty_pairs = combine_tys "T-App" new_params arg_tys
          in let types_mismatch ((expected, found) : ty * ty) : bool tc =
-           match subtype Combine ell found expected with
+           match subtype Combine ellN found expected with
            | Succ _ -> Succ false
            | Fail (UnificationFailed _) -> Succ true
            | Fail err -> Fail err

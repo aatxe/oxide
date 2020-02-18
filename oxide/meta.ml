@@ -136,8 +136,8 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
   | (_, None, Some _) ->
     (* UP-AbstractProvLocalProv *)
     if not (loan_env_is_abs ell prov1) then Fail (InvalidProv prov1)
-    else if loan_env_abs_sub ell prov1 prov2 then Succ ell
-    else Fail (InvalidProv prov1)
+    else if loan_env_abs_sub ell prov2 prov1 then Succ ell
+    else Fail (AbsProvsNotSubtype (prov1, prov2))
   | (_, Some _, None) ->
     (* UP-LocalProvAbstractProv *)
     if not (loan_env_is_abs ell prov2) then Fail (InvalidProv prov2)
@@ -250,7 +250,10 @@ let rec decompose_by (path : path) (ty : ty) : (ty_ctx * ty) tc =
       if idx = n then inner_ctx else (fst ty, Ty ty)
     in let ctx : ty_ctx = (loc, Tup (List.mapi replace tys))
     in Succ (ctx, ty)
-  | (Struct (_, _, _, Some ty), path) -> decompose ty path
+  | (Struct (name, provs, tys, Some ty), path) ->
+    let* (inner_ctx, ty) = decompose ty path
+    in let ctx : ty_ctx = (loc, Tagged (name, provs, tys, inner_ctx))
+    in Succ (ctx, ty)
   | (Uninit ty, path) -> Fail (PartiallyMovedPath (ty, path))
   | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
 and decompose (ty : ty) (path : path) : (ty_ctx * ty) tc = decompose_by path ty
