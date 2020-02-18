@@ -427,7 +427,11 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   | Uninit _ -> Succ true (* probably never ask this question anyway *)
   | Ref (_, Unique, _) -> Succ true
   | Ref (_, Shared, _) -> Succ false
-  | Fun (_, _, _, _, _, _) -> Succ false
+  | Fun (_, _, _, _, env, _) ->
+    (match env with
+     | EnvVar _ -> Succ true
+     | Env gamma_c -> gamma_c |> List.map snd |> any (noncopyable sigma)
+     | EnvOf _ -> Succ true)
   | Array (typPrime, _) -> noncopyable sigma typPrime
   | Slice typPrime -> noncopyable sigma typPrime
   | Rec pairs -> any (noncopyable sigma >> snd) pairs
