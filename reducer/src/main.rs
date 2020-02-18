@@ -801,6 +801,35 @@ impl PrettyPrint for Type {
             )
         }
 
+        if let Type::Array(ty) = self {
+            return parenthesize(
+                ty.span().to_doc(st.clone())
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(
+                        Doc::text("Array")
+                            .append(Doc::space())
+                            .append(parenthesize(
+                                ty.elem.to_doc(st.clone())
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(if let Expr::Lit(len) = ty.len {
+                                        if let Lit::Int(n) = len.lit {
+                                            let value = n.base10_parse::<usize>().expect(
+                                                "array length must be a valid usize"
+                                            );
+                                            Doc::text(format!("{}", value))
+                                        } else {
+                                            panic!("array lengths must be integers")
+                                        }
+                                    } else {
+                                        panic!("we only support array types with literal length")
+                                    })
+                            ))
+                    )
+            )
+        }
+
         if let Type::Tuple(ty) = self {
             return parenthesize(
                 ty.span().to_doc(st.clone())
@@ -1129,7 +1158,7 @@ impl PrettyPrint for Expr {
                     .append(Doc::text("Idx")
                             .append(Doc::space())
                             .append(parenthesize(
-                                expr.expr.to_doc(st.clone())
+                                expr.expr.to_place_expr_doc(st.clone())
                                     .append(Doc::text(","))
                                     .append(Doc::space())
                                     .append(expr.index.to_doc(st.clone()))
