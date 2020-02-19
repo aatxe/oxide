@@ -135,22 +135,18 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
     in ellPrime |> loan_env_include prov2 rep1 |> succ
   | (_, None, Some _) ->
     (* UP-AbstractProvLocalProv *)
-    if not (loan_env_is_abs ell prov1) then Fail (InvalidProv prov1)
+    if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
     else if loan_env_abs_sub ell prov2 prov1 then Succ ell
-    else Fail (AbsProvsNotSubtype (prov1, prov2))
+    else AbsProvsNotSubtype (prov1, prov2) |> fail
   | (_, Some _, None) ->
     (* UP-LocalProvAbstractProv *)
-    if not (loan_env_is_abs ell prov2) then Fail (InvalidProv prov2)
-    else let* ellPrime = loan_env_add_abs_sub ell prov1 prov2
-    in Succ ellPrime
+    if not (loan_env_is_abs ell prov2) then InvalidProv prov2 |> fail
+    else ProvTooShort (prov1, prov2) |> fail
   | (_, None, None) ->
     (* UP-AbstractProvenances *)
-    if not (loan_env_is_abs ell prov1) then
-      Fail (InvalidProv prov1)
-    else if not (loan_env_is_abs ell prov2) then
-      Fail (InvalidProv prov2)
-    else if not (loan_env_abs_sub ell prov1 prov2) then
-      Fail (AbsProvsNotSubtype (prov1, prov2))
+    if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
+    else if not (loan_env_is_abs ell prov2) then InvalidProv prov2 |> fail
+    else if not (loan_env_abs_sub ell prov1 prov2) then AbsProvsNotSubtype (prov1, prov2) |> fail
     else Succ ell
 
 let subtype_prov_many (mode : subtype_modality) (ell : loan_env)
