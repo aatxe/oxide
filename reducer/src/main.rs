@@ -874,7 +874,18 @@ impl PrettyPrint for Type {
                             .append(Doc::text(","))
                             .append(Doc::space())
                             // lifetime variables
-                            .append(Doc::text("[]"))
+                            .append(match ty.lifetimes {
+                                Some(bound) =>
+                                    Doc::text("[")
+                                        .append(Doc::intersperse(
+                                            bound.lifetimes.into_iter().map(|lft| {
+                                                lft.to_doc(st.clone())
+                                            }),
+                                            Doc::text(";").append(Doc::space())
+                                        ))
+                                        .append(Doc::text("]")),
+                                None => Doc::text("[]"),
+                            })
                             .append(Doc::text(","))
                             .append(Doc::space())
                             // type variables
