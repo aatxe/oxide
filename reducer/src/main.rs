@@ -9,6 +9,10 @@ use proc_macro2::{LineColumn, Span};
 use syn::*;
 use syn::spanned::Spanned;
 
+const FNS: [&'static str; 3] = ["Fn", "FnOnce", "FnMut"];
+const NUMS: [&'static str; 5] = ["u32", "u8", "usize", "isize", "i32"];
+const MACROS: [&'static str; 4] = ["abort", "panic", "unimplemented", "unreachable"];
+
 type PP = Doc<'static, BoxDoc<'static, ()>>;
 
 enum ResolutionType { FunName, StructName, TypeVar }
@@ -258,9 +262,6 @@ fn copyable_doc(attrs: Vec<Attribute>) -> PP {
     }
     Doc::text("false")
 }
-
-const FNS: [&'static str; 3] = ["Fn", "FnOnce", "FnMut"];
-const NUMS: [&'static str; 5] = ["u32", "u8", "usize", "isize", "i32"];
 
 fn fun_bound_to_fun_ty(st: CompilerState, env_name: Ident, mut bound: TraitBound) -> PP {
     let segment =
@@ -1579,7 +1580,7 @@ impl PrettyPrint for Expr {
                     acc
                 }
             ).split_off(2);
-            if macro_name == "abort" || macro_name == "panic" || macro_name == "unimplemented" {
+            if MACROS.contains(&&macro_name[..]) {
                 return parenthesize(
                     expr.span().to_doc(st.clone())
                         .append(Doc::text(","))
@@ -1589,6 +1590,8 @@ impl PrettyPrint for Expr {
                                 .append(Doc::space())
                                 .append(if macro_name == "unimplemented" {
                                     quote(Doc::text("abort: unimplemented"))
+                                } else if macro_name == "unreachable" {
+                                    quote(Doc::text("abort: unreachable"))
                                 } else if expr.mac.tokens.is_empty () {
                                     quote(Doc::text("abort: no message provided"))
                                 } else {
@@ -1602,7 +1605,7 @@ impl PrettyPrint for Expr {
                         )
                 );
             } else {
-                panic!("we don't support macros besides abort!, panic!, and unimplemented!");
+                panic!("we don't support the macro: {}!", macro_name);
             }
         }
 
