@@ -1072,6 +1072,19 @@ impl PrettyPrint for Expr {
         }
 
         if let Expr::Reference(expr) = self {
+            let mut lft = gensym();
+            for attr in expr.attrs.iter() {
+                if let Ok(Meta::NameValue(attr)) = attr.parse_meta() {
+                    if attr.path.is_ident("lft") {
+                        if let Lit::Str(lit) = attr.lit {
+                            lft = Doc::text(lit.value());
+                        } else {
+                            panic!("lifetime annotation on borrows must use string literals")
+                        }
+                    }
+                }
+            }
+
             return parenthesize(
                 expr.span().to_doc(st.clone())
                     .append(Doc::text(","))
@@ -1083,7 +1096,7 @@ impl PrettyPrint for Expr {
                                 parenthesize(expr.span().to_doc(st.clone())
                                              .append(Doc::text(","))
                                              .append(Doc::space())
-                                             .append(gensym()))
+                                             .append(lft))
                                     .append(Doc::text(","))
                                     .append(Doc::space())
                                     .append(expr.mutability.to_doc(st.clone()))
