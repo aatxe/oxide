@@ -81,8 +81,9 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
         delta |> tyvar_env_add_env_vars evs
               |> tyvar_env_add_provs provs
               |> tyvar_env_add_ty_vars tyvars
-      in let* () = for_each_rev (valid_type sigma new_delta ell gamma) param_tys
-      in valid_type sigma new_delta ell gamma ret_ty
+      in let new_ell = loan_env_bindall ell provs
+      in let* () = for_each param_tys (valid_type sigma new_delta new_ell gamma)
+      in valid_type sigma new_delta new_ell gamma ret_ty
     | Array (typ, n) ->
       if n >= 0 then valid typ
       else InvalidArrayLen (ty, n) |> fail
