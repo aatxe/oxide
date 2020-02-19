@@ -598,3 +598,28 @@ let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) : vars tc 
 let free_vars (expr : expr) : vars tc = free_vars_helper expr (fun _ -> Succ true)
 
 let free_provs_var_env : var_env -> provs = List.flatten >> List.map (free_provs_ty >> snd)
+
+(* produces an error if the loans in the given type are found in the parameter list *)
+let find_refs_to_params (ell : loan_env) (ty : ty) (params : (var * ty) list) : unit tc =
+  let place_in_params (pi : place) : bool = List.mem_assoc (root_of pi) params
+  in let rec impl (ty : ty) : unit tc =
+    match snd ty with
+    | Any | BaseTy _ | TyVar _ -> Succ ()
+    | Ref (prov, _, ty) ->
+      let loans = loan_env_lookup ell prov
+      in let borrow_loans = loans |> List.map snd |> List.filter_map place_expr_to_place
+      in let param_loans = borrow_loans |> List.filter place_in_params
+      in if is_empty param_loans then impl ty
+      else NoReferenceToParameter (List.hd param_loans) |> fail
+    | Fun _ -> Succ ()
+    | Array (ty, _) | Slice ty -> impl ty
+    | Rec fields -> fields |> List.map snd |> for_each_rev impl
+    | Tup tys -> for_each_rev impl tys
+    | Struct (_, _, _, Some ty) -> impl ty
+    | Struct _ | Uninit _ -> Succ ()
+  in impl ty
+
+let find_refs_to_captured (ell : loan_env) (ty : ty) (gamma_c : var_env) : unit tc =
+  match find_refs_to_params ell ty gamma_c with
+  | Fail (NoReferenceToParameter pi) -> NoReferenceToCaptured pi |> fail
+  | res -> res

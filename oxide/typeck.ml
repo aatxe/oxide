@@ -381,6 +381,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let free_vars = List.filter (fun var -> not (List.mem_assoc var params)) free_vars
       in let* moved_vars = free_nc_vars sigma gamma body
       in let gamma_c = List.map (fun var -> (var, List.assoc var gamma)) free_vars
+      in let* () = find_refs_to_captured ell_body ret_ty gamma_c
       in let ellPrime = loan_env_exclude_all provs ell_body
       in let gammaPrime = var_env_uninit_many gamma moved_vars
       in let fn_ty (ret_ty : ty) : ty =
@@ -469,7 +470,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
            in let* ell_final = subtype Combine ell_prime found_ty expected_ty
            in Succ (ell_final, gamma_prime)
          in let* (ell_prime, gamma_prime) = foldl tc_exp (ell, gamma) pairs
-         in let tagged_ty : ty option = Some (inferred, Tup dfn_tys)
+         in let tagged_ty : ty option = Some (inferred, Tup expected_tys)
          in Succ ((inferred, Struct (name, provs, tys, tagged_ty)), ell_prime, gamma_prime)
        | Some (Rec _) -> WrongStructConstructor (fst expr, name, Tup) |> fail
        | None ->
@@ -664,26 +665,6 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       in List.cons entry entries |> succ
     in foldr do_lifted entries []
   in do_global_entries [] sigma
-
-(* produces an error if the loans in the given type are found in the parameter list *)
-let find_refs_to_params (ell : loan_env) (ty : ty) (params : (var * ty) list) : unit tc =
-  let place_in_params (pi : place) : bool = List.mem_assoc (root_of pi) params
-  in let rec impl (ty : ty) : unit tc =
-    match snd ty with
-    | Any | BaseTy _ | TyVar _ -> Succ ()
-    | Ref (prov, _, ty) ->
-      let loans = loan_env_lookup ell prov
-      in let borrow_loans = loans |> List.map snd |> List.filter_map place_expr_to_place
-      in let param_loans = borrow_loans |> List.filter place_in_params
-      in if is_empty param_loans then impl ty
-      else NoReferenceToParameter (List.hd param_loans) |> fail
-    | Fun _ -> Succ ()
-    | Array (ty, _) | Slice ty -> impl ty
-    | Rec fields -> fields |> List.map snd |> for_each_rev impl
-    | Tup tys -> for_each_rev impl tys
-    | Struct (_, _, _, Some ty) -> impl ty
-    | Struct _ | Uninit _ -> Succ ()
-  in impl ty
 
 let wf_global_env (sigma : global_env) : unit tc =
   let* sigma = struct_to_tagged (List.cons drop sigma)
