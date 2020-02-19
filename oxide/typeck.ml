@@ -7,7 +7,7 @@ open Util
 let unify (loc : source_loc) (ell : loan_env) (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
   let* ell1 = subtype Combine ell ty1 ty2
   in let* ell2 = subtype Combine ell ty2 ty1
-  in if ell1 = ell2 then Succ (ell2, ty2)
+  in if loan_env_eq ell1 ell2 then Succ (ell2, ty2)
   else LoanEnvMismatch (loc, ell1, ell2) |> fail
 
 let unify_many (loc : source_loc) (ell : loan_env) (tys : ty list) : (loan_env * ty) tc =

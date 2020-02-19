@@ -303,6 +303,18 @@ let loan_env_lookup (ell : loan_env) (var : prov) : loans =
   if loan_env_is_abs ell var then []
   else fst ell |> to_prov_var_keys |> List.assoc (snd var)
 
+let loan_env_eq (ell1: loan_env) (ell2: loan_env) : bool =
+  let concrete_dom = List.map (snd >> fst) >> fst
+  in let abs_names = List.map snd >> sndfst
+  in let equal_loans (prov : prov) : bool =
+    equal_unordered (loan_env_lookup ell1 prov) (loan_env_lookup ell2 prov)
+  in let concrete_matches =
+    equal_unordered (concrete_dom ell1) (concrete_dom ell2) &&
+    ell1 |> fst |> List.map fst |> List.for_all equal_loans
+  in let abstract_matches = equal_unordered (abs_names ell1) (abs_names ell2)
+  in let binding_matches = equal_unordered (sndsnd ell1) (sndsnd ell2)
+  in concrete_matches && abstract_matches && binding_matches
+
 let loan_env_filter_dom (ell : loan_env) (provs : provs) : loan_env =
   let prov_vars = List.map snd provs
   in (fst ell |> List.filter (fun ((_, var), _) -> List.mem var prov_vars),

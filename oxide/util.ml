@@ -32,6 +32,12 @@ let is_empty (lst : 'a list) : bool = List.length lst = 0
 (* checks if the given list is non-empty*)
 let non_empty (lst : 'a list) : bool = is_empty lst |> not
 
+(* returns true if the given lists are equal modulo ordering *)
+let equal_unordered (lst1 : 'a list) (lst2 : 'b list) : bool =
+  (* FIXME: take into account duplicate entries *)
+  List.for_all (fun elem -> List.mem elem lst2) lst1 &&
+  List.for_all (fun elem -> List.mem elem lst1) lst2
+
 (* collects all the elements where pred is true *)
 let take_while (pred : 'a -> bool) (lst : 'a list) : 'a list =
   let collect (acc : 'a list) (elem : 'a) : 'a list =
