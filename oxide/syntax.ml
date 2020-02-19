@@ -185,7 +185,7 @@ type preexpr =
   | Prim of prim
   | BinOp of binop * expr * expr
   | Move of place_expr
-  | Drop of place (* like move but _always_ drops, even if copyable *)
+  | Drop of place_expr (* like move but _always_ drops, even if copyable, but errors if not a place *)
   | Borrow of prov * owned * place_expr
   | BorrowIdx of prov * owned * place_expr * expr
   | BorrowSlice of prov * owned * place_expr * expr * expr
@@ -371,7 +371,7 @@ type tc_error =
   | PartiallyMovedPath of ty * path (* the type * the path that was moved *)
   | PartiallyMovedExprPath of ty * expr_path (* the type * the expr path that was moved *)
   | PartiallyMovedTypes of ty * ty (* uninitialized type * initialized type *)
-  | UnificationFailed of ty * ty
+  | UnificationFailed of ty * ty (* lhs is not a subtype of rhs *)
   | UnknownFunction of source_loc * fn_var
   | UnknownStruct of source_loc * struct_var
   | UnevaluatedEnvOf of var

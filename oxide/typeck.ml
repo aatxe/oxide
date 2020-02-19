@@ -221,12 +221,15 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          else failwith "unreachable"
        | Fail err -> Fail err)
     (* T-Drop made explicit to eliminate non-determinism *)
-    | Drop pi ->
-      let* ty = var_env_lookup gamma pi
-      in if is_init ty then
-        let* gammaPrime = var_env_type_update gamma pi (uninit ty)
-        in Succ ((inferred, BaseTy Unit), ell, gammaPrime)
-      else PartiallyMoved (pi, ty) |> fail
+    | Drop phi ->
+      (match place_expr_to_place phi with
+       | Some pi ->
+         let* ty = var_env_lookup gamma pi
+         in if is_init ty then
+           let* gammaPrime = var_env_type_update gamma pi (uninit ty)
+           in Succ ((inferred, BaseTy Unit), ell, gammaPrime)
+         else PartiallyMoved (pi, ty) |> fail
+       | None -> CannotMove phi |> fail)
     (* T-Borrow *)
     | Borrow (prov, omega, pi) ->
       let* (ty, loans) = ownership_safe sigma ell gamma omega pi
