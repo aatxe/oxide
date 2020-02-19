@@ -404,7 +404,7 @@ type tc_error =
   | UnboundPlaceExpr of place_expr
   | PlaceExprNotAPlace of place_expr
   | AbsProvsNotSubtype of prov * prov
-  | ProvTooShort of prov * prov (* prov1 does not live as long as prov2 *)
+  | CannotPromoteLocalProvToAbstract of prov * prov (* cannot promote local prov to abstract prov *)
   | EnvArityMismatch of string * env list * env_vars
   | ProvArityMismatch of string * provs * provs
   | TysArityMismatch of string * ty list * ty list

@@ -136,12 +136,11 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
   | (_, None, Some _) ->
     (* UP-AbstractProvLocalProv *)
     if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
-    else if loan_env_abs_sub ell prov2 prov1 then Succ ell
     else AbsProvsNotSubtype (prov1, prov2) |> fail
   | (_, Some _, None) ->
     (* UP-LocalProvAbstractProv *)
     if not (loan_env_is_abs ell prov2) then InvalidProv prov2 |> fail
-    else ProvTooShort (prov1, prov2) |> fail
+    else CannotPromoteLocalProvToAbstract (prov1, prov2) |> fail
   | (_, None, None) ->
     (* UP-AbstractProvenances *)
     if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
