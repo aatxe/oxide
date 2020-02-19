@@ -706,8 +706,18 @@ impl PrettyPrint for Block {
                                 } else {
                                     panic!("bindings must use identifiers, not pattern matching")
                                 }
+                            } else if let Pat::Ident(pat) = stmt.pat {
+                                Doc::text(format!("\"{}\"", pat.ident))
+                                    .append(Doc::text(","))
+                                    .append(Doc::space())
+                                    .append(parenthesize(
+                                        stmt.let_token.span.to_doc(st.clone())
+                                            .append(Doc::text(","))
+                                            .append(Doc::space())
+                                            .append(Doc::text("Infer"))
+                                    ))
                             } else {
-                                panic!("types must be fully-annotated")
+                                panic!("bindings must use identifiers, not pattern matching")
                             }).append(Doc::text(","))
                                 .append(Doc::space())
                                 .append(match stmt.init {
@@ -771,7 +781,16 @@ impl PrettyPrint for Pat {
 }
 
 impl PrettyPrint for Type {
-  fn to_doc(self, st: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
+    fn to_doc(self, st: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
+        if let Type::Infer(ty) = self {
+            return parenthesize(
+                ty.span().to_doc(st.clone())
+                    .append(Doc::text(","))
+                    .append(Doc::space())
+                    .append(Doc::text("Infer"))
+            )
+        }
+
         if let Type::Reference(ty) = self {
             let lft = match ty.lifetime.as_ref() {
                 Some(lft) => lft,

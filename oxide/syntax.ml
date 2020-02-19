@@ -82,6 +82,7 @@ type kind = Star | Prov [@@deriving show]
 type base_ty = Bool | U32 | Unit [@@deriving show]
 type prety =
   | Any
+  | Infer (* infer this type! *)
   | BaseTy of base_ty
   | TyVar of ty_var
   | Ref of prov * owned * ty
@@ -125,7 +126,7 @@ let is_sized (typ : ty) : bool =
 (* is the given type fully initialized? *)
 let rec is_init (typ : ty) : bool =
   match snd typ with
-  | Any | BaseTy _ | TyVar _ -> true
+  | Any | Infer | BaseTy _ | TyVar _ -> true
   | Ref (_, _, ty) -> is_init ty (* invariant: this should always be true *)
   | Fun (_, _, _, tys, gamma, ty) ->
     all_init tys && var_env_init gamma && is_init ty

@@ -60,7 +60,7 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
                    (ty : ty) : unit tc =
   let rec valid (ty : ty) : unit tc =
     match snd ty with
-    | Any | BaseTy _ -> Succ ()
+    | Any | Infer | BaseTy _ -> Succ ()
     | TyVar tyvar ->
       if tyvar_env_ty_mem tyvar delta then Succ ()
       else InvalidType ty |> fail
@@ -290,6 +290,15 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let deltaPrime = tyvar_env_add_provs new_provs delta
       in let ellPrime = loan_env_append (provs_of delta |> List.map to_loan_entry, ([], [])) ell
       in tc deltaPrime ellPrime gamma e
+    (* T-LetInfer *)
+    | Let (var, (_, Infer), e1, e2) ->
+      let* (ty1, ell1, gamma1) = tc delta ell gamma e1
+      in let* () = valid_type sigma delta ell1 gamma ty1
+      in let gamma1Prime = var_env_include gamma1 var ty1
+      in let* (ty2, ell2, gamma2) = tc delta ell1 gamma1Prime e2
+      in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
+      in let* () = valid_type sigma delta ell2Prime gamma2Prime ty2
+      in Succ (ty2, ell2Prime, gamma2Prime)
     (* T-Let *)
     | Let (var, ann_ty, e1, e2) ->
       let* (ty1, ell1, gamma1) = tc delta ell gamma e1
@@ -592,7 +601,7 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
         in Succ (loc, Struct (sn, provs, tys, Some ty))
       | None -> UnknownStruct (loc, sn) |> fail)
     (* structural cases *)
-    | Any | BaseTy _ | TyVar _ -> Succ (loc, ty)
+    | Any | Infer | BaseTy _ | TyVar _ -> Succ (loc, ty)
     | Ref (prov, omega, ty) ->
       let* ty = do_ty ctx ty
       in Succ (loc, Ref (prov, omega, ty))

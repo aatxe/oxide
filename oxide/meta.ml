@@ -39,7 +39,7 @@ let subst_env_var (ty : ty) (this : env) (that : env_var) : ty =
   let rec sub (ty : ty) : ty =
     let loc = fst ty
     in match snd ty with
-    | Any | BaseTy _ | TyVar _ -> ty
+    | Any | Infer | BaseTy _ | TyVar _ -> ty
     | Uninit ty -> (loc, Uninit (sub ty))
     | Ref (prov, omega, ty) -> (loc, Ref (prov, omega, sub ty))
     | Fun (evs, pvs, tvs, tys, gamma, ret_ty) ->
@@ -70,7 +70,7 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
   let rec sub (ty : ty) : ty =
     let loc = fst ty
     in match snd ty with
-    | Any | BaseTy _ | TyVar _ -> ty
+    | Any | Infer | BaseTy _ | TyVar _ -> ty
     | Uninit ty -> (loc, Uninit (sub ty))
     | Ref (pv, omega, ty) ->
       let prov = if snd pv = snd that then this else pv
@@ -100,7 +100,7 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
   let rec sub (ty : ty) : ty =
     let loc = fst ty
     in match snd ty with
-    | Any | BaseTy _ -> ty
+    | Any | Infer | BaseTy _ -> ty
     | TyVar tv -> if tv = that then this else ty
     | Uninit ty -> (loc, Uninit (sub ty))
     | Ref (pv, omega, ty) -> (loc, Ref (pv, omega, sub ty))
@@ -386,7 +386,7 @@ let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
 let rec contains_prov (gamma : var_env) (prov : prov) : bool =
   let rec ty_contains (ty : ty) : bool =
     match snd ty with
-    | Any | BaseTy _ | TyVar _ -> false
+    | Any | Infer | BaseTy _ | TyVar _ -> false
     | Ref (pv, _, ty) -> snd pv = snd prov || ty_contains ty
     | Fun (_, pvs, _, tys, gam, ret_ty) ->
       if not (List.mem prov pvs) then
@@ -410,7 +410,7 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
       in let new_gamma = sndfst pi |> var_env_exclude gamma
       in if not (contains_prov new_gamma prov) then Succ (loan_env_exclude prov ell, new_gamma)
       else Succ (ell, new_gamma)
-    | Some (_, Any) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
+    | Some (_, Any) | Some (_, Infer) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
     | Some (_, Struct _) -> Succ envs
     | Some (_, Uninit ty)
     | Some (_, Array (ty, _))
@@ -424,7 +424,7 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
 
 let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   match snd typ with
-  | Any -> Succ false
+  | Any | Infer -> Succ true (* arbitrary types are always _not_ copyable *)
   | BaseTy _ -> Succ false
   | TyVar _ -> Succ true
   | Uninit _ -> Succ true (* probably never ask this question anyway *)
@@ -486,7 +486,7 @@ let valid_copy_impl (sigma : global_env) (def : struct_def) : unit tc =
 
 let rec free_provs_ty (ty : ty) : provs =
   match snd ty with
-  | Any | BaseTy _ | TyVar _ -> []
+  | Any | Infer | BaseTy _ | TyVar _ -> []
   | Uninit ty -> free_provs_ty ty
   | Ref (prov, _, ty) -> free_provs_ty ty |> List.cons prov
   | Fun (_, provs, _, tys, _, ty) ->
@@ -604,7 +604,7 @@ let find_refs_to_params (ell : loan_env) (ty : ty) (params : (var * ty) list) : 
   let place_in_params (pi : place) : bool = List.mem_assoc (root_of pi) params
   in let rec impl (ty : ty) : unit tc =
     match snd ty with
-    | Any | BaseTy _ | TyVar _ -> Succ ()
+    | Any | Infer | BaseTy _ | TyVar _ -> Succ ()
     | Ref (prov, _, ty) ->
       let loans = loan_env_lookup ell prov
       in let borrow_loans = loans |> List.map snd |> List.filter_map place_expr_to_place

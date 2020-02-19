@@ -9,7 +9,7 @@ let explode_places (var : var) (ty : ty) : (place * ty) list =
     (fst pi, (root_of pi, List.append (path_of pi) [entry]))
   in let rec explode (pi : place) (ty : ty) : (place * ty) list =
     match snd ty with
-    | Any | BaseTy _ | TyVar _ | Ref _ | Fun _ | Array _ | Slice _ -> [(pi, ty)]
+    | Any | Infer | BaseTy _ | TyVar _ | Ref _ | Fun _ | Array _ | Slice _ -> [(pi, ty)]
     | Rec fields ->
       (pi, ty) :: flat_map (fun (field, ty) -> explode (proj pi (Field field)) ty) fields
     | Tup tys ->
@@ -29,7 +29,7 @@ let collect_places (gamma : var_env) : (place * ty) list =
 let rec expand_closures (gamma : var_env) : var_env =
   let rec expand_closure (ty : ty) : var_env =
     match snd ty with
-    | Any | BaseTy _ | TyVar _ -> []
+    | Any | Infer | BaseTy _ | TyVar _ -> []
     | Ref (_, _, ty) -> expand_closure ty
     | Fun (_, _, _, _, Unboxed, _) -> []
     | Fun (_, _, _, _, EnvVar _, _) -> []
