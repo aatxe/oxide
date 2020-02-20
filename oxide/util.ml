@@ -42,7 +42,7 @@ let equal_unordered (lst1 : 'a list) (lst2 : 'b list) : bool =
 let take_while (pred : 'a -> bool) (lst : 'a list) : 'a list =
   let collect (acc : 'a list) (elem : 'a) : 'a list =
     if pred elem then List.cons elem acc else acc
-  in List.rev (List.fold_left collect [] lst)
+  in List.fold_left collect [] lst |> List.rev
 
 (* drops elements from the list until the predicate returns false *)
 let rec drop_while (pred : 'a -> bool) (lst : 'a list) : 'a list =
@@ -51,13 +51,13 @@ let rec drop_while (pred : 'a -> bool) (lst : 'a list) : 'a list =
   | lst -> lst
 
 let flat_map (oper : 'a -> 'b list) (lst : 'a list) : 'b list =
-  List.flatten (List.map oper lst)
+  List.map oper lst |> List.flatten
 
 let flatten_opts (lst : 'a option list) : 'a list =
   flat_map (fun opt -> match opt with Some x -> [x] | None -> []) lst
 
 let flat_mapi (oper : int -> 'a -> 'b list) (lst : 'a list) : 'b list =
-  List.flatten (List.mapi oper lst)
+  List.mapi oper lst |> List.flatten
 
 (* splits the list into a prefix and a suffix such that:
    - forall x in prefix. pred x = true
