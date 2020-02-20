@@ -1077,7 +1077,7 @@ impl PrettyPrint for Expr {
                 if let Ok(Meta::NameValue(attr)) = attr.parse_meta() {
                     if attr.path.is_ident("lft") {
                         if let Lit::Str(lit) = attr.lit {
-                            lft = Doc::text(lit.value());
+                            lft = quote(Doc::text(lit.value()));
                         } else {
                             panic!("lifetime annotation on borrows must use string literals")
                         }
