@@ -234,13 +234,15 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     (* T-Borrow *)
     | Borrow (prov, omega, pi) ->
       let* (ty, loans) = ownership_safe sigma ell gamma omega pi
-      in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell, gamma)
+      in if loan_env_is_abs ell prov then Succ ((inferred, Ref (prov, omega, ty)), ell, gamma)
+      else Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell, gamma)
     (* T-BorrowIndex *)
     | BorrowIdx (prov, omega, pi, e) ->
       (match tc delta ell gamma e with
        | Succ ((_, BaseTy U32), ell1, gamma1) ->
          let* (ty, loans) = ownership_safe sigma ell1 gamma1 omega pi
-         in Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell, gamma)
+         in if loan_env_is_abs ell1 prov then Succ ((inferred, Ref (prov, omega, ty)), ell1, gamma1)
+         else Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell1, gamma1)
        | Succ (found, _, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
        | Fail err -> Fail err)
     (* T-BorrowSlice *)
@@ -415,7 +417,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let* prov_sub = combine_prov "T-App" new_provs provs
          in let* ty_sub = combine_ty "T-App" new_tys tyvars
          in let do_sub : ty -> ty =
-           subst_many_prov prov_sub >> subst_many_env_var env_sub >> subst_many ty_sub
+           subst_many ty_sub >> subst_many_prov prov_sub >> subst_many_env_var env_sub
          in let new_params = List.map do_sub params
          in let* ty_pairs = combine_tys "T-App" new_params arg_tys
          in let types_mismatch ((expected, found) : ty * ty) : bool tc =
@@ -454,7 +456,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let exprs = List.map snd fields_sorted
          in let* prov_sub = combine_prov "T-RecStruct" provs dfn_provs
          in let* ty_sub = combine_ty "T-RecStruct" tys tyvars
-         in let do_sub : ty -> ty = subst_many_prov prov_sub >> subst_many ty_sub
+         in let do_sub : ty -> ty = subst_many ty_sub >> subst_many_prov prov_sub
          in let expected_fields = List.map (fun (f, ty) -> (f, do_sub ty)) dfn_fields_sorted
          in let expected_tys = List.map snd expected_fields
          in let* pairs = combine_expr "T-RecStruct" exprs expected_tys
@@ -474,7 +476,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Some (Tup (_, _, dfn_provs, tyvars, dfn_tys)) ->
          let* prov_sub = combine_prov "T-TupStruct" provs dfn_provs
          in let* ty_sub = combine_ty "T-TupStruct" tys tyvars
-         in let do_sub : ty -> ty = subst_many_prov prov_sub >> subst_many ty_sub
+         in let do_sub : ty -> ty = subst_many ty_sub >> subst_many_prov prov_sub
          in let expected_tys = List.map do_sub dfn_tys
          in let* pairs = combine_expr "T-TupStruct" exprs expected_tys
          in let tc_exp ((ell, gamma) : (loan_env * var_env)) (p : expr * ty) =
@@ -586,7 +588,7 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
         let fields_sorted = List.sort compare_keys fields
         in let* prov_sub = combine_prov "T-RecStruct" provs dfn_provs
         in let* ty_sub = combine_ty "T-RecStruct" tys tyvars
-        in let do_sub : ty -> ty = subst_many_prov prov_sub >> subst_many ty_sub
+        in let do_sub : ty -> ty = subst_many ty_sub >> subst_many_prov prov_sub
         in let fields_fixed = List.map (fun (f, ty) -> (f, do_sub ty)) fields_sorted
         in let* fields = do_params (List.cons sn ctx) fields_fixed
         in let ty : ty = (inferred, Rec fields)
@@ -594,7 +596,7 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       | Some (Tup (_, _, dfn_provs, tyvars, tup_tys)) ->
         let* prov_sub = combine_prov "T-TupStruct" provs dfn_provs
         in let* ty_sub = combine_ty "T-TupStruct" tys tyvars
-        in let do_sub : ty -> ty = subst_many_prov prov_sub >> subst_many ty_sub
+        in let do_sub : ty -> ty = subst_many ty_sub >> subst_many_prov prov_sub
         in let tup_tys = List.map do_sub tup_tys
         in let* tup_tys = do_tys ctx tup_tys
         in let ty : ty = (inferred, Tup tup_tys)
