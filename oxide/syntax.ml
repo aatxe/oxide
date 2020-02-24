@@ -394,6 +394,7 @@ type tc_error =
   | InvalidType of ty
   | InvalidEnvVar of env_var * ty (* invalid env var * the type it was found in *)
   | InvalidProv of prov
+  | ProvDoesNotOutlive of prov * prov (* the first provenance does not outlive the second *)
   | InvalidLoan of owned * place_expr
   | InvalidArrayLen of ty * int
   | InvalidOperationOnType of path * ty

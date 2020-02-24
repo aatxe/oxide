@@ -253,6 +253,23 @@ let rec decompose_by (path : path) (ty : ty) : (ty_ctx * ty) tc =
   | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
 and decompose (ty : ty) (path : path) : (ty_ctx * ty) tc = decompose_by path ty
 
+(* checks that prov2 outlives prov1, erroring otherwise *)
+let outlives (ell : loan_env) (prov1: prov) (prov2 : prov) : unit tc =
+  match (loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
+  | (Some _, Some _) -> Succ ()
+  | (None, Some _) ->
+    if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
+    else ProvDoesNotOutlive (prov1, prov2) |> fail
+  | (Some _, None) ->
+    if not (loan_env_is_abs ell prov2) then InvalidProv prov2 |> fail
+    else Succ ()
+  | (None, None) ->
+    (* UP-AbstractProvenances *)
+    if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
+    else if not (loan_env_is_abs ell prov2) then InvalidProv prov2 |> fail
+    else if not (loan_env_abs_sub ell prov1 prov2) then AbsProvsNotSubtype (prov1, prov2) |> fail
+    else Succ ()
+
 (* find the type of the expr path based on the original type in a context *)
 (* this will error if the context doesn't allow the operation,
    e.g. dereferencing a shared reference in a unique context *)
@@ -263,8 +280,7 @@ let compute_ty_in (ctx : owned) (ell : loan_env) (ty : ty) (path : expr_path) : 
     | (ty, []) -> Succ (loc, ty)
     | (Ref (prov, omega, ty), Deref :: path) ->
       if is_at_least ctx omega then
-        let* () = for_each passed
-                           (fun prv -> let* _ = subtype_prov Combine ell prv prov in Succ ())
+        let* () = for_each passed (outlives ell |> flip $ prov)
         in compute (List.cons prov passed) path ty
       else Fail (PermissionErr (ty, path, ctx))
     | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
@@ -366,6 +382,9 @@ let rec is_prefix_of (path1 : path) (path2 : path) : bool =
   | (Index i1 :: path1, Index i2 :: path2) -> if i1 = i2 then is_prefix_of path1 path2 else false
   | (_, _) -> false
 
+let prefix_of (pi1 : place) (pi2 : place) : bool =
+  root_of pi1 = root_of pi2 && is_prefix_of (path_of pi1) (path_of pi2)
+
 (* is path2 a prefix of path1? *)
 let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
   match (path1, path2) with
@@ -377,6 +396,9 @@ let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
     if i1 = i2 then is_expr_prefix_of path1 path2 else false
   | (Deref :: path1, Deref :: path2) -> is_expr_prefix_of path1 path2
   | (_, _) -> false
+
+let expr_prefix_of (phi1 : place_expr) (phi2 : place_expr) : bool =
+  expr_root_of phi1 = expr_root_of phi2 && is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2)
 
 let rec contains_prov (gamma : var_env) (prov : prov) : bool =
   let rec ty_contains (ty : ty) : bool =
@@ -414,8 +436,15 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
     | Some (_, Tup tys) -> loops envs tys
     | None -> Succ envs
   and loops (envs : loan_env * var_env) = foldl loop envs >> List.map Option.some
+  in let pi_as_phi = place_to_place_expr pi
+  in let remove_provs (ell : loan_env) : loan_env =
+    let (concrete, abstract) = ell
+    in (List.filter (not >> List.exists (expr_prefix_of |> flip $ pi_as_phi)
+                         >> List.map snd >> snd) concrete,
+        abstract)
   in let* opt = var_env_lookup_opt gamma pi
-  in loop (ell, sndfst pi |> var_env_exclude gamma) opt
+  in let* (ell_out, gamma_out) = loop (ell, sndfst pi |> var_env_exclude gamma) opt
+  in Succ (remove_provs ell_out, gamma_out)
 
 let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   match snd typ with
