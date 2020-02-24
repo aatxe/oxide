@@ -618,3 +618,9 @@ let find_refs_to_captured (ell : loan_env) (ty : ty) (gamma_c : var_env) : unit 
   match find_refs_to_params ell ty gamma_c with
   | Fail (NoReferenceToParameter pi) -> NoReferenceToCaptured pi |> fail
   | res -> res
+
+let places_of (ell : loan_env) : place_expr list =
+  ell |> fst |> List.map snd |> List.flatten |> List.map snd
+
+let domain_of (ell : loan_env) : provs =
+  ell |> fst |> List.map fst |> List.append (ell |> sndfst)

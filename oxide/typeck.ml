@@ -43,9 +43,8 @@ let var_env_diff (gam1 : var_env) (gam2 : var_env) : var_env =
     not (List.exists (fun entry2 -> fst entry2 = fst entry1) gam2)
   in List.filter not_in_gam2 gam1
 
-let valid_prov (_ : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) : unit tc =
-  (* FIXME: check tyvar_env_prov_mem, but then we need to add letprovs to programs in codegen *)
-  if loan_env_mem ell prov then
+let valid_prov (delta : tyvar_env) (ell : loan_env) (gamma : var_env) (prov : prov) : unit tc =
+  if tyvar_env_prov_mem delta prov && loan_env_mem ell prov then
     match loan_env_lookup_opt ell prov with
     | Some loans ->
       let invalid_loans = List.filter (not >> var_env_contains_place_expr gamma >> snd) loans
@@ -62,7 +61,7 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
     match snd ty with
     | Any | Infer | BaseTy _ -> Succ ()
     | TyVar tyvar ->
-      if tyvar_env_ty_mem tyvar delta then Succ ()
+      if tyvar_env_ty_mem delta tyvar then Succ ()
       else InvalidType ty |> fail
     | Ref (prov, _, ty) ->
       let* () = valid_prov delta ell gamma prov
@@ -101,14 +100,32 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
     | Env gamma -> for_each_rev (fun (_, ty) -> valid ty) gamma
     | EnvOf var -> UnevaluatedEnvOf var |> fail
   in valid ty
-
-let valid_types (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+and valid_types (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
     (tys : ty list) : unit tc =
   for_each_rev (valid_type sigma delta ell gamma) tys
-
-let valid_var_env (sigma : global_env) (delta : tyvar_env) (ell : loan_env)
+and valid_loan_env (delta : tyvar_env) (gamma : var_env) (ell : loan_env) : unit tc =
+  let missing_phis = ell |> places_of |> List.find_all (not >> var_env_contains_place_expr gamma)
+  in if is_empty missing_phis then
+    let missing_provs = ell |> domain_of |> List.find_all (not >> tyvar_env_prov_mem delta)
+    in if is_empty missing_provs then Succ ()
+    else InvalidProv (List.hd missing_provs) |> fail
+  else let (prov, _) =
+    ell |> fst |> List.find (List.exists ((=) (List.hd missing_phis) >> snd) >> snd)
+  in UnboundLoanInProv (List.hd missing_phis, prov) |> fail
+and valid_var_env (sigma : global_env) (delta : tyvar_env) (ell : loan_env)
     (gamma : var_env) : unit tc =
   gamma |> List.map snd |> valid_types sigma delta ell gamma
+and valid_envs (sigma : global_env) (delta : tyvar_env)
+               (ell : loan_env) (gamma : var_env) : unit tc =
+  let* () = valid_loan_env delta gamma ell
+  in valid_var_env sigma delta ell gamma
+
+(* shadow valid_type with a version that checks valid_envs first *)
+let valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+               (ty : ty) : unit tc =
+  let* () = valid_envs sigma delta ell gamma
+  in valid_type sigma delta ell gamma ty
+
 
 let type_of (prim : prim) : ty =
   (inferred, match prim with

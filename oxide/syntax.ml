@@ -280,8 +280,8 @@ let tyvar_env_add_ty_vars (tyvars : ty_var list) (delta : tyvar_env) : tyvar_env
   match delta with
   | (evs, provs, curr_tyvars) -> (evs, provs, list_union curr_tyvars tyvars)
 
-let tyvar_env_prov_mem (var : prov) (delta : tyvar_env) : bool = List.mem var (provs_of delta)
-let tyvar_env_ty_mem (var : ty_var) (delta : tyvar_env) : bool = List.mem var (ty_vars_of delta)
+let tyvar_env_prov_mem (delta : tyvar_env) (var : prov) : bool = provs_of delta |> List.mem var
+let tyvar_env_ty_mem (delta : tyvar_env) (var : ty_var) : bool = ty_vars_of delta |> List.mem var
 let tyvar_env_env_var_mem (var : env_var) (delta : tyvar_env) : bool =
   List.mem var (env_vars_of delta)
 
@@ -402,6 +402,7 @@ type tc_error =
   | InvalidCopyImpl of struct_var * ty (* for struct * because of ty *)
   | UnboundPlace of place
   | UnboundPlaceExpr of place_expr
+  | UnboundLoanInProv of place_expr * prov (* unbound loan * in prov *)
   | PlaceExprNotAPlace of place_expr
   | AbsProvsNotSubtype of prov * prov
   | CannotPromoteLocalProvToAbstract of prov * prov (* cannot promote local prov to abstract prov *)
