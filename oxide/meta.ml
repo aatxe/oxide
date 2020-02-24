@@ -280,7 +280,7 @@ let compute_ty_in (ctx : owned) (ell : loan_env) (ty : ty) (path : expr_path) : 
     | (ty, []) -> Succ (loc, ty)
     | (Ref (prov, omega, ty), Deref :: path) ->
       if is_at_least ctx omega then
-        let* () = for_each passed (outlives ell |> flip $ prov)
+        let* () = outlives ell |> flip $ prov |> for_each passed
         in compute (List.cons prov passed) path ty
       else Fail (PermissionErr (ty, path, ctx))
     | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
