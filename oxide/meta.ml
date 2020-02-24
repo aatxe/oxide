@@ -630,11 +630,16 @@ let find_refs_to_params (ell : loan_env) (ty : ty) (params : (var * ty) list) : 
     match snd ty with
     | Any | Infer | BaseTy _ | TyVar _ -> Succ ()
     | Ref (prov, _, ty) ->
-      let loans = loan_env_lookup ell prov
-      in let borrow_loans = loans |> List.map snd |> List.filter_map place_expr_to_place
-      in let param_loans = borrow_loans |> List.filter place_in_params
-      in if is_empty param_loans then impl ty
-      else NoReferenceToParameter (List.hd param_loans) |> fail
+      let loans_opt = loan_env_lookup_opt ell prov
+      in (match loans_opt with
+      | Some loans ->
+        let borrow_loans = loans |> List.map snd |> List.filter_map place_expr_to_place
+        in let param_loans = borrow_loans |> List.filter place_in_params
+        in if is_empty param_loans then impl ty
+        else NoReferenceToParameter (List.hd param_loans) |> fail
+      | None ->
+        if loan_env_is_abs ell prov then Succ ()
+        else InvalidProv prov |> fail)
     | Fun _ -> Succ ()
     | Array (ty, _) | Slice ty -> impl ty
     | Rec fields -> fields |> List.map snd |> for_each_rev impl
