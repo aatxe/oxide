@@ -27,16 +27,21 @@ let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
   in let (prt1, (prt2, prt3)) = List.fold_left work ell1 (fst ell2)
   in (prt1, (list_union prt2 (sndfst ell2), list_union prt3 (sndsnd ell2)))
 
+(* return only the common entries, taking uninit types over init types *)
+let merge (gamma1: var_env) (gamma2 : var_env) : var_env =
+  let merge_entry (name, ty1) =
+    match (ty1 |> snd, List.assoc_opt name gamma2) with
+    | (Uninit _ , Some ((_, Uninit _) as ty2)) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
+    | (Uninit inner, Some ty2) -> if ty_eq inner ty2 then Some (name, ty1) else None
+    | (_, Some ty2) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
+    | (_, None) -> None
+  in gamma1 |> List.map merge_entry |> List.filter Option.is_some |> List.map Option.get
+
 let intersect (envs1 : loan_env * var_env) (envs2 : loan_env * var_env) : loan_env * var_env =
   let (ell1, gamma1) = envs1
   in let (ell2, gamma2) = envs2
   in let ell = union ell1 ell2
-  in let also_in_gamma2 (pair : var * ty) =
-       let (x, ty) = pair
-       in match List.assoc_opt x gamma2 with
-       | Some ty2 -> ty == ty2 (* TODO: maybe unify, but then we're changing ell *)
-       | None -> false
-  in (ell, List.find_all also_in_gamma2 gamma1)
+  in (ell, merge gamma1 gamma2)
 
 let var_env_diff (gam1 : var_env) (gam2 : var_env) : var_env =
   let not_in_gam2 (entry1 : var * ty) : bool =
@@ -168,7 +173,7 @@ let flow_closed_envs_forward (computed : ty) (annotated : ty) : ty tc =
       in Succ (fst annotated, ty)
     | (Struct (_, _, comp_tys, comp_opt), Struct (name, provs, ann_tys, ann_opt)) ->
       let* forward_tys = flow_many comp_tys ann_tys
-      in let* forward = flow (unwrap comp_opt) (unwrap ann_opt)
+      in let* forward = flow (Option.get comp_opt) (Option.get ann_opt)
       in let ty : prety = Struct (name, provs, forward_tys, Some forward)
       in Succ (fst annotated, ty)
     | (Uninit computed_inner, Uninit annotated_inner) ->
@@ -747,7 +752,7 @@ let wf_global_env (sigma : global_env) : unit tc =
     | RecStructDef (_, name, provs, tyvars, fields) ->
       let delta : tyvar_env = ([], provs, tyvars)
       in let ell = ([], (provs, []))
-      in let* () = name |> global_env_find_struct sigma |> unwrap |> valid_copy_impl sigma
+      in let* () = name |> global_env_find_struct sigma |> Option.get |> valid_copy_impl sigma
       in let* () = List.map snd fields |> valid_types sigma delta ell empty_gamma
       in let find_dup (pair : field * ty)
                       (acc : (field * ty) list * ((field * ty) * (field * ty)) option) =
@@ -762,7 +767,7 @@ let wf_global_env (sigma : global_env) : unit tc =
     | TupStructDef (_, name, provs, tyvars, tys) ->
       let delta : tyvar_env = ([], provs, tyvars)
       in let ell = ([], (provs, []))
-      in let* () = name |> global_env_find_struct sigma |> unwrap |> valid_copy_impl sigma
+      in let* () = name |> global_env_find_struct sigma |> Option.get |> valid_copy_impl sigma
       in let* () = valid_types sigma delta ell empty_gamma tys
       in Succ ()
   in for_each sigma valid_global_entry

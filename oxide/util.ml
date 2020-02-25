@@ -26,11 +26,6 @@ let ($) (f : 'a -> 'b) (a : 'a) : 'b = f a
 let flip (f : 'a -> 'b -> 'c) : 'b -> 'a -> 'c =
   fun b -> fun a -> f a b
 
-let unwrap (opt : 'a option) : 'a =
-  match opt with
-  | Some x -> x
-  | None -> failwith "attempted to unwrap an empty option"
-
 (* checks if the given list is empty *)
 let is_empty (lst : 'a list) : bool = List.length lst = 0
 (* checks if the given list is non-empty*)

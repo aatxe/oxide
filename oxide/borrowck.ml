@@ -58,7 +58,7 @@ let keep_if_ref (context : owned) (places : (place * ty) list) : (place * ty) li
 
 let decompose_place_expr (phi : place_expr) : place * expr_path =
   let (prefix, suffix) = expr_path_of phi |> partition ((<>) Deref)
-  in let inner_pi = (fst phi, (expr_root_of phi, unwrap (expr_path_to_path prefix)))
+  in let inner_pi = (fst phi, (expr_root_of phi, expr_path_to_path prefix |> Option.get))
   in (inner_pi, suffix)
 
 let apply_suffix (suffix : expr_path) (phi : place_expr) : place_expr =

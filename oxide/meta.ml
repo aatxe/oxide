@@ -659,3 +659,25 @@ let places_of (ell : loan_env) : place_expr list =
 
 let domain_of (ell : loan_env) : provs =
   ell |> fst |> List.map fst |> List.append (ell |> sndfst)
+
+(* type equality, ignoring the source locations *)
+let rec ty_eq (ty1 : ty) (ty2 : ty) : bool =
+  match (snd ty1, snd ty2) with
+  | (Any, Any) | (Infer, Infer) -> true
+  | (BaseTy b1, BaseTy b2) -> b1 = b2
+  | (TyVar a1, TyVar a2) -> a1 = a2
+  | (Ref (p1, o1, ty1), Ref (p2, o2, ty2)) -> snd p1 = snd p2 && o1 = o2 && ty_eq ty1 ty2
+  | (Fun (evs1, pvs1, tyvs1, tys1, env1, ty1), Fun (evs2, pvs2, tyvs2, tys2, env2, ty2)) ->
+    evs1 = evs2 && List.map snd pvs1 = List.map snd pvs2 && tyvs1 = tyvs2 &&
+    List.for_all2 ty_eq tys1 tys2 && env1 = env2 && ty_eq ty1 ty2
+  | (Array (ty1, len1), Array (ty2, len2)) -> len1 = len2 && ty_eq ty1 ty2
+  | (Slice ty1, Slice ty2) -> ty_eq ty1 ty2
+  | (Rec fields1, Rec fields2) ->
+    List.for_all2 ty_eq (fields1 |> List.sort compare_keys |> List.map snd)
+                        (fields2 |> List.sort compare_keys |> List.map snd)
+  | (Tup tys1, Tup tys2) -> List.for_all2 ty_eq tys1 tys2
+  | (Struct (sn1, pvs1, tys1, opt_ty1), Struct (sn2, pvs2, tys2, opt_ty2)) ->
+    sn1 = sn2 && List.map snd pvs1 = List.map snd pvs2 &&
+    List.for_all2 ty_eq tys1 tys2 && Option.equal ty_eq opt_ty1 opt_ty2
+  | (Uninit ty1, Uninit ty2) -> ty_eq ty1 ty2
+  | _ -> false
