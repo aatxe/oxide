@@ -516,7 +516,8 @@ let rec free_provs_ty (ty : ty) : provs =
   | Fun (_, provs, _, tys, _, ty) ->
     let free_in_tys = List.map free_provs_ty tys |> List.flatten
     in let free_in_ret = free_provs_ty ty
-    in List.append free_in_tys free_in_ret |> List.filter (fun prov -> not (List.mem prov provs))
+    in List.append free_in_tys free_in_ret |>
+       List.filter (fun prov -> provs |> List.map snd |> List.mem (snd prov) |> not)
   | Array (ty, _) | Slice ty -> free_provs_ty ty
   | Rec tys -> tys |> List.map (free_provs_ty >> snd) |> List.flatten
   | Tup tys -> tys |> List.map free_provs_ty |> List.flatten
@@ -530,7 +531,7 @@ and free_provs (expr : expr) : provs =
   | BorrowSlice (prov, _, _, e1, e2) ->
     [e1; e2] |> free_provs_many |> List.cons prov
   | LetProv (provs, e) ->
-    free_provs e |> List.filter (fun prov -> not (List.mem prov provs))
+    free_provs e |> List.filter (fun prov -> provs |> List.map snd |> List.mem (snd prov) |> not)
   | Let (_, ty, e1, e2) ->
     [e1; e2] |> List.map free_provs |> List.cons (free_provs_ty ty) |> List.flatten
   | Assign (_, e) -> free_provs e
@@ -542,7 +543,7 @@ and free_provs (expr : expr) : provs =
       | Some ty -> free_provs_ty ty
       | None -> []
     in let free_in_body = free_provs body
-    in List.filter (fun prov -> not (List.mem prov provs))
+    in List.filter (fun prov -> provs |> List.map snd |> List.mem (snd prov) |> not)
                    (List.concat [free_in_params; free_in_ret; free_in_body])
   | App (e1, _, provs, tys, es) ->
     List.concat [free_provs e1; provs;
