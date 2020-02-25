@@ -34,6 +34,7 @@ type expr_path_entry =
 type expr_path = expr_path_entry list [@@deriving show]
 type preplace_expr = var * expr_path [@@deriving show]
 type place_expr = source_loc * preplace_expr [@@deriving show]
+type place_exprs = place_expr list [@@deriving show]
 
 let path_entry_to_expr_path_entry (entry : path_entry) : expr_path_entry =
   match entry with
@@ -280,10 +281,12 @@ let tyvar_env_add_ty_vars (tyvars : ty_var list) (delta : tyvar_env) : tyvar_env
   match delta with
   | (evs, provs, curr_tyvars) -> (evs, provs, list_union curr_tyvars tyvars)
 
-let tyvar_env_prov_mem (delta : tyvar_env) (var : prov) : bool = provs_of delta |> List.mem var
-let tyvar_env_ty_mem (delta : tyvar_env) (var : ty_var) : bool = ty_vars_of delta |> List.mem var
+let tyvar_env_prov_mem (delta : tyvar_env) (var : prov) : bool =
+  provs_of delta |> List.map snd |> List.mem (snd var)
+let tyvar_env_ty_mem (delta : tyvar_env) (var : ty_var) : bool =
+  ty_vars_of delta |> List.mem var
 let tyvar_env_env_var_mem (var : env_var) (delta : tyvar_env) : bool =
-  List.mem var (env_vars_of delta)
+  env_vars_of delta |> List.mem var
 
 type subty = prov_var * prov_var [@@deriving show]
 type loan_env = (prov * loans) list * (prov list * subty list) [@@deriving show]
@@ -426,6 +429,10 @@ let bind (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc =
 
 let succ (elem : 'a) : 'a tc = Succ elem
 let fail (err : tc_error) : 'a tc = Fail err
+
+let is_succ (elem : 'a tc) : bool = match elem with Succ _ -> true | Fail _ -> false
+let is_fail (elem : 'a tc) : bool = match elem with Fail _ -> true | Succ _ -> false
+
 let (let*) (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc = bind tc f
 
 (* lifting normal list operations to tc monad *)

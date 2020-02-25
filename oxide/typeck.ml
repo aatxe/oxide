@@ -180,6 +180,22 @@ let flow_closed_envs_forward (computed : ty) (annotated : ty) : ty tc =
     in map (fun (comp, ann) -> flow comp ann) combined_tys
   in flow computed annotated
 
+let ty_valid_before_after (sigma : global_env) (delta : tyvar_env) (ty : ty)
+                          (ell_before : loan_env) (gamma_before : var_env)
+                          (ell_after : loan_env) (gamma_after : var_env) : unit tc =
+  match (valid_type sigma delta ell_before gamma_before ty,
+         valid_type sigma delta ell_after gamma_after ty) with
+  | (Succ (), Succ ()) -> Succ ()
+  | (Succ (), Fail (InvalidProv prov as err)) ->
+    (match loan_env_lookup_opt ell_before prov with
+    | Some loans ->
+      let missing = List.find_all (not >> var_env_contains_place_expr gamma_after >> snd) loans
+      in if is_empty missing then Succ ()
+      else UnboundLoanInProv (missing |> List.hd |> snd, prov) |> fail
+    | None -> Fail err)
+  | (Succ (), Fail err) -> Fail err
+  | (Fail err, _) -> Fail err
+
 let rec eval_env_of (gamma : var_env) (env : env) : env tc =
   match env with
   | Unboxed | EnvVar _ | Env _ -> Succ env
@@ -308,7 +324,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       let to_loan_entry (var : prov) : prov * loans = (var, [])
       in let deltaPrime = tyvar_env_add_provs new_provs delta
       in let ellPrime = loan_env_append (provs_of delta |> List.map to_loan_entry, ([], [])) ell
-      in tc deltaPrime ellPrime gamma e
+      in let* (ty_out, ell_out, gamma_out) = tc deltaPrime ellPrime gamma e
+      in Succ (ty_out, loan_env_exclude_all new_provs ell_out, gamma_out)
     (* T-LetInfer *)
     | Let (var, (_, Infer), e1, e2) ->
       let* (ty1, ell1, gamma1) = tc delta ell gamma e1
@@ -316,7 +333,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let gamma1Prime = var_env_include gamma1 var ty1
       in let* (ty2, ell2, gamma2) = tc delta ell1 gamma1Prime e2
       in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
-      in let* () = valid_type sigma delta ell2Prime gamma2Prime ty2
+      in let* () = ty_valid_before_after sigma delta ty2 ell2 gamma2 ell2Prime gamma2Prime
       in Succ (ty2, ell2Prime, gamma2Prime)
     (* T-Let *)
     | Let (var, ann_ty, e1, e2) ->
@@ -327,7 +344,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let gamma1Prime = var_env_include gamma1 var ann_ty
       in let* (ty2, ell2, gamma2) = tc delta ell1Prime gamma1Prime e2
       in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
-      in let* () = valid_type sigma delta ell2Prime gamma2Prime ty2
+      in let* () = ty_valid_before_after sigma delta ty2 ell2 gamma2 ell2Prime gamma2Prime
       in Succ (ty2, ell2Prime, gamma2Prime)
     (* T-Assign and T-AssignDeref *)
     | Assign (phi, e) ->
