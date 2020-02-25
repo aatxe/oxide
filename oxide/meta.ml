@@ -425,7 +425,8 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
     | Some (_, Ref (prov, _, ty)) ->
       let* (ell, gamma) = Some ty |> loop envs
       in let new_gamma = sndfst pi |> var_env_exclude gamma
-      in if not (contains_prov new_gamma prov) then Succ (loan_env_exclude prov ell, new_gamma)
+      in if not $ contains_prov new_gamma prov && not $ loan_env_is_abs ell prov then
+        Succ (loan_env_exclude prov ell, new_gamma)
       else Succ (ell, new_gamma)
     | Some (_, Any) | Some (_, Infer) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
     | Some (_, Struct _) -> Succ envs
