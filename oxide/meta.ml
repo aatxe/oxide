@@ -421,13 +421,18 @@ let rec contains_prov (gamma : var_env) (prov : prov) : bool =
   and tys_contains (tys : ty list) : bool = List.exists ty_contains tys
   in List.exists (ty_contains >> snd) gamma
 
-let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var_env) tc =
+let contains (prov : prov) (provs : provs) : bool =
+  provs |> List.map snd |> List.mem (snd prov)
+
+let envs_minus (keep_provs : provs) (ell : loan_env) (gamma : var_env)
+               (pi : place) : (loan_env * var_env) tc =
   let rec loop (envs : loan_env * var_env) (ty : ty option) : (loan_env * var_env) tc =
     match ty with
     | Some (_, Ref (prov, _, ty)) ->
       let* (ell, gamma) = Some ty |> loop envs
       in let new_gamma = sndfst pi |> var_env_exclude gamma
-      in if not $ contains_prov new_gamma prov then Succ (loan_env_exclude prov ell, new_gamma)
+      in if not $ contains_prov new_gamma prov && not $ contains prov keep_provs then
+        Succ (loan_env_exclude prov ell, new_gamma)
       else Succ (ell, new_gamma)
     | Some (_, Any) | Some (_, Infer) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
     | Some (_, Struct _) -> Succ envs

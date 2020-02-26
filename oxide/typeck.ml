@@ -334,7 +334,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* () = valid_type sigma delta ell1 gamma ty1
       in let gamma1Prime = var_env_include gamma1 var ty1
       in let* (ty2, ell2, gamma2) = tc delta ell1 gamma1Prime e2
-      in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
+      in let keep_provs = free_provs_ty ty2
+      in let* (ell2Prime, gamma2Prime) = envs_minus keep_provs ell2 gamma2 (fst expr, (var, []))
       in let* () = ty_valid_before_after sigma delta ty2 ell2 gamma2 ell2Prime gamma2Prime
       in Succ (ty2, ell2Prime, gamma2Prime)
     (* T-Let *)
@@ -345,7 +346,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* ann_ty = flow_closed_envs_forward ty1 ann_ty
       in let gamma1Prime = var_env_include gamma1 var ann_ty
       in let* (ty2, ell2, gamma2) = tc delta ell1Prime gamma1Prime e2
-      in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
+      in let keep_provs = free_provs_ty ty2
+      in let* (ell2Prime, gamma2Prime) = envs_minus keep_provs ell2 gamma2 (fst expr, (var, []))
       in let* () = ty_valid_before_after sigma delta ty2 ell2 gamma2 ell2Prime gamma2Prime
       in Succ (ty2, ell2Prime, gamma2Prime)
     (* T-Assign and T-AssignDeref *)
@@ -378,7 +380,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ ((_, Array (elem_ty, _)), ell1, gamma1) ->
          let gamma1Prime = var_env_include gamma1 var elem_ty
          in let* (_, ell2, gamma2) = tc delta ell1 gamma1Prime e2
-         in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
+         in let* (ell2Prime, gamma2Prime) = envs_minus [] ell2 gamma2 (fst expr, (var, []))
          in if gamma2Prime = gamma1 then
            if ell2Prime = ell1 then ((inferred, BaseTy Unit), ell1, gamma1) |> succ
            else LoanEnvMismatch (fst e2, ell1, ell2Prime) |> fail
@@ -387,7 +389,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ ((_, Ref (prov, omega, (_, Slice elem_ty))), ell1, gamma1) ->
          let gamma1Prime = var_env_include gamma1 var (inferred, Ref (prov, omega, elem_ty))
          in let* (_, ell2, gamma2) = tc delta ell1 gamma1Prime e2
-         in let* (ell2Prime, gamma2Prime) = envs_minus ell2 gamma2 (fst expr, (var, []))
+         in let* (ell2Prime, gamma2Prime) = envs_minus [] ell2 gamma2 (fst expr, (var, []))
          in if gamma2Prime = gamma1 then
            if ell2Prime = ell1 then ((inferred, BaseTy Unit), ell1, gamma1) |> succ
            else LoanEnvMismatch (fst e2, ell1, ell2Prime) |> fail
@@ -466,8 +468,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
                in let* () = valid_type sigma delta ellN gammaN new_ret_ty
                in Succ (new_ret_ty, ellN, gammaN)
              | Some (expected, found) -> TypeMismatch (expected, found) |> fail)
-       | Succ ((_, Uninit (_, Fun _) as uninit_fn_ty), _, _) ->
-         MovedFunction (fn, uninit_fn_ty) |> fail
+       | Succ ((_, Uninit (_, Fun _) as uninit_ty), _, _) -> MovedFunction (fn, uninit_ty) |> fail
        | Succ (found, _, _) -> TypeMismatchFunction found |> fail
        | Fail err -> Fail err)
     (* T-Tuple *)
