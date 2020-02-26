@@ -324,6 +324,10 @@ fn fun_bound_to_fun_ty(st: CompilerState, env_name: Ident, mut bound: TraitBound
                                     .group(),
                                 ReturnType::Type(_, ty) => ty.to_doc(st.clone()),
                             }))
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            // where bounds
+                            .append(Doc::text("[]"))
                     ))
             )
         }
@@ -782,7 +786,7 @@ impl PrettyPrint for Pat {
 }
 
 impl PrettyPrint for Type {
-    fn to_doc(self, st: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
+  fn to_doc(self, st: CompilerState) -> Doc<'static, BoxDoc<'static, ()>> {
         if let Type::Infer(ty) = self {
             return parenthesize(
                 ty.span().to_doc(st.clone())
@@ -941,6 +945,10 @@ impl PrettyPrint for Type {
                                     .group(),
                                 ReturnType::Type(_, ty) => ty.to_doc(st.clone()),
                             }))
+                            .append(Doc::text(","))
+                            .append(Doc::space())
+                            // where bounds
+                            .append(Doc::text("[]"))
                     ))
             )
         }

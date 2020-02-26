@@ -11,7 +11,7 @@ let is_at_least (omega : owned) (omega_prime : owned) : bool =
 (* looks up var in gamma, and if the type is a closure, returns its closed over environment *)
 let env_of (var : var) (gamma : var_env) : env tc =
   match List.assoc_opt var gamma with
-  | Some (_, Fun (_, _, _, _, gamma_c, _)) -> Succ gamma_c
+  | Some (_, Fun (_, _, _, _, gamma_c, _, _)) -> Succ gamma_c
   | Some ty -> Fail (TypeMismatchFunction ty)
   | None -> Fail (UnboundPlace ((dummy, (var, []))))
 
@@ -42,13 +42,13 @@ let subst_env_var (ty : ty) (this : env) (that : env_var) : ty =
     | Any | Infer | BaseTy _ | TyVar _ -> ty
     | Uninit ty -> (loc, Uninit (sub ty))
     | Ref (prov, omega, ty) -> (loc, Ref (prov, omega, sub ty))
-    | Fun (evs, pvs, tvs, tys, gamma, ret_ty) ->
+    | Fun (evs, pvs, tvs, tys, gamma, ret_ty, bounds) ->
       if not (List.mem that evs) then
         let gammaPrime =
           match gamma with
           | EnvVar ev -> if ev = that then this else gamma
           | Unboxed | Env _ | EnvOf _ -> gamma
-        in (loc, Fun (evs, pvs, tvs, sub_many tys, gammaPrime, sub ret_ty))
+        in (loc, Fun (evs, pvs, tvs, sub_many tys, gammaPrime, sub ret_ty, bounds))
       else ty
     | Array (ty, n) -> (loc, Array (sub ty, n))
     | Slice ty -> (loc, Slice (sub ty))
@@ -67,16 +67,16 @@ let subst_many_env_var (pairs : (env * env_var) list) (ty : ty) : ty =
 
 (* substitutes this for that in ty *)
 let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
-  let rec sub (ty : ty) : ty =
+  let sub_prov (prov : prov) =  if snd prov = snd that then this else prov
+  in let rec sub (ty : ty) : ty =
     let loc = fst ty
     in match snd ty with
     | Any | Infer | BaseTy _ | TyVar _ -> ty
     | Uninit ty -> (loc, Uninit (sub ty))
-    | Ref (pv, omega, ty) ->
-      let prov = if snd pv = snd that then this else pv
-      in (loc, Ref (prov, omega, sub ty))
-    | Fun (evs, pvs, tvs, tys, gamma, ret_ty) ->
-      if not (List.mem that pvs) then (loc, Fun (evs, pvs, tvs, sub_many tys, gamma, sub ret_ty))
+    | Ref (pv, omega, ty) -> (loc, Ref (sub_prov pv, omega, sub ty))
+    | Fun (evs, pvs, tvs, tys, gamma, ret_ty, bounds) ->
+      if not $ List.mem that pvs then
+        (loc, Fun (evs, pvs, tvs, sub_many tys, gamma, sub ret_ty, sub_bounds bounds))
       else ty
     | Array (ty, n) -> (loc, Array (sub ty, n))
     | Slice ty -> (loc, Slice (sub ty))
@@ -88,6 +88,8 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
       in let new_provs = List.fold_right sub_next provs []
       in (loc, Struct (name, new_provs, sub_many tys, sub_opt tagged_ty))
   and sub_many (tys : ty list) : ty list = List.map sub tys
+  and sub_bounds (bounds : bounds) : bounds =
+    bounds |> List.map (fun (pv1, pv2) -> (sub_prov pv1, sub_prov pv2))
   and sub_many_pairs (pairs : (field * ty) list) : (field * ty) list =
     List.map (fun (f, ty) -> (f, sub ty)) pairs
   and sub_opt (ty : ty option) : ty option = Option.map sub ty
@@ -95,6 +97,12 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
 
 let subst_many_prov (pairs : (prov * prov) list) (ty : ty) : ty =
   List.fold_right (fun pair ty -> subst_prov ty (fst pair) (snd pair)) pairs ty
+
+let subst_many_prov_in_bounds (pairs : (prov * prov) list) (bounds : bounds) : bounds =
+  let replace_bounds (bounds : bounds) (this : prov) (that : prov) =
+    let replace (prov : prov) = if snd prov = snd that then this else prov
+    in bounds |> List.map (fun (pv1, pv2) -> (replace pv1, replace pv2))
+  in List.fold_right (fun (this, that) bounds -> replace_bounds bounds this that) pairs bounds
 
 let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
   let rec sub (ty : ty) : ty =
@@ -104,8 +112,9 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
     | TyVar tv -> if tv = that then this else ty
     | Uninit ty -> (loc, Uninit (sub ty))
     | Ref (pv, omega, ty) -> (loc, Ref (pv, omega, sub ty))
-    | Fun (evs, pvs, tvs, tys, gamma, ret_ty) ->
-      if not (List.mem that tvs) then (loc, Fun (evs, pvs, tvs, sub_many tys, gamma, sub ret_ty))
+    | Fun (evs, pvs, tvs, tys, gamma, ret_ty, bounds) ->
+      if not $ List.mem that tvs then
+        (loc, Fun (evs, pvs, tvs, sub_many tys, gamma, sub ret_ty, bounds))
       else ty
     | Array (ty, n) -> (loc, Array (sub ty, n))
     | Slice ty -> (loc, Slice (sub ty))
@@ -197,8 +206,8 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
         in sub_opt ell_tys tagged_ty1 tagged_ty2
       else Fail (UnificationFailed (ty1, ty2))
     (* UT-Function *)
-    | (Fun (evs1, prov1, tyvar1, tys1, _, ret_ty1),
-       Fun (evs2, prov2, tyvar2, tys2, _, ret_ty2)) ->
+    | (Fun (evs1, prov1, tyvar1, tys1, _, ret_ty1, bounds1),
+       Fun (evs2, prov2, tyvar2, tys2, _, ret_ty2, bounds2)) ->
       let tyvar_for_sub = List.map (fun x -> (inferred, TyVar x)) tyvar1
       in let* ev_sub = combine_evs "UT-Function" (List.map (fun ev -> EnvVar ev) evs1) evs2
       in let* prov_sub = combine_prov "UT-Function" prov1 prov2
@@ -207,7 +216,9 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
          subst_many_prov prov_sub >> subst_many ty_sub >> subst_many_env_var ev_sub
       in let alpharenamed_tys2 = List.map do_sub tys2
       in let* ell_prime = sub_many ell alpharenamed_tys2 tys1
-      in sub ell_prime ret_ty1 ret_ty2
+      in let alpharenamed_bounds2 = subst_many_prov_in_bounds prov_sub bounds2
+      in if eq_bounds bounds1 alpharenamed_bounds2 then sub ell_prime ret_ty1 ret_ty2
+      else UnificationFailed (ty1, ty2) |> fail
     (* UT-Bottom *)
     | (Any, _) -> Succ ell
     (* UT-Uninit *)
@@ -270,6 +281,9 @@ let outlives (delta : tyvar_env) (ell : loan_env) (prov1: prov) (prov2 : prov) :
     else if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
     else if not $ tyvar_env_abs_sub delta prov1 prov2 then AbsProvsNotSubtype (prov1, prov2) |> fail
     else Succ ()
+
+let check_bounds (delta : tyvar_env) (ell : loan_env) (bounds : bounds) : loan_env tc =
+  foldl (fun ell (prov1, prov2) -> subtype_prov Combine delta ell prov1 prov2) ell bounds
 
 (* find the type of the expr path based on the original type in a context *)
 (* this will error if the context doesn't allow the operation,
@@ -402,14 +416,19 @@ let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
 let expr_prefix_of (phi1 : place_expr) (phi2 : place_expr) : bool =
   expr_root_of phi1 = expr_root_of phi2 && is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2)
 
+let contains (prov : prov) (provs : provs) : bool =
+  provs |> List.map snd |> List.mem (snd prov)
+
 let rec contains_prov (gamma : var_env) (prov : prov) : bool =
   let rec ty_contains (ty : ty) : bool =
     match snd ty with
     | Any | Infer | BaseTy _ | TyVar _ -> false
     | Ref (pv, _, ty) -> snd pv = snd prov || ty_contains ty
-    | Fun (_, pvs, _, tys, gam, ret_ty) ->
-      if not (List.mem prov pvs) then
+    | Fun (_, pvs, _, tys, gam, ret_ty, bounds) ->
+      if not $ contains prov pvs then
         ty_contains ret_ty || tys_contains tys ||
+        bounds |> List.map fst |> contains prov ||
+        bounds |> List.map snd |> contains prov ||
         match gam with
         | Env gam -> contains_prov gam prov
         | Unboxed | EnvVar _ | EnvOf _ -> false
@@ -420,9 +439,6 @@ let rec contains_prov (gamma : var_env) (prov : prov) : bool =
     | Struct (_, pvs, _, _) -> List.mem prov pvs
   and tys_contains (tys : ty list) : bool = List.exists ty_contains tys
   in List.exists (ty_contains >> snd) gamma
-
-let contains (prov : prov) (provs : provs) : bool =
-  provs |> List.map snd |> List.mem (snd prov)
 
 let envs_minus (keep_provs : provs) (ell : loan_env) (gamma : var_env)
                (pi : place) : (loan_env * var_env) tc =
@@ -459,7 +475,7 @@ let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   | Uninit _ -> Succ true (* probably never ask this question anyway *)
   | Ref (_, Unique, _) -> Succ true
   | Ref (_, Shared, _) -> Succ false
-  | Fun (_, _, _, _, env, _) -> noncopyable_env sigma env
+  | Fun (_, _, _, _, env, _, _) -> noncopyable_env sigma env
   | Array (typPrime, _) -> noncopyable sigma typPrime
   | Slice typPrime -> noncopyable sigma typPrime
   | Rec pairs -> any (noncopyable sigma >> snd) pairs
@@ -518,11 +534,12 @@ let rec free_provs_ty (ty : ty) : provs =
   | Any | Infer | BaseTy _ | TyVar _ -> []
   | Uninit ty -> free_provs_ty ty
   | Ref (prov, _, ty) -> free_provs_ty ty |> List.cons prov
-  | Fun (_, provs, _, tys, _, ty) ->
-    let free_in_tys = List.map free_provs_ty tys |> List.flatten
-    in let free_in_ret = free_provs_ty ty
-    in List.append free_in_tys free_in_ret |>
-       List.filter (fun prov -> provs |> List.map snd |> List.mem (snd prov) |> not)
+  | Fun (_, provs, _, tys, _, ty, bounds) ->
+    [tys |> List.map free_provs_ty |> List.flatten;
+     free_provs_ty ty;
+     bounds |> List.map fst;
+     bounds |> List.map snd] |>
+    List.concat |> List.filter (fun pv -> provs |> List.map snd |> List.mem (snd pv) |> not)
   | Array (ty, _) | Slice ty -> free_provs_ty ty
   | Rec tys -> tys |> List.map (free_provs_ty >> snd) |> List.flatten
   | Tup tys -> tys |> List.map free_provs_ty |> List.flatten
@@ -668,9 +685,10 @@ let rec ty_eq (ty1 : ty) (ty2 : ty) : bool =
   | (BaseTy b1, BaseTy b2) -> b1 = b2
   | (TyVar a1, TyVar a2) -> a1 = a2
   | (Ref (p1, o1, ty1), Ref (p2, o2, ty2)) -> snd p1 = snd p2 && o1 = o2 && ty_eq ty1 ty2
-  | (Fun (evs1, pvs1, tyvs1, tys1, env1, ty1), Fun (evs2, pvs2, tyvs2, tys2, env2, ty2)) ->
+  | (Fun (evs1, pvs1, tyvs1, tys1, env1, ty1, bs1), Fun (evs2, pvs2, tyvs2, tys2, env2, ty2, bs2)) ->
     evs1 = evs2 && List.map snd pvs1 = List.map snd pvs2 && tyvs1 = tyvs2 &&
-    List.for_all2 ty_eq tys1 tys2 && env1 = env2 && ty_eq ty1 ty2
+    List.for_all2 ty_eq tys1 tys2 && env1 = env2 && ty_eq ty1 ty2 &&
+    List.map fstsnd bs1 = List.map fstsnd bs2 && List.map sndsnd bs1 = List.map sndsnd bs2
   | (Array (ty1, len1), Array (ty2, len2)) -> len1 = len2 && ty_eq ty1 ty2
   | (Slice ty1, Slice ty2) -> ty_eq ty1 ty2
   | (Rec fields1, Rec fields2) ->

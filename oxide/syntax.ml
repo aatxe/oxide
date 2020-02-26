@@ -79,6 +79,11 @@ type provs = prov list [@@deriving show]
 type bound = prov * prov [@@deriving show]
 type bounds = bound list [@@deriving show]
 
+
+let eq_bounds (bounds1 : bounds) (bounds2 : bounds) : bool =
+  equal_unordered (bounds1 |> List.map (fun (l, r) -> (snd l, snd r)))
+                  (bounds2 |> List.map (fun (l, r) -> (snd l, snd r)))
+
 type base_ty = Bool | U32 | Unit [@@deriving show]
 type prety =
   | Any
@@ -86,7 +91,7 @@ type prety =
   | BaseTy of base_ty
   | TyVar of ty_var
   | Ref of prov * owned * ty
-  | Fun of env_vars * provs * ty_var list * ty list * env * ty
+  | Fun of env_vars * provs * ty_var list * ty list * env * ty * bounds
   | Array of ty * int
   | Slice of ty
   | Rec of (field * ty) list
@@ -128,7 +133,7 @@ let rec is_init (typ : ty) : bool =
   match snd typ with
   | Any | Infer | BaseTy _ | TyVar _ -> true
   | Ref (_, _, ty) -> is_init ty (* invariant: this should always be true *)
-  | Fun (_, _, _, tys, gamma, ty) ->
+  | Fun (_, _, _, tys, gamma, ty, _) ->
     all_init tys && var_env_init gamma && is_init ty
   | Array (ty, _) | Slice ty -> is_init ty
   | Rec fields -> all_init (List.map snd fields)

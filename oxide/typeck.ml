@@ -78,18 +78,22 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
         in let* _ = compute_ty delta ell ty_root $ sndsnd pi
         in Succ () (* FIXME: check if ty_pi is reachable via some projections from ty *)
       in for_each_rev check_ty place_exprs
-    | Fun (evs, provs, tyvars, param_tys, gamma_c, ret_ty) ->
+    | Fun (evs, provs, tyvars, param_tys, gamma_c, ret_ty, bounds) ->
       let* () = valid_env gamma_c
       in let new_delta =
         delta |> tyvar_env_add_env_vars evs
               |> tyvar_env_add_provs provs
               |> tyvar_env_add_ty_vars tyvars
+              |> tyvar_env_add_bounds (bounds |> List.map (fun (l, r) -> (snd l, snd r)))
       in let* () = for_each param_tys (valid_type sigma new_delta ell gamma)
       in valid_type sigma new_delta ell gamma ret_ty
     | Array (typ, n) ->
       if n >= 0 then valid typ
       else InvalidArrayLen (ty, n) |> fail
-    | Uninit typ | Slice typ -> valid typ
+    (* every uninit type is valid since an uninit type can only be used by assigning to the binding
+       at the inner type, and if that type is not valid, no expression exists at the inner type *)
+    | Uninit _ -> Succ ()
+    | Slice typ -> valid typ
     | Rec pairs -> valid_many (List.map snd pairs)
     | Tup tys -> valid_many tys
     | Struct _ -> Succ () (* TODO: use sigma *)
@@ -142,10 +146,11 @@ let flow_closed_envs_forward (computed : ty) (annotated : ty) : ty tc =
     | (Ref (_, _, computed_inner), Ref (prov, omega, annotated_inner)) ->
       let* forward = flow computed_inner annotated_inner
       in Succ (fst annotated, Ref (prov, omega, forward))
-    | (Fun (_, _, _, comp_tys, gamma_c, comp_ret), Fun (evs, provs, tyvars, ann_tys, _, ann_ret)) ->
+    | (Fun (_, _, _, comp_tys, gamma_c, comp_ret, _),
+       Fun (evs, provs, tyvars, ann_tys, _, ann_ret, bounds)) ->
       let* forward_tys = flow_many comp_tys ann_tys
       in let* forward_ret = flow comp_ret ann_ret
-      in let fn_ty : prety = Fun (evs, provs, tyvars, forward_tys, gamma_c, forward_ret)
+      in let fn_ty : prety = Fun (evs, provs, tyvars, forward_tys, gamma_c, forward_ret, bounds)
       in Succ (fst annotated, fn_ty)
     | (Array (computed_inner, _), Array (annotated_inner, len)) ->
       let* forward = flow computed_inner annotated_inner
@@ -228,12 +233,12 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in Succ (out_ty, ellFinal, gamma2)
        | _ -> failwith "unreachable")
     (* T-Move and T-Copy *)
-    | Move pi ->
-      let* root_ty = var_env_lookup_expr_root gamma pi
-      in let* computed_ty = expr_path_of pi |> compute_ty delta ell root_ty
+    | Move phi ->
+      let* root_ty = var_env_lookup_expr_root gamma phi
+      in let* computed_ty = expr_path_of phi |> compute_ty delta ell root_ty
       in let* copy = copyable sigma computed_ty
       in let omega = if copy then Shared else Unique
-      in (match ownership_safe sigma delta ell gamma omega pi with
+      in (match ownership_safe sigma delta ell gamma omega phi with
        | Succ (ty, [(Unique, pi)]) ->
          let* (ellPrime, gammaPrime) =
            match place_expr_to_place pi with
@@ -260,7 +265,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          let* ty = var_env_lookup gamma pi
          in if is_init ty then
            let* gammaPrime = var_env_type_update gamma pi (uninit ty)
-           in Succ ((inferred, BaseTy Unit), ell, gammaPrime)
+           in let ellPrime = kill_loans_for phi ell
+           in Succ ((inferred, BaseTy Unit), ellPrime, gammaPrime)
          else PartiallyMoved (pi, ty) |> fail
        | None -> CannotMove phi |> fail)
     (* T-Borrow *)
@@ -399,8 +405,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     (* T-Function *)
     | Fn fn ->
       (match global_env_find_fn sigma fn with
-       | Some (_, evs, provs, tyvars, params, ret_ty, _, _) ->
-         let fn_ty : ty = (inferred, Fun (evs, provs, tyvars, List.map snd params, Env [], ret_ty))
+       | Some (_, evs, provs, tyvars, params, ret_ty, bounds, _) ->
+         let fn_ty : ty =
+           (inferred, Fun (evs, provs, tyvars, List.map snd params, Env [], ret_ty, bounds))
          in Succ (fn_ty, ell, gamma)
        | None ->
          (match List.assoc_opt fn gamma with
@@ -436,7 +443,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let* () = find_refs_to_captured deltaPrime ell_body ret_ty gamma_c
       in let gammaPrime = var_env_uninit_many gamma moved_vars
       in let fn_ty (ret_ty : ty) : ty =
-           (inferred, Fun ([], provs, tyvars, List.map snd params, Env gamma_c, ret_ty))
+           (inferred, Fun ([], provs, tyvars, List.map snd params, Env gamma_c, ret_ty, []))
       in (match opt_ret_ty with
           | Some ann_ret_ty ->
             let* ellPrime = subtype Combine deltaPrime ell_body ret_ty ann_ret_ty
@@ -445,7 +452,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     (* T-App *)
     | App (fn, envs, new_provs, new_tys, args) ->
       (match tc delta ell gamma fn with
-       | Succ ((_, Fun (evs, provs, tyvars, params, _, ret_ty)), ellF, gammaF) ->
+       | Succ ((_, Fun (evs, provs, tyvars, params, _, ret_ty, bounds)), ellF, gammaF) ->
          let* (arg_tys, ellN, gammaN) = tc_many delta ellF gammaF args
          in let* evaled_envs = map (eval_env_of gammaF) envs
          in let* env_sub = combine_evs "T-App" evaled_envs evs
@@ -456,8 +463,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
            subst_many ty_sub >> subst_many_prov prov_sub >> subst_many_env_var env_sub
          in let new_params = List.map do_sub params
          in let* ty_pairs = combine_tys "T-App" new_params arg_tys
+         in let instantiated_bounds = subst_many_prov_in_bounds prov_sub bounds
+         in let* ellPrime = check_bounds delta ellN instantiated_bounds
          in let types_mismatch ((expected, found) : ty * ty) : bool tc =
-           match subtype Combine delta ellN found expected with
+           match subtype Combine delta ellPrime found expected with
            | Succ _ -> Succ false
            | Fail (UnificationFailed _) -> Succ true
            | Fail err -> Fail err
@@ -465,8 +474,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in (match type_mismatches with
              | None ->
                let new_ret_ty = do_sub ret_ty
-               in let* () = valid_type sigma delta ellN gammaN new_ret_ty
-               in Succ (new_ret_ty, ellN, gammaN)
+               in let* () = valid_type sigma delta ellPrime gammaN new_ret_ty
+               in Succ (new_ret_ty, ellPrime, gammaN)
              | Some (expected, found) -> TypeMismatch (expected, found) |> fail)
        | Succ ((_, Uninit (_, Fun _) as uninit_ty), _, _) -> MovedFunction (fn, uninit_ty) |> fail
        | Succ (found, _, _) -> TypeMismatchFunction found |> fail
@@ -642,11 +651,11 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
     | Ref (prov, omega, ty) ->
       let* ty = do_ty ctx ty
       in Succ (loc, Ref (prov, omega, ty))
-    | Fun (evs, provs, tyvars, tys, gamma, ty) ->
+    | Fun (evs, provs, tyvars, tys, gamma, ty, bounds) ->
       (* should we transform gamma here? maybe not necessary *)
       let* tys = do_tys ctx tys
       in let* ty = do_ty ctx ty
-      in let fn : prety = Fun (evs, provs, tyvars, tys, gamma, ty)
+      in let fn : prety = Fun (evs, provs, tyvars, tys, gamma, ty, bounds)
       in Succ (loc, fn)
     | Array (ty, n) ->
       let* ty = do_ty ctx ty
