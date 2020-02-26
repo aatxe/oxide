@@ -15,24 +15,24 @@ let env_of (var : var) (gamma : var_env) : env tc =
   | Some ty -> Fail (TypeMismatchFunction ty)
   | None -> Fail (UnboundPlace ((dummy, (var, []))))
 
-let loan_env_add_abs_sub (ell : loan_env) (v1 : prov) (v2 : prov) : loan_env tc =
-  let into_prov (var : prov_var) : prov = fst ell |> List.find ((=) var >> fstsnd) |> fst
-  in let is_abs (var : prov_var) : bool = loan_env_is_abs ell (dummy, var)
+let tyvar_env_add_abs_sub (delta : tyvar_env) (v1 : prov) (v2 : prov) : tyvar_env tc =
+  let into_prov (var : prov_var) : prov = delta |> provs_of |> List.find ((=) var >> snd)
+  in let is_abs (var : prov_var) : bool = tyvar_env_prov_mem delta (dummy, var)
   in let both_abs ((lhs, rhs) : prov_var * prov_var) : bool = is_abs lhs && is_abs rhs
   in let already_sub ((lhs, rhs) : prov_var * prov_var) : bool =
-    loan_env_abs_sub ell (dummy, lhs) (dummy, rhs)
+    tyvar_env_abs_sub delta (dummy, lhs) (dummy, rhs)
   in let trans_extend (cs : subty list) (lhs : prov_var) (rhs : prov_var) : subty list tc =
     let cs = List.cons (lhs, rhs) cs
-    in let into_lhs = List.filter (fun cx -> (snd cx) = lhs) cs
-    in let from_rhs = List.filter (fun cx -> (fst cx) = rhs) cs
+    in let into_lhs = List.filter (fun cx -> snd cx = lhs) cs
+    in let from_rhs = List.filter (fun cx -> fst cx = rhs) cs
     in let new_cs = List.append (List.map (fun cx -> (fst cx, rhs)) into_lhs)
            (List.map (fun cx -> (lhs, snd cx)) from_rhs)
     in let bad_pairs = new_cs |> List.filter both_abs |> List.filter (not >> already_sub)
     in if is_empty bad_pairs then List.append new_cs cs |> succ
     else let (lhs, rhs) = List.hd bad_pairs
     in AbsProvsNotSubtype (into_prov lhs, into_prov rhs) |> fail
-  in let* constraints = trans_extend (sndsnd ell) (snd v1) (snd v2)
-  in (fst ell, (sndfst ell, constraints)) |> succ
+  in let* constraints = trans_extend (bounds_of delta) (snd v1) (snd v2)
+  in delta |> tyvar_env_add_bounds constraints |> succ
 
 (* substitutes this for that in ty *)
 let subst_env_var (ty : ty) (this : env) (that : env_var) : ty =
@@ -122,7 +122,7 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
 let subst_many (pairs : (ty * ty_var) list) (ty : ty) : ty =
   List.fold_right (fun pair ty -> subst ty (fst pair) (snd pair)) pairs ty
 
-let subtype_prov (mode : subtype_modality) (ell : loan_env)
+let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
     (prov1 : prov) (prov2 : prov) : loan_env tc =
   match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
   | (Combine, Some rep1, Some rep2) ->
@@ -135,25 +135,26 @@ let subtype_prov (mode : subtype_modality) (ell : loan_env)
     in ellPrime |> loan_env_include prov2 rep1 |> succ
   | (_, None, Some _) ->
     (* UP-AbstractProvLocalProv *)
-    if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
+    if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
     else AbsProvsNotSubtype (prov1, prov2) |> fail
   | (_, Some _, None) ->
     (* UP-LocalProvAbstractProv *)
-    if not (loan_env_is_abs ell prov2) then InvalidProv prov2 |> fail
+    if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
     else CannotPromoteLocalProvToAbstract (prov1, prov2) |> fail
   | (_, None, None) ->
     (* UP-AbstractProvenances *)
-    if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
-    else if not (loan_env_is_abs ell prov2) then InvalidProv prov2 |> fail
-    else if not (loan_env_abs_sub ell prov1 prov2) then AbsProvsNotSubtype (prov1, prov2) |> fail
+    if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
+    else if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
+    else if not $ tyvar_env_abs_sub delta prov1 prov2 then AbsProvsNotSubtype (prov1, prov2) |> fail
     else Succ ell
 
-let subtype_prov_many (mode : subtype_modality) (ell : loan_env)
+let subtype_prov_many (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
     (provs1 : provs) (provs2 : provs) : loan_env tc =
   let* provs = combine_prov "subtype_prov_many" provs1 provs2
-  in foldl (fun ell (prov1, prov2) -> subtype_prov mode ell prov1 prov2) ell provs
+  in foldl (fun ell (prov1, prov2) -> subtype_prov mode delta ell prov1 prov2) ell provs
 
-let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
+let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
+            (ty1 : ty) (ty2 : ty) : loan_env tc =
   let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
     match (snd ty1, snd ty2) with
     (* UT-Refl for base types *)
@@ -172,11 +173,11 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
     | (Slice t1, Slice t2) -> sub ell t1 t2
     (* UT-SharedRef *)
     | (Ref (v1, Shared, t1), Ref (v2, Shared, t2)) ->
-      let* ellPrime = subtype_prov mode ell v1 v2
+      let* ellPrime = subtype_prov mode delta ell v1 v2
       in sub ellPrime t1 t2
     (* UT-UniqueRef *)
     | (Ref (v1, Unique, t1), Ref (v2, _, t2)) ->
-      let* ellPrime = subtype_prov mode ell v1 v2
+      let* ellPrime = subtype_prov mode delta ell v1 v2
       in let* ell1 = sub ellPrime t1 t2
       in let* ell2 = sub ellPrime t2 t1
       in if canonize ell1 = canonize ell2 then Succ ell2
@@ -191,7 +192,7 @@ let subtype (mode : subtype_modality) (ell : loan_env) (ty1 : ty) (ty2 : ty) : l
     (* UT-Struct *)
     | (Struct (name1, provs1, tys1, tagged_ty1), Struct (name2, provs2, tys2, tagged_ty2)) ->
       if name1 = name2 then
-        let* ell_provs = subtype_prov_many mode ell provs1 provs2
+        let* ell_provs = subtype_prov_many mode delta ell provs1 provs2
         in let* ell_tys = sub_many ell_provs tys1 tys2
         in sub_opt ell_tys tagged_ty1 tagged_ty2
       else Fail (UnificationFailed (ty1, ty2))
@@ -254,33 +255,34 @@ let rec decompose_by (path : path) (ty : ty) : (ty_ctx * ty) tc =
 and decompose (ty : ty) (path : path) : (ty_ctx * ty) tc = decompose_by path ty
 
 (* checks that prov2 outlives prov1, erroring otherwise *)
-let outlives (ell : loan_env) (prov1: prov) (prov2 : prov) : unit tc =
+let outlives (delta : tyvar_env) (ell : loan_env) (prov1: prov) (prov2 : prov) : unit tc =
   match (loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
   | (Some _, Some _) -> Succ ()
   | (None, Some _) ->
-    if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
+    if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
     else ProvDoesNotOutlive (prov1, prov2) |> fail
   | (Some _, None) ->
-    if not (loan_env_is_abs ell prov2) then InvalidProv prov2 |> fail
+    if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
     else Succ ()
   | (None, None) ->
     (* UP-AbstractProvenances *)
-    if not (loan_env_is_abs ell prov1) then InvalidProv prov1 |> fail
-    else if not (loan_env_is_abs ell prov2) then InvalidProv prov2 |> fail
-    else if not (loan_env_abs_sub ell prov1 prov2) then AbsProvsNotSubtype (prov1, prov2) |> fail
+    if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
+    else if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
+    else if not $ tyvar_env_abs_sub delta prov1 prov2 then AbsProvsNotSubtype (prov1, prov2) |> fail
     else Succ ()
 
 (* find the type of the expr path based on the original type in a context *)
 (* this will error if the context doesn't allow the operation,
    e.g. dereferencing a shared reference in a unique context *)
-let compute_ty_in (ctx : owned) (ell : loan_env) (ty : ty) (path : expr_path) : ty tc =
+let compute_ty_in (ctx : owned) (delta : tyvar_env) (ell : loan_env)
+                  (ty : ty) (path : expr_path) : ty tc =
   let rec compute (passed : prov list) (path : expr_path) (ty : ty)  : ty tc =
     let (loc, ty) = ty
     in match (ty, path) with
     | (ty, []) -> Succ (loc, ty)
     | (Ref (prov, omega, ty), Deref :: path) ->
       if is_at_least ctx omega then
-        let* () = outlives ell |> flip $ prov |> for_each passed
+        let* () = outlives delta ell |> flip $ prov |> for_each passed
         in compute (List.cons prov passed) path ty
       else Fail (PermissionErr (ty, path, ctx))
     | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
@@ -293,8 +295,8 @@ let compute_ty_in (ctx : owned) (ell : loan_env) (ty : ty) (path : expr_path) : 
   in compute [] path ty
 
 (* find the type of the expr path based on the original type, assuming a shared use context*)
-let compute_ty (ell : loan_env) (ty : ty) (path : expr_path) : ty tc =
-  compute_ty_in Shared ell ty path
+let compute_ty (delta : tyvar_env) (ell : loan_env) (ty : ty) (path : expr_path) : ty tc =
+  compute_ty_in Shared delta ell ty path
 
 let rec plug (fill : ty) (ctx : ty_ctx) : ty =
   let (loc, ctx) = ctx
@@ -425,8 +427,7 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
     | Some (_, Ref (prov, _, ty)) ->
       let* (ell, gamma) = Some ty |> loop envs
       in let new_gamma = sndfst pi |> var_env_exclude gamma
-      in if not $ contains_prov new_gamma prov && not $ loan_env_is_abs ell prov then
-        Succ (loan_env_exclude prov ell, new_gamma)
+      in if not $ contains_prov new_gamma prov then Succ (loan_env_exclude prov ell, new_gamma)
       else Succ (ell, new_gamma)
     | Some (_, Any) | Some (_, Infer) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
     | Some (_, Struct _) -> Succ envs
@@ -439,10 +440,8 @@ let envs_minus (ell : loan_env) (gamma : var_env) (pi : place) : (loan_env * var
   and loops (envs : loan_env * var_env) = foldl loop envs >> List.map Option.some
   in let pi_as_phi = place_to_place_expr pi
   in let remove_provs (ell : loan_env) : loan_env =
-    let (concrete, abstract) = ell
-    in (List.filter (not >> List.exists (expr_prefix_of |> flip $ pi_as_phi)
-                         >> List.map snd >> snd) concrete,
-        abstract)
+    ell |> List.filter (not >> List.exists (expr_prefix_of |> flip $ pi_as_phi)
+                            >> List.map snd >> snd)
   in let* opt = var_env_lookup_opt gamma pi
   in let* (ell_out, gamma_out) = loop (ell, sndfst pi |> var_env_exclude gamma) opt
   in Succ (remove_provs ell_out, gamma_out)
@@ -626,7 +625,8 @@ let free_vars (expr : expr) : vars tc = free_vars_helper expr (fun _ -> Succ tru
 let free_provs_var_env : var_env -> provs = List.flatten >> List.map (free_provs_ty >> snd)
 
 (* produces an error if the loans in the given type are found in the parameter list *)
-let find_refs_to_params (ell : loan_env) (ty : ty) (params : (var * ty) list) : unit tc =
+let find_refs_to_params (delta : tyvar_env) (ell : loan_env)
+                        (ty : ty) (params : (var * ty) list) : unit tc =
   let place_in_params (pi : place) : bool = List.mem_assoc (root_of pi) params
   in let rec impl (ty : ty) : unit tc =
     match snd ty with
@@ -640,7 +640,7 @@ let find_refs_to_params (ell : loan_env) (ty : ty) (params : (var * ty) list) : 
         in if is_empty param_loans then impl ty
         else NoReferenceToParameter (List.hd param_loans) |> fail
       | None ->
-        if loan_env_is_abs ell prov then Succ ()
+        if tyvar_env_prov_mem delta prov then Succ ()
         else InvalidProv prov |> fail)
     | Fun _ -> Succ ()
     | Array (ty, _) | Slice ty -> impl ty
@@ -650,16 +650,11 @@ let find_refs_to_params (ell : loan_env) (ty : ty) (params : (var * ty) list) : 
     | Struct _ | Uninit _ -> Succ ()
   in impl ty
 
-let find_refs_to_captured (ell : loan_env) (ty : ty) (gamma_c : var_env) : unit tc =
-  match find_refs_to_params ell ty gamma_c with
+let find_refs_to_captured (delta : tyvar_env) (ell : loan_env)
+                          (ty : ty) (gamma_c : var_env) : unit tc =
+  match find_refs_to_params delta ell ty gamma_c with
   | Fail (NoReferenceToParameter pi) -> NoReferenceToCaptured pi |> fail
   | res -> res
-
-let places_of (ell : loan_env) : place_expr list =
-  ell |> fst |> List.map snd |> List.flatten |> List.map snd
-
-let domain_of (ell : loan_env) : provs =
-  ell |> fst |> List.map fst |> List.append (ell |> sndfst)
 
 (* type equality, ignoring the source locations *)
 let rec ty_eq (ty1 : ty) (ty2 : ty) : bool =

@@ -66,15 +66,12 @@ let apply_suffix (suffix : expr_path) (phi : place_expr) : place_expr =
 
 (* kill all the loans for phi in ell *)
 let kill_loans_for (phi : place_expr) (ell : loan_env) : loan_env =
-  let (concrete, abstract) = ell
-  in let phi = apply_suffix [Deref] phi
+  let phi = apply_suffix [Deref] phi
   in let not_killed (loan : loan) : bool =
     let (_, phi_prime) = loan
     in not (expr_root_of phi = expr_root_of phi_prime &&
             is_expr_prefix_of (expr_path_of phi_prime) (expr_path_of phi))
-  in let concretePrime =
-    List.map (fun (prov, loans) -> (prov, List.filter not_killed loans)) concrete
-  in (concretePrime, abstract)
+  in ell |> List.map (fun (prov, loans) -> (prov, List.filter not_killed loans))
 
 (* are the given places disjoint? *)
 let disjoint (pi1 : place) (pi2 : place) : bool =
@@ -99,8 +96,8 @@ let expr_disjoint_place (pi : place) (phi : place_expr) : bool =
   let (inner_pi, _) = decompose_place_expr phi
   in disjoint pi inner_pi
 
-let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : owned)
-                   (tl_phi : place_expr) : (ty * loans) tc =
+let ownership_safe (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+                   (omega : owned) (tl_phi : place_expr) : (ty * loans) tc =
   let check_permission (ty : ty) (suffix : expr_path) : unit tc =
     match (snd ty, suffix) with
     | (Ref (_, omega_ref, _), Deref :: _) ->
@@ -126,7 +123,7 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
       in let safety_test ((_, ty) : place * ty) : unit tc =
         match snd ty with
         | Ref (prov, _, _) ->
-          let loans = loan_env_lookup ell prov
+          let loans = if tyvar_env_prov_mem delta prov then [] else loan_env_lookup ell prov
           in let loan_to_place : loan -> place option = place_expr_to_place >> snd
           in let places_with_loans = List.map (fun loan -> (loan_to_place loan, loan)) loans
           in let conflicts =
@@ -140,7 +137,7 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
         | _ -> failwith "O-UniqueSafety/O-SharedSafety: unreachable"
       in let* () = for_each refined_places safety_test
       in let* root_ty = var_env_lookup_expr_root gamma phi
-      in let* ty = expr_path_of phi |> compute_ty_in omega ell root_ty
+      in let* ty = expr_path_of phi |> compute_ty_in omega delta ell root_ty
       in Succ (ty, [(omega, phi)])
     (* O-Deref, O-DerefAbs *)
     | None ->
@@ -149,7 +146,7 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
       in match snd ty with
       | Ref (prov, _, _) ->
         let* () = check_permission ty suffix
-        in let loans = loan_env_lookup ell prov
+        in let loans = if tyvar_env_prov_mem delta prov then [] else loan_env_lookup ell prov
         in let new_exclusions = List.map (fstsnd >> decompose_place_expr >> snd) loans
         in let exclusions = List.concat [[(snd inner_pi)]; new_exclusions; exclusions]
         in let* safe_results =
@@ -161,7 +158,7 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
         in let safety_test ((_, ty) : place * ty) : unit tc =
           match snd ty with
           | Ref (prov, _, _) ->
-            let loans = loan_env_lookup ell prov
+            let loans = if tyvar_env_prov_mem delta prov then [] else loan_env_lookup ell prov
             in let conflicts = List.find_all (expr_not_disjoint_from phi >> snd) loans
             in if is_empty conflicts then Succ ()
             else SafetyErr ((omega, tl_phi), List.hd conflicts) |> fail
@@ -169,7 +166,7 @@ let ownership_safe (_ : global_env) (ell : loan_env) (gamma : var_env) (omega : 
         in let* () = for_each refined_places safety_test
         in let loans = flat_map snd safe_results
         in let* root_ty = var_env_lookup_expr_root gamma phi
-        in let* ty = expr_path_of phi |> compute_ty_in omega ell root_ty
+        in let* ty = expr_path_of phi |> compute_ty_in omega delta ell root_ty
         in Succ (ty, List.cons (omega, phi) loans)
       | Uninit (loc, Ref (prov, omega, ty)) ->
         PartiallyMoved (inner_pi, (loc, Ref (prov, omega, ty))) |> fail

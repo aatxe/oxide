@@ -79,7 +79,6 @@ type provs = prov list [@@deriving show]
 type bound = prov * prov [@@deriving show]
 type bounds = bound list [@@deriving show]
 
-type kind = Star | Prov [@@deriving show]
 type base_ty = Bool | U32 | Unit [@@deriving show]
 type prety =
   | Any
@@ -264,100 +263,83 @@ let global_env_find_struct (sigma : global_env) (name : struct_var) : struct_def
   | Some (TupStructDef defn) -> Some (Tup defn)
   | _ -> None
 
-type tyvar_env = env_vars * provs * ty_var list [@@deriving show]
-let empty_delta : tyvar_env = ([], [], [])
+type subty = prov_var * prov_var [@@deriving show]
+type tyvar_env = env_vars * provs * ty_var list * subty list [@@deriving show]
+let empty_delta : tyvar_env = ([], [], [], [])
 
-let env_vars_of (delta : tyvar_env) : env_vars = match delta with (evs, _, _) -> evs
-let provs_of (delta : tyvar_env) : provs = match delta with (_, provs, _) -> provs
-let ty_vars_of (delta : tyvar_env) : ty_var list = match delta with (_, _, tyvars) -> tyvars
+let env_vars_of (delta : tyvar_env) : env_vars = match delta with (evs, _, _, _) -> evs
+let provs_of (delta : tyvar_env) : provs = match delta with (_, provs, _, _) -> provs
+let ty_vars_of (delta : tyvar_env) : ty_var list = match delta with (_, _, tyvars, _) -> tyvars
+let bounds_of (delta : tyvar_env) : subty list = match delta with (_, _, _, bounds) -> bounds
 
 let tyvar_env_add_env_vars (evs : env_vars) (delta : tyvar_env) : tyvar_env =
   match delta with
-  | (curr_evs, provs, tyvars) -> (list_union curr_evs evs, provs, tyvars)
+  | (curr_evs, provs, tyvars, bounds) -> (list_union curr_evs evs, provs, tyvars, bounds)
 let tyvar_env_add_provs (provs : provs) (delta : tyvar_env) : tyvar_env =
   match delta with
-  | (evs, curr_provs, tyvars) -> (evs, list_union curr_provs provs, tyvars)
+  | (evs, curr_provs, tyvars, bounds) -> (evs, list_union curr_provs provs, tyvars, bounds)
 let tyvar_env_add_ty_vars (tyvars : ty_var list) (delta : tyvar_env) : tyvar_env =
   match delta with
-  | (evs, provs, curr_tyvars) -> (evs, provs, list_union curr_tyvars tyvars)
+  | (evs, provs, curr_tyvars, bounds) -> (evs, provs, list_union curr_tyvars tyvars, bounds)
+let tyvar_env_add_bounds (bounds : subty list) (delta : tyvar_env) : tyvar_env =
+  match delta with
+  | (evs, provs, tyvars, curr_bounds) -> (evs, provs, tyvars, list_union curr_bounds bounds)
 
 let tyvar_env_prov_mem (delta : tyvar_env) (var : prov) : bool =
   provs_of delta |> List.map snd |> List.mem (snd var)
 let tyvar_env_ty_mem (delta : tyvar_env) (var : ty_var) : bool =
   ty_vars_of delta |> List.mem var
-let tyvar_env_env_var_mem (var : env_var) (delta : tyvar_env) : bool =
+let tyvar_env_env_var_mem (delta : tyvar_env) (var : env_var) : bool =
   env_vars_of delta |> List.mem var
+let tyvar_env_abs_sub (delta : tyvar_env) (v1 : prov) (v2 : prov) : bool =
+  bounds_of delta |> List.mem (snd v1, snd v2) || (snd v1) = (snd v2)
 
-type subty = prov_var * prov_var [@@deriving show]
-type loan_env = (prov * loans) list * (prov list * subty list) [@@deriving show]
-let empty_ell : loan_env = ([], ([], []))
+type loan_env = (prov * loans) list [@@deriving show]
+let empty_ell : loan_env = []
+
+let places_of (ell : loan_env) : place_expr list =
+  ell |> List.map snd |> List.flatten |> List.map snd
+let domain_of (ell : loan_env) : provs =
+  ell |> List.map fst
 
 let to_prov_var_keys (concrete : (prov * loans) list) : (prov_var * loans) list =
   List.map (fun ((_, prov), loans) -> (prov, loans)) concrete
 
 let loan_env_mem (ell : loan_env) (var : prov) : bool =
-  fst ell |> to_prov_var_keys |> List.mem_assoc (snd var)
+  ell |> to_prov_var_keys |> List.mem_assoc (snd var)
 let loan_env_lookup_opt (ell : loan_env) (var : prov) : loans option =
-  fst ell |> to_prov_var_keys |> List.assoc_opt (snd var)
-let loan_env_is_abs (ell : loan_env) (var : prov) : bool =
-  sndfst ell |> List.map snd |> List.mem (snd var)
-let loan_env_abs_sub (ell : loan_env) (v1 : prov) (v2 : prov) : bool =
-  List.mem (snd v1, snd v2) (sndsnd ell) || (snd v1) = (snd v2)
+  ell |> to_prov_var_keys |> List.assoc_opt (snd var)
 let loan_env_lookup (ell : loan_env) (var : prov) : loans =
-  if loan_env_is_abs ell var then []
-  else fst ell |> to_prov_var_keys |> List.assoc (snd var)
+  ell |> to_prov_var_keys |> List.assoc (snd var)
 
 let loan_env_eq (ell1: loan_env) (ell2: loan_env) : bool =
-  let concrete_dom = List.map (snd >> fst) >> fst
-  in let abs_names = List.map snd >> sndfst
+  let concrete_dom = List.map (snd >> fst)
   in let equal_loans (prov : prov) : bool =
     equal_unordered (loan_env_lookup ell1 prov) (loan_env_lookup ell2 prov)
-  in let concrete_matches =
-    equal_unordered (concrete_dom ell1) (concrete_dom ell2) &&
-    ell1 |> fst |> List.map fst |> List.for_all equal_loans
-  in let abstract_matches = equal_unordered (abs_names ell1) (abs_names ell2)
-  in let binding_matches = equal_unordered (sndsnd ell1) (sndsnd ell2)
-  in concrete_matches && abstract_matches && binding_matches
+  in equal_unordered (concrete_dom ell1) (concrete_dom ell2) &&
+     ell1 |> List.map fst |> List.for_all equal_loans
 
 let loan_env_filter_dom (ell : loan_env) (provs : provs) : loan_env =
   let prov_vars = List.map snd provs
-  in (fst ell |> List.filter (fun ((_, var), _) -> List.mem var prov_vars),
-      (sndfst ell |> List.filter (fun (_, var) -> List.mem var prov_vars),
-       sndsnd ell |> List.filter (fun (lhs, rhs) -> List.mem lhs prov_vars ||
-                                                    List.mem rhs prov_vars)))
+  in ell |> List.filter (flip List.mem $ prov_vars >> fstsnd)
 
 let loan_env_include (var : prov) (loans : loans) (ell : loan_env) : loan_env =
-  (fst ell |> List.filter ((<>) (snd var) >> fstsnd) |> List.cons (var, loans),
-   snd ell)
+  ell |> List.filter ((<>) (snd var) >> fstsnd) |> List.cons (var, loans)
 let loan_env_include_all (provs : provs) (loans : loans) (ell : loan_env) : loan_env =
   let entries = List.map (fun prov -> (prov, loans)) provs
-  in (fst ell |> List.filter (fun (prov, _) -> provs |> List.map snd |> List.mem (snd prov) |> not)
-              |> List.append entries,
-      snd ell)
+  in ell |> List.filter (fun (prov, _) -> provs |> List.map snd |> List.mem (snd prov) |> not)
+         |> List.append entries
 
-let loan_env_bind (ell : loan_env) (prov : prov) : loan_env =
-  (fst ell, (sndfst ell |> List.cons prov, sndsnd ell))
-let loan_env_bindall (ell : loan_env) (provs : prov list) : loan_env =
-  (fst ell, (sndfst ell |> List.append provs, sndsnd ell))
 let loan_env_append (ell1 : loan_env) (ell2 : loan_env) : loan_env =
-  (List.append (fst ell1) (fst ell2),
-   (List.append (sndfst ell1) (sndfst ell2), sndsnd ell2))
+  List.append ell1 ell2
 
 let loan_env_exclude (prov : prov) (ell : loan_env) : loan_env =
-  (fst ell |> List.filter ((<>) (snd prov) >> fstsnd),
-   (sndfst ell |> List.filter (fun v -> snd v <> snd prov),
-    sndsnd ell |> List.filter (fun cs -> fst cs <> snd prov && snd cs <> snd prov)))
+  ell |> List.filter ((<>) (snd prov) >> fstsnd)
 let loan_env_exclude_all (provs : provs) (ell : loan_env) : loan_env =
-  let prov_vars = List.map snd provs
-  in (fst ell |> List.filter (fun ((_, prov), _) -> prov_vars |> List.mem prov |> not),
-   (sndfst ell |> List.filter (fun v -> prov_vars |> List.mem (snd v) |> not),
-    sndsnd ell |> List.filter (fun (lhs, rhs) -> prov_vars |> List.mem lhs |> not &&
-                                                 prov_vars |> List.mem rhs |> not)))
+  ell |> List.filter (fun ((_, prov), _) -> provs |> List.map snd |> List.mem prov |> not)
 
 let canonize (ell : loan_env) : loan_env =
-  (fst ell |> List.sort_uniq compare_keys,
-   (sndfst ell |> List.sort_uniq compare_keys,
-    sndsnd ell |> List.sort_uniq compare_keys))
+  ell |> List.sort_uniq compare_keys
 
 (* var_env is mutually recursive with ty and as such, is defined above *)
 let empty_gamma : var_env = []
