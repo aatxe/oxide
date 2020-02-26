@@ -234,11 +234,11 @@ let rec decompose_by (path : path) (ty : ty) : (ty_ctx * ty) tc =
   in match (ty, path) with
   | (ty, []) -> Succ ((inferred, Hole), (loc, ty))
   | (Rec pairs, (Field f) :: path) ->
-    let* (inner_ctx, ty) = List.assoc f pairs |> decompose_by path
+    let* (inner_ctx, inner_ty) = List.assoc f pairs |> decompose_by path
     in let replace (pair : field * ty) : field * ty_ctx =
-      if fst pair = f then (f, inner_ctx) else (fst pair, (fst ty, Ty ty))
+      if fst pair = f then (f, inner_ctx) else (fst pair, (loc, Ty (loc, ty)))
     in let ctx : ty_ctx = (loc, Rec (List.map replace pairs))
-    in Succ (ctx, ty)
+    in Succ (ctx, inner_ty)
   | (Tup tys, (Index n) :: path) ->
     let* (inner_ctx, ty) = List.nth tys n |> decompose_by path
     in let replace (idx : int) (ty : ty) : ty_ctx =
