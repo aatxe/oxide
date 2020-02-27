@@ -29,8 +29,8 @@ let rec decompose_by (path : path) (ty : ty) : (ty_ctx * ty) tc =
     let* (inner_ctx, ty) = decompose ty path
     in let ctx : ty_ctx = (loc, Tagged (name, provs, tys, inner_ctx))
     in Succ (ctx, ty)
-  | (Uninit ty, path) -> Fail (PartiallyMovedPath (ty, path))
-  | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
+  | (Uninit ty, path) -> PartiallyMovedPath (ty, path) |> fail
+  | (ty, path) -> InvalidOperationOnType (path, (loc, ty)) |> fail
 and decompose (ty : ty) (path : path) : (ty_ctx * ty) tc = decompose_by path ty
 
 let rec plug (fill : ty) (ctx : ty_ctx) : ty =
@@ -38,7 +38,7 @@ let rec plug (fill : ty) (ctx : ty_ctx) : ty =
   in match ctx with
   | Hole -> fill
   | Ty ty -> ty
-  | Tagged (tag, provs, tys, ctx) -> (loc, Struct (tag, provs, tys, Some (plug fill ctx)))
+  | Tagged (tag, provs, tys, ctx) -> (loc, Struct (tag, provs, tys, Option.some $ plug fill ctx))
   | Rec pair -> (loc, Rec (List.map (fun (f, ctx) -> (f, plug fill ctx)) pair))
   | Tup ctx -> (loc, Tup (List.map (plug fill) ctx))
 
@@ -50,24 +50,24 @@ let var_env_lookup (gamma : var_env) (pi : place) : ty tc =
   | Some ty ->
     let* (_, ty) = decompose ty path
     in Succ ty
-  | None -> Fail (UnboundPlace pi)
+  | None -> UnboundPlace pi |> fail
 
 let var_env_lookup_root (gamma : var_env) (pi : place) : ty tc =
   let (root, _) = snd pi
   in match List.assoc_opt root gamma with
   | Some ty -> Succ ty
-  | None -> Fail (UnboundPlace pi)
+  | None -> UnboundPlace pi |> fail
 
 let var_env_lookup_expr_root (gamma : var_env) (phi : place_expr) : ty tc =
   let (root, _) = snd phi
   in match List.assoc_opt root gamma with
   | Some ty -> Succ ty
-  | None -> Fail (UnboundPlaceExpr phi)
+  | None -> UnboundPlaceExpr phi |> fail
 
 let var_env_lookup_many (gamma : var_env) (pis : place list) : ty list tc =
   let lookup_seq (pi : place) (tys : ty list) : ty list tc =
     let* ty = var_env_lookup gamma pi
-    in Succ (List.cons ty tys)
+    in List.cons ty tys |> succ
   in foldr lookup_seq pis []
 
 let var_env_lookup_opt (gamma : var_env) (pi : place) : (ty option) tc =
@@ -75,13 +75,13 @@ let var_env_lookup_opt (gamma : var_env) (pi : place) : (ty option) tc =
   in match List.assoc_opt root gamma with
   | Some ty ->
     let* (_, ty) = decompose ty path
-    in Succ (Some ty)
+    in Some ty |> succ
   | None -> Succ None
 
 let var_env_lookup_place_expr (gamma : var_env) (pi : place_expr) : ty tc =
   match place_expr_to_place pi with
   | Some pi -> var_env_lookup gamma pi
-  | None -> Fail (PlaceExprNotAPlace pi)
+  | None -> PlaceExprNotAPlace pi |> fail
 
 let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
   let (root, _) = snd pi
@@ -94,8 +94,8 @@ let var_env_type_update (gamma : var_env) (pi : place) (ty : ty) : var_env tc =
   in match List.assoc_opt root gamma with
   | Some root_ty ->
     let* (ctx, _) = decompose root_ty path
-    in Succ (replace_assoc gamma root (plug ty ctx))
-  | None -> Fail (UnboundPlace pi)
+    in plug ty ctx |> replace_assoc gamma root |> succ
+  | None -> UnboundPlace pi |> fail
 
 let var_env_uninit_many (gamma : var_env) (vars : var list) : var_env =
   let work (entry : var * ty) : var * ty =
@@ -110,6 +110,36 @@ let var_env_diff (gam1 : var_env) (gam2 : var_env) : var_env =
   let not_in_gam2 (entry1 : var * ty) : bool =
     not $ List.exists (fun entry2 -> fst entry2 = fst entry1) gam2
   in List.filter not_in_gam2 gam1
+
+(* looks up var in gamma, and if the type is a closure, returns its closed over environment *)
+let env_of (var : var) (gamma : var_env) : env tc =
+  match List.assoc_opt var gamma with
+  | Some (_, Fun (_, _, _, _, gamma_c, _, _)) -> Succ gamma_c
+  | Some ty -> TypeMismatchFunction ty |> fail
+  | None -> UnboundPlace ((dummy, (var, []))) |> fail
+
+(* returns whether or not the given gamma contains the provenance in any types *)
+let rec contains_prov (gamma : var_env) (prov : prov) : bool =
+  let rec ty_contains (ty : ty) : bool =
+    match snd ty with
+    | Any | Infer | BaseTy _ | TyVar _ -> false
+    | Ref (pv, _, ty) -> snd pv = snd prov || ty_contains ty
+    | Fun (_, pvs, _, tys, gam, ret_ty, bounds) ->
+      if not $ contains prov pvs then
+        ty_contains ret_ty || tys_contains tys ||
+        bounds |> List.map fst |> contains prov ||
+        bounds |> List.map snd |> contains prov ||
+        match gam with
+        | Env gam -> contains_prov gam prov
+        | Unboxed | EnvVar _ | EnvOf _ -> false
+      else false
+    | Uninit ty | Array (ty, _) | Slice ty -> ty_contains ty
+    | Rec pairs -> List.map snd pairs |> tys_contains
+    | Tup tys -> tys_contains tys
+    | Struct (_, pvs, _, _) -> List.mem prov pvs
+  and tys_contains (tys : ty list) : bool = List.exists ty_contains tys
+  in List.exists (ty_contains >> snd) gamma
+
 
 (* is path2 a prefix of path1? *)
 let rec is_prefix_of (path1 : path) (path2 : path) : bool =
@@ -138,13 +168,6 @@ let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
 let expr_prefix_of (phi1 : place_expr) (phi2 : place_expr) : bool =
   expr_root_of phi1 = expr_root_of phi2 && is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2)
 
-(* looks up var in gamma, and if the type is a closure, returns its closed over environment *)
-let env_of (var : var) (gamma : var_env) : env tc =
-  match List.assoc_opt var gamma with
-  | Some (_, Fun (_, _, _, _, gamma_c, _, _)) -> Succ gamma_c
-  | Some ty -> Fail (TypeMismatchFunction ty)
-  | None -> Fail (UnboundPlace ((dummy, (var, []))))
-
 let tyvar_env_add_abs_sub (delta : tyvar_env) (v1 : prov) (v2 : prov) : tyvar_env tc =
   let into_prov (var : prov_var) : prov = delta |> provs_of |> List.find ((=) var >> snd)
   in let is_abs (var : prov_var) : bool = tyvar_env_prov_mem delta (dummy, var)
@@ -156,7 +179,7 @@ let tyvar_env_add_abs_sub (delta : tyvar_env) (v1 : prov) (v2 : prov) : tyvar_en
     in let into_lhs = List.filter (fun cx -> snd cx = lhs) cs
     in let from_rhs = List.filter (fun cx -> fst cx = rhs) cs
     in let new_cs = List.append (List.map (fun cx -> (fst cx, rhs)) into_lhs)
-           (List.map (fun cx -> (lhs, snd cx)) from_rhs)
+                                (List.map (fun cx -> (lhs, snd cx)) from_rhs)
     in let bad_pairs = new_cs |> List.filter both_abs |> List.filter (not >> already_sub)
     in if is_empty bad_pairs then List.append new_cs cs |> succ
     else let (lhs, rhs) = List.hd bad_pairs
@@ -173,7 +196,7 @@ let subst_env_var (ty : ty) (this : env) (that : env_var) : ty =
     | Uninit ty -> (loc, Uninit (sub ty))
     | Ref (prov, omega, ty) -> (loc, Ref (prov, omega, sub ty))
     | Fun (evs, pvs, tvs, tys, gamma, ret_ty, bounds) ->
-      if not (List.mem that evs) then
+      if not $ List.mem that evs then
         let gammaPrime =
           match gamma with
           | EnvVar ev -> if ev = that then this else gamma
@@ -451,27 +474,6 @@ let compute_ty (delta : tyvar_env) (ell : loan_env) (gamma :var_env) (phi : plac
 let check_bounds (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
                  (bounds : bounds) : loan_env tc =
   foldl (fun ell (prov1, prov2) -> outlives delta ell gamma prov1 prov2) ell bounds
-
-let rec contains_prov (gamma : var_env) (prov : prov) : bool =
-  let rec ty_contains (ty : ty) : bool =
-    match snd ty with
-    | Any | Infer | BaseTy _ | TyVar _ -> false
-    | Ref (pv, _, ty) -> snd pv = snd prov || ty_contains ty
-    | Fun (_, pvs, _, tys, gam, ret_ty, bounds) ->
-      if not $ contains prov pvs then
-        ty_contains ret_ty || tys_contains tys ||
-        bounds |> List.map fst |> contains prov ||
-        bounds |> List.map snd |> contains prov ||
-        match gam with
-        | Env gam -> contains_prov gam prov
-        | Unboxed | EnvVar _ | EnvOf _ -> false
-      else false
-    | Uninit ty | Array (ty, _) | Slice ty -> ty_contains ty
-    | Rec pairs -> List.map snd pairs |> tys_contains
-    | Tup tys -> tys_contains tys
-    | Struct (_, pvs, _, _) -> List.mem prov pvs
-  and tys_contains (tys : ty list) : bool = List.exists ty_contains tys
-  in List.exists (ty_contains >> snd) gamma
 
 let envs_minus (keep_provs : provs) (ell : loan_env) (gamma : var_env)
                (pi : place) : (loan_env * var_env) tc =
