@@ -1,6 +1,6 @@
 (* an implementation of ownership safety *)
-open Syntax
 open Meta
+open Syntax
 open Util
 
 (* explode the given variable and type into all of its sub-places and their respective types *)
@@ -56,6 +56,8 @@ let keep_if_ref (context : owned) (places : (place * ty) list) : (place * ty) li
     match snd ty with Ref (_, omega, _) -> significant_in_context omega | _ -> false
   in List.filter ref_test places
 
+(* decompose a place expression into an inner place and the rest of the expression path *)
+(* invariant: if the path is non-empty, the first entry in the path will always be Deref *)
 let decompose_place_expr (phi : place_expr) : place * expr_path =
   let (prefix, suffix) = expr_path_of phi |> partition ((<>) Deref)
   in let inner_pi = (fst phi, (expr_root_of phi, expr_path_to_path prefix |> Option.get))

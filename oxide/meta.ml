@@ -51,21 +51,25 @@ let var_env_lookup (gamma : var_env) (pi : place) : ty tc =
     let* (_, ty) = decompose ty path
     in Succ ty
   | None -> Fail (UnboundPlace pi)
+
 let var_env_lookup_root (gamma : var_env) (pi : place) : ty tc =
   let (root, _) = snd pi
   in match List.assoc_opt root gamma with
   | Some ty -> Succ ty
   | None -> Fail (UnboundPlace pi)
+
 let var_env_lookup_expr_root (gamma : var_env) (phi : place_expr) : ty tc =
   let (root, _) = snd phi
   in match List.assoc_opt root gamma with
   | Some ty -> Succ ty
   | None -> Fail (UnboundPlaceExpr phi)
+
 let var_env_lookup_many (gamma : var_env) (pis : place list) : ty list tc =
   let lookup_seq (pi : place) (tys : ty list) : ty list tc =
     let* ty = var_env_lookup gamma pi
     in Succ (List.cons ty tys)
   in foldr lookup_seq pis []
+
 let var_env_lookup_opt (gamma : var_env) (pi : place) : (ty option) tc =
   let (root, path) = snd pi
   in match List.assoc_opt root gamma with
@@ -73,10 +77,12 @@ let var_env_lookup_opt (gamma : var_env) (pi : place) : (ty option) tc =
     let* (_, ty) = decompose ty path
     in Succ (Some ty)
   | None -> Succ None
+
 let var_env_lookup_place_expr (gamma : var_env) (pi : place_expr) : ty tc =
   match place_expr_to_place pi with
   | Some pi -> var_env_lookup gamma pi
   | None -> Fail (PlaceExprNotAPlace pi)
+
 let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
   let (root, _) = snd pi
   in match List.assoc_opt root gamma with
@@ -100,15 +106,10 @@ let var_env_include (gamma : var_env) (x : var) (typ : ty) = List.cons (x, typ) 
 let var_env_append (gamma1 : var_env) (gamma2 : var_env) = List.append gamma1 gamma2
 let var_env_exclude (gamma : var_env) (x : var) = List.remove_assoc x gamma
 
-(* find the root of a given place expr *)
-let root_of : place -> var = fst >> snd
-(* find the path for the given place *)
-let path_of : place -> path = snd >> snd
-
-(* find the root of a given place expr *)
-let expr_root_of : place_expr -> var = fst >> snd
-(* find the path for the given place_expr *)
-let expr_path_of : place_expr -> expr_path = snd >> snd
+let var_env_diff (gam1 : var_env) (gam2 : var_env) : var_env =
+  let not_in_gam2 (entry1 : var * ty) : bool =
+    not $ List.exists (fun entry2 -> fst entry2 = fst entry1) gam2
+  in List.filter not_in_gam2 gam1
 
 (* is path2 a prefix of path1? *)
 let rec is_prefix_of (path1 : path) (path2 : path) : bool =
@@ -136,9 +137,6 @@ let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
 
 let expr_prefix_of (phi1 : place_expr) (phi2 : place_expr) : bool =
   expr_root_of phi1 = expr_root_of phi2 && is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2)
-
-let contains (prov : prov) (provs : provs) : bool =
-  provs |> List.map snd |> List.mem (snd prov)
 
 (* looks up var in gamma, and if the type is a closure, returns its closed over environment *)
 let env_of (var : var) (gamma : var_env) : env tc =
@@ -371,6 +369,23 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
     | (Some ty1, Some ty2) -> sub ell ty1 ty2
     | (Some _, None) | (None, Some _) | (None, None) -> Succ ell
   in sub ell ty1 ty2
+
+(* invariant subtyping *)
+let unify (loc : source_loc) (delta : tyvar_env) (ell : loan_env)
+          (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
+  let* ell1 = subtype Combine delta ell ty1 ty2
+  in let* ell2 = subtype Combine delta ell ty2 ty1
+  in if loan_env_eq ell1 ell2 then Succ (ell2, ty2)
+  else LoanEnvMismatch (loc, ell1, ell2) |> fail
+
+(* invariant subtyping for a sequence of types *)
+let unify_many (loc : source_loc) (delta :tyvar_env) (ell : loan_env)
+               (tys : ty list) : (loan_env * ty) tc =
+  match tys with
+  | [] -> Succ (ell, (loc, Any))
+  | [ty] -> Succ (ell, ty)
+  | ty :: tys ->
+    foldl (fun (curr_ell, curr_ty) new_ty -> unify loc delta curr_ell curr_ty new_ty) (ell, ty) tys
 
 (* checks that prov2 outlives prov1, erroring otherwise *)
 let rec outlives (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
@@ -719,3 +734,208 @@ let rec ty_eq (ty1 : ty) (ty2 : ty) : bool =
     List.for_all2 ty_eq tys1 tys2 && Option.equal ty_eq opt_ty1 opt_ty2
   | (Uninit ty1, Uninit ty2) -> ty_eq ty1 ty2
   | _ -> false
+
+let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
+  let combine (acc : loan_env) (entry : prov * loans) : loan_env =
+    let (prov, loans) = entry
+    in match loan_env_lookup_opt acc prov with
+    | Some curr_loans -> acc |> loan_env_exclude prov
+                             |> loan_env_include prov (list_union loans curr_loans)
+    | None -> acc |> loan_env_include prov loans
+  in List.fold_left combine ell1 ell2
+
+(* return only the common entries, taking uninit types over init types *)
+let merge (gamma1: var_env) (gamma2 : var_env) : var_env =
+  let merge_entry (name, ty1) =
+    match (ty1 |> snd, List.assoc_opt name gamma2) with
+    | (Uninit _ , Some ((_, Uninit _) as ty2)) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
+    | (Uninit inner, Some ty2) -> if ty_eq inner ty2 then Some (name, ty1) else None
+    | (_, Some ty2) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
+    | (_, None) -> None
+  in gamma1 |> List.map merge_entry |> List.filter Option.is_some |> List.map Option.get
+
+let intersect (envs1 : loan_env * var_env) (envs2 : loan_env * var_env) : loan_env * var_env =
+  let (ell1, gamma1) = envs1
+  in let (ell2, gamma2) = envs2
+  in let ell = union ell1 ell2
+  in (ell, merge gamma1 gamma2)
+
+(* populate the tagged section of struct types based on the global environment *)
+let struct_to_tagged (sigma : global_env) : global_env tc =
+  let rec do_expr (ctx : struct_var list) (expr : expr) : expr tc =
+    let (loc, expr) = expr
+    in match expr with
+    | Prim _ | Move _ | Drop _ | Borrow _ | Fn _ | Abort _ | Ptr _ -> Succ (loc, expr)
+    | BinOp (op, e1, e2) ->
+      let* e1 = do_expr ctx e1
+      in let* e2 = do_expr ctx e2
+      in Succ (loc, BinOp (op, e1, e2))
+    | BorrowIdx (prov, omega, p, e) ->
+      let* e = do_expr ctx e
+      in Succ (loc, BorrowIdx (prov, omega, p, e))
+    | BorrowSlice (prov, omega, p, e1, e2) ->
+      let* e1 = do_expr ctx e1
+      in let* e2 = do_expr ctx e2
+      in Succ (loc, BorrowSlice (prov, omega, p, e1, e2))
+    | LetProv (provs, e) ->
+      let* e = do_expr ctx e
+      in Succ (loc, LetProv (provs, e))
+    | Let (x, ty, e1, e2) ->
+      let* ty = do_ty ctx ty
+      in let* e1 = do_expr ctx e1
+      in let* e2 = do_expr ctx e2
+      in Succ (loc, Let (x, ty, e1, e2))
+    | Assign (p, e) ->
+      let* e = do_expr ctx e
+      in Succ (loc, Assign (p, e))
+    | Seq (e1, e2) ->
+      let* e1 = do_expr ctx e1
+      in let* e2 = do_expr ctx e2
+      in Succ (loc, Seq (e1, e2))
+    | Fun (provs, tyvars, params, res, body) ->
+      let* params = do_params ctx params
+      in let* res = do_opt_ty ctx res
+      in let* body = do_expr ctx body
+      in let fn : preexpr = Fun (provs, tyvars, params, res, body)
+      in Succ (loc, fn)
+    | App (fn, envs, provs, tys, args) ->
+      let* fn = do_expr ctx fn
+      in let* tys = do_tys ctx tys
+      in let* args = do_exprs ctx args
+      in Succ (loc, App (fn, envs, provs, tys, args))
+    | Idx (p, e) ->
+      let* e = do_expr ctx e
+      in Succ (loc, Idx (p, e))
+    | Branch (e1, e2, e3) ->
+      let* e1 = do_expr ctx e1
+      in let* e2 = do_expr ctx e2
+      in let* e3 = do_expr ctx e3
+      in Succ (loc, Branch (e1, e2, e3))
+    | While (e1, e2) ->
+      let* e1 = do_expr ctx e1
+      in let* e2 = do_expr ctx e2
+      in Succ (loc, While (e1, e2))
+    | For (x, e1, e2) ->
+      let* e1 = do_expr ctx e1
+      in let* e2 = do_expr ctx e2
+      in Succ (loc, For (x, e1, e2))
+    | Tup exprs ->
+      let* exprs = do_exprs ctx exprs
+      in let tup : preexpr = Tup exprs
+      in Succ (loc, tup)
+    | Array exprs ->
+      let* exprs = do_exprs ctx exprs
+      in let array : preexpr = Array exprs
+      in Succ (loc, array)
+    | RecStruct (sn, provs, tys, args) ->
+      let* tys = do_tys ctx tys
+      in let* args = do_args ctx args
+      in Succ (loc, RecStruct (sn, provs, tys, args))
+    | TupStruct (sn, provs, tys, exprs) ->
+      let* tys = do_tys ctx tys
+      in let* exprs = do_exprs ctx exprs
+      in Succ (loc, TupStruct (sn, provs, tys, exprs))
+  and do_ty (ctx : struct_var list) (ty : ty) : ty tc =
+    let (loc, ty) = ty
+    in match ty with
+    (* the interesting case: encountering a struct type *)
+    | Struct (sn, provs, tys, None) ->
+      let* tys = do_tys ctx tys
+      in if List.mem sn ctx then Succ (loc, Struct (sn, provs, tys, None))
+      else (match global_env_find_struct sigma sn with
+      | Some (Rec (_, _, dfn_provs, tyvars, fields)) ->
+        let fields_sorted = List.sort compare_keys fields
+        in let* prov_sub = combine_prov "T-RecStruct" provs dfn_provs
+        in let* ty_sub = combine_ty "T-RecStruct" tys tyvars
+        in let do_sub : ty -> ty = subst_many ty_sub >> subst_many_prov prov_sub
+        in let fields_fixed = List.map (fun (f, ty) -> (f, do_sub ty)) fields_sorted
+        in let* fields = do_params (List.cons sn ctx) fields_fixed
+        in let ty : ty = (inferred, Rec fields)
+        in Succ (loc, Struct (sn, provs, tys, Some ty))
+      | Some (Tup (_, _, dfn_provs, tyvars, tup_tys)) ->
+        let* prov_sub = combine_prov "T-TupStruct" provs dfn_provs
+        in let* ty_sub = combine_ty "T-TupStruct" tys tyvars
+        in let do_sub : ty -> ty = subst_many ty_sub >> subst_many_prov prov_sub
+        in let tup_tys = List.map do_sub tup_tys
+        in let* tup_tys = do_tys ctx tup_tys
+        in let ty : ty = (inferred, Tup tup_tys)
+        in Succ (loc, Struct (sn, provs, tys, Some ty))
+      | None -> UnknownStruct (loc, sn) |> fail)
+    (* structural cases *)
+    | Any | Infer | BaseTy _ | TyVar _ -> Succ (loc, ty)
+    | Ref (prov, omega, ty) ->
+      let* ty = do_ty ctx ty
+      in Succ (loc, Ref (prov, omega, ty))
+    | Fun (evs, provs, tyvars, tys, gamma, ty, bounds) ->
+      (* should we transform gamma here? maybe not necessary *)
+      let* tys = do_tys ctx tys
+      in let* ty = do_ty ctx ty
+      in let fn : prety = Fun (evs, provs, tyvars, tys, gamma, ty, bounds)
+      in Succ (loc, fn)
+    | Array (ty, n) ->
+      let* ty = do_ty ctx ty
+      in let array : prety = Array (ty, n)
+      in Succ (loc, array)
+    | Slice ty ->
+      let* ty = do_ty ctx ty
+      in let slice : prety = Slice ty
+      in Succ (loc, slice)
+    | Rec fields ->
+      let* fields = do_params ctx fields
+      in let record : prety = Rec fields
+      in Succ (loc, record)
+    | Tup tys ->
+      let* tys = do_tys ctx tys
+      in let tup : prety = Tup tys
+      in Succ (loc, tup)
+    | Struct (sn, provs, tys, Some tagged_ty) ->
+      let* tys = do_tys ctx tys
+      in let* tagged_ty = do_ty ctx tagged_ty
+      in Succ (loc, Struct (sn, provs, tys, Some tagged_ty))
+    | Uninit ty ->
+      let* ty = do_ty ctx ty
+      in let uninit : prety = Uninit ty
+      in Succ (loc, uninit)
+  and do_exprs (ctx : struct_var list) (exprs : expr list) : expr list tc =
+    let do_lifted (expr : expr) (exprs : expr list) : expr list tc =
+      let* expr = do_expr ctx expr
+      in Succ (List.cons expr exprs)
+    in foldr do_lifted exprs []
+  and do_args (ctx : struct_var list) (args : (field * expr) list) : (field * expr) list tc =
+    let do_lifted (arg : field * expr) (so_far : (field * expr) list) : (field * expr) list tc =
+      let* expr = do_expr ctx (snd arg)
+      in List.cons (fst arg, expr) so_far |> succ
+    in foldr do_lifted args []
+  and do_tys (ctx : struct_var list) (tys : ty list) : ty list tc =
+    let do_lifted (ty : ty) (tys : ty list) : ty list tc =
+      let* ty = do_ty ctx ty
+      in List.cons ty tys |> succ
+    in foldr do_lifted tys []
+  and do_opt_ty (ctx : struct_var list) (ty : ty option) : ty option tc =
+    match ty with
+    | Some ty -> let* ty = do_ty ctx ty in Some ty |> succ
+    | None -> Succ None
+  and do_params (ctx : struct_var list) (params : (var * ty) list) : (var * ty) list tc =
+    let do_lifted (param : var * ty) (so_far : (var * ty) list) : (var * ty) list tc =
+      let* ty = do_ty ctx (snd param)
+      in List.cons (fst param, ty) so_far |> succ
+    in foldr do_lifted params []
+  and do_global_entry (ctx : struct_var list) (entry : global_entry) : global_entry tc =
+    match entry with
+    | FnDef (fn, evs, provs, tyvars, params, ret_ty, bounds, body) ->
+      let* params = do_params ctx params
+      in let* ret_ty = do_ty ctx ret_ty
+      in let* body = do_expr ctx body
+      in Succ (FnDef (fn, evs, provs, tyvars, params, ret_ty, bounds, body))
+    | RecStructDef (copyable, sn, provs, tyvars, fields) ->
+      let* fields = do_params ctx fields
+      in Succ (RecStructDef (copyable, sn, provs, tyvars, fields))
+    | TupStructDef (copyable, sn, provs, tyvars, tys) ->
+      let* tys = do_tys ctx tys
+      in Succ (TupStructDef (copyable, sn, provs, tyvars, tys))
+  and do_global_entries (ctx : struct_var list) (entries : global_env) : global_env tc =
+    let do_lifted (entry : global_entry) (entries : global_env) : global_env tc =
+      let* entry = do_global_entry ctx entry
+      in List.cons entry entries |> succ
+    in foldr do_lifted entries []
+  in do_global_entries [] sigma

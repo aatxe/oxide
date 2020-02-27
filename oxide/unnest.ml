@@ -1,6 +1,6 @@
 open Oxide.Edsl
-open Oxide.Typeck
 open Oxide.Syntax
+open Oxide.Typeck
 
 let prog : global_env =
   [(fn "unnest"

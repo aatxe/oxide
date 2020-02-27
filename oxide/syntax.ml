@@ -36,23 +36,39 @@ type preplace_expr = var * expr_path [@@deriving show]
 type place_expr = source_loc * preplace_expr [@@deriving show]
 type place_exprs = place_expr list [@@deriving show]
 
+(* find the root of a given place expr *)
+let root_of : place -> var = fst >> snd
+(* find the path for the given place *)
+let path_of : place -> path = snd >> snd
+
+(* find the root of a given place expr *)
+let expr_root_of : place_expr -> var = fst >> snd
+(* find the path for the given place_expr *)
+let expr_path_of : place_expr -> expr_path = snd >> snd
+
+(* converts a path entry into an expr path entry *)
 let path_entry_to_expr_path_entry (entry : path_entry) : expr_path_entry =
   match entry with
   | Field f -> Field f
   | Index i -> Index i
 
+(* converts a path into a place expression path *)
 let path_to_expr_path (path : path) : expr_path = List.map path_entry_to_expr_path_entry path
 
+(* converts a place into a place expression, which always succeeds *)
 let place_to_place_expr (pi : place) : place_expr =
   let (root, path) = snd pi
   in (fst pi, (root, path_to_expr_path path))
 
+(* converts expr path entries to their corresponding path entry form *)
+(* returns none if the expr path entry is Deref *)
 let expr_path_entry_to_path_entry (entry : expr_path_entry) : path_entry option =
   match entry with
   | Field f -> Some (Field f)
   | Index i -> Some (Index i)
   | Deref -> None
 
+(* converts a place expression path to a path, if possible, reutrning none otherwise *)
 let expr_path_to_path (path : expr_path) : path option =
   let work (entry : expr_path_entry) (acc : path option) : path option =
     match acc with
@@ -63,6 +79,7 @@ let expr_path_to_path (path : expr_path) : path option =
     | None -> None
   in List.fold_right work path (Some [])
 
+(* converts a place expression to a place, if possible, returning none otherwise *)
 let place_expr_to_place (pi : place_expr) : place option =
   let (root, path) = snd pi
   in match expr_path_to_path path with
@@ -79,7 +96,11 @@ type provs = prov list [@@deriving show]
 type bound = prov * prov [@@deriving show]
 type bounds = bound list [@@deriving show]
 
+(* does the given provenance list contain the given provenance? *)
+let contains (prov : prov) (provs : provs) : bool =
+  provs |> List.map snd |> List.mem (snd prov)
 
+(* are the two given bounds lists equal? *)
 let eq_bounds (bounds1 : bounds) (bounds2 : bounds) : bool =
   equal_unordered (bounds1 |> List.map (fun (l, r) -> (snd l, snd r)))
                   (bounds2 |> List.map (fun (l, r) -> (snd l, snd r)))
