@@ -74,8 +74,7 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
       in let place_exprs =
         loan_env_lookup_opt ell prov |> Option.to_list |> List.flatten |> List.map snd
       in let check_ty (pi : place_expr) : unit tc =
-        let* ty_root = var_env_lookup gamma (fst pi, (sndfst pi, []))
-        in let* _ = compute_ty delta ell ty_root $ sndsnd pi
+        let* _ = compute_ty delta ell gamma pi
         in Succ () (* FIXME: check if ty_pi is reachable via some projections from ty *)
       in for_each_rev check_ty place_exprs
     | Fun (evs, provs, tyvars, param_tys, gamma_c, ret_ty, bounds) ->
@@ -234,8 +233,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | _ -> failwith "unreachable")
     (* T-Move and T-Copy *)
     | Move phi ->
-      let* root_ty = var_env_lookup_expr_root gamma phi
-      in let* computed_ty = expr_path_of phi |> compute_ty delta ell root_ty
+      let* computed_ty = compute_ty delta ell gamma phi 
       in let* copy = copyable sigma computed_ty
       in let omega = if copy then Shared else Unique
       in (match ownership_safe sigma delta ell gamma omega phi with
@@ -272,7 +270,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
     (* T-Borrow *)
     | Borrow (prov, omega, pi) ->
       let* (ty, loans) = ownership_safe sigma delta ell gamma omega pi
-      in if tyvar_env_prov_mem delta prov then Succ ((inferred, Ref (prov, omega, ty)), ell, gamma)
+      in if tyvar_env_prov_mem delta prov then
+        let* passed = passed_provs delta ell gamma pi
+        in let* _ = foldl (fun ell -> outlives delta ell gamma prov) ell passed
+        in Succ ((inferred, Ref (prov, omega, ty)), ell, gamma)
       else Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell, gamma)
     (* T-BorrowIndex *)
     | BorrowIdx (prov, omega, pi, e) ->
@@ -280,7 +281,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | Succ ((_, BaseTy U32), ell1, gamma1) ->
          let* (ty, loans) = ownership_safe sigma delta ell1 gamma1 omega pi
          in if tyvar_env_prov_mem delta prov then
-           Succ ((inferred, Ref (prov, omega, ty)), ell1, gamma1)
+           let* passed = passed_provs delta ell1 gamma1 pi
+           in let* _ = foldl (fun _ -> outlives delta ell1 gamma1 prov) ell1 passed
+           in Succ ((inferred, Ref (prov, omega, ty)), ell1, gamma1)
          else Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell1, gamma1)
        | Succ (found, _, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
        | Fail err -> Fail err)
@@ -292,7 +295,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
           | Succ ((_, BaseTy U32), ell2, gamma2) ->
             let* (ty, loans) = ownership_safe sigma delta ell2 gamma2 omega pi
             in if tyvar_env_prov_mem delta prov then
-              Succ ((inferred, Ref (prov, omega, ty)), ell2, gamma2)
+              let* passed = passed_provs delta ell gamma pi
+              in let* _ = foldl (fun _ -> outlives delta ell2 gamma2 prov) ell2 passed
+              in Succ ((inferred, Ref (prov, omega, ty)), ell2, gamma2)
             else Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans ell2, gamma2)
           | Succ (found, _, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
           | Fail err -> Fail err)
@@ -464,7 +469,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
          in let new_params = List.map do_sub params
          in let* ty_pairs = combine_tys "T-App" new_params arg_tys
          in let instantiated_bounds = subst_many_prov_in_bounds prov_sub bounds
-         in let* ellPrime = check_bounds delta ellN instantiated_bounds
+         in let* ellPrime = check_bounds delta ellN gammaN instantiated_bounds
          in let types_mismatch ((expected, found) : ty * ty) : bool tc =
            match subtype Combine delta ellPrime found expected with
            | Succ _ -> Succ false

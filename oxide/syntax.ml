@@ -70,7 +70,7 @@ let place_expr_to_place (pi : place_expr) : place option =
   | None -> None
 
 (* returns true if the place expression doesn't contain any dereferencing *)
-let place_expr_is_place (pi : place_expr) : bool = not (List.mem Deref (sndsnd pi))
+let place_expr_is_place : place_expr -> bool = not >> List.mem Deref >> snd >> snd
 
 type loan = owned * place_expr [@@deriving show]
 type loans = loan list [@@deriving show]
@@ -326,10 +326,10 @@ let loan_env_eq (ell1: loan_env) (ell2: loan_env) : bool =
 
 let loan_env_filter_dom (ell : loan_env) (provs : provs) : loan_env =
   let prov_vars = List.map snd provs
-  in ell |> List.filter (flip List.mem $ prov_vars >> fstsnd)
+  in ell |> List.filter (flip List.mem $ prov_vars >> snd >> fst)
 
 let loan_env_include (var : prov) (loans : loans) (ell : loan_env) : loan_env =
-  ell |> List.filter ((<>) (snd var) >> fstsnd) |> List.cons (var, loans)
+  ell |> List.filter ((<>) (snd var) >> snd >> fst) |> List.cons (var, loans)
 let loan_env_include_all (provs : provs) (loans : loans) (ell : loan_env) : loan_env =
   let entries = List.map (fun prov -> (prov, loans)) provs
   in ell |> List.filter (fun (prov, _) -> provs |> List.map snd |> List.mem (snd prov) |> not)
@@ -339,7 +339,7 @@ let loan_env_append (ell1 : loan_env) (ell2 : loan_env) : loan_env =
   List.append ell1 ell2
 
 let loan_env_exclude (prov : prov) (ell : loan_env) : loan_env =
-  ell |> List.filter ((<>) (snd prov) >> fstsnd)
+  ell |> List.filter ((<>) (snd prov) >> snd >> fst)
 let loan_env_exclude_all (provs : provs) (ell : loan_env) : loan_env =
   ell |> List.filter (fun ((_, prov), _) -> provs |> List.map snd |> List.mem prov |> not)
 
@@ -413,6 +413,8 @@ let bind (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc =
   match tc with
   | Succ x -> f x
   | Fail err -> Fail err
+let (>>=) (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc = bind tc f
+
 
 let succ (elem : 'a) : 'a tc = Succ elem
 let fail (err : tc_error) : 'a tc = Fail err

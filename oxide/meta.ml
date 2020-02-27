@@ -8,6 +8,138 @@ let is_at_least (omega : owned) (omega_prime : owned) : bool =
   | (Unique, Unique) -> true
   | (Unique, Shared) -> false
 
+(* use the path to decompose a type into a context and an inner type *)
+let rec decompose_by (path : path) (ty : ty) : (ty_ctx * ty) tc =
+  let (loc, ty) = ty
+  in match (ty, path) with
+  | (ty, []) -> Succ ((inferred, Hole), (loc, ty))
+  | (Rec pairs, (Field f) :: path) ->
+    let* (inner_ctx, inner_ty) = List.assoc f pairs |> decompose_by path
+    in let replace (pair : field * ty) : field * ty_ctx =
+      if fst pair = f then (f, inner_ctx) else (fst pair, (pair |> snd |> fst, Ty (snd pair)))
+    in let ctx : ty_ctx = (loc, Rec (List.map replace pairs))
+    in Succ (ctx, inner_ty)
+  | (Tup tys, (Index n) :: path) ->
+    let* (inner_ctx, ty) = List.nth tys n |> decompose_by path
+    in let replace (idx : int) (ty : ty) : ty_ctx =
+      if idx = n then inner_ctx else (fst ty, Ty ty)
+    in let ctx : ty_ctx = (loc, Tup (List.mapi replace tys))
+    in Succ (ctx, ty)
+  | (Struct (name, provs, tys, Some ty), path) ->
+    let* (inner_ctx, ty) = decompose ty path
+    in let ctx : ty_ctx = (loc, Tagged (name, provs, tys, inner_ctx))
+    in Succ (ctx, ty)
+  | (Uninit ty, path) -> Fail (PartiallyMovedPath (ty, path))
+  | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
+and decompose (ty : ty) (path : path) : (ty_ctx * ty) tc = decompose_by path ty
+
+let rec plug (fill : ty) (ctx : ty_ctx) : ty =
+  let (loc, ctx) = ctx
+  in match ctx with
+  | Hole -> fill
+  | Ty ty -> ty
+  | Tagged (tag, provs, tys, ctx) -> (loc, Struct (tag, provs, tys, Some (plug fill ctx)))
+  | Rec pair -> (loc, Rec (List.map (fun (f, ctx) -> (f, plug fill ctx)) pair))
+  | Tup ctx -> (loc, Tup (List.map (plug fill) ctx))
+
+(* var env operations *)
+
+let var_env_lookup (gamma : var_env) (pi : place) : ty tc =
+  let (root, path) = snd pi
+  in match List.assoc_opt root gamma with
+  | Some ty ->
+    let* (_, ty) = decompose ty path
+    in Succ ty
+  | None -> Fail (UnboundPlace pi)
+let var_env_lookup_root (gamma : var_env) (pi : place) : ty tc =
+  let (root, _) = snd pi
+  in match List.assoc_opt root gamma with
+  | Some ty -> Succ ty
+  | None -> Fail (UnboundPlace pi)
+let var_env_lookup_expr_root (gamma : var_env) (phi : place_expr) : ty tc =
+  let (root, _) = snd phi
+  in match List.assoc_opt root gamma with
+  | Some ty -> Succ ty
+  | None -> Fail (UnboundPlaceExpr phi)
+let var_env_lookup_many (gamma : var_env) (pis : place list) : ty list tc =
+  let lookup_seq (pi : place) (tys : ty list) : ty list tc =
+    let* ty = var_env_lookup gamma pi
+    in Succ (List.cons ty tys)
+  in foldr lookup_seq pis []
+let var_env_lookup_opt (gamma : var_env) (pi : place) : (ty option) tc =
+  let (root, path) = snd pi
+  in match List.assoc_opt root gamma with
+  | Some ty ->
+    let* (_, ty) = decompose ty path
+    in Succ (Some ty)
+  | None -> Succ None
+let var_env_lookup_place_expr (gamma : var_env) (pi : place_expr) : ty tc =
+  match place_expr_to_place pi with
+  | Some pi -> var_env_lookup gamma pi
+  | None -> Fail (PlaceExprNotAPlace pi)
+let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
+  let (root, _) = snd pi
+  in match List.assoc_opt root gamma with
+  | Some _ -> true
+  | None -> false
+
+let var_env_type_update (gamma : var_env) (pi : place) (ty : ty) : var_env tc =
+  let (root, path) = snd pi
+  in match List.assoc_opt root gamma with
+  | Some root_ty ->
+    let* (ctx, _) = decompose root_ty path
+    in Succ (replace_assoc gamma root (plug ty ctx))
+  | None -> Fail (UnboundPlace pi)
+
+let var_env_uninit_many (gamma : var_env) (vars : var list) : var_env =
+  let work (entry : var * ty) : var * ty =
+    if List.mem (fst entry) vars then (fst entry, (inferred, Uninit (snd entry))) else entry
+  in List.map work gamma
+
+let var_env_include (gamma : var_env) (x : var) (typ : ty) = List.cons (x, typ) gamma
+let var_env_append (gamma1 : var_env) (gamma2 : var_env) = List.append gamma1 gamma2
+let var_env_exclude (gamma : var_env) (x : var) = List.remove_assoc x gamma
+
+(* find the root of a given place expr *)
+let root_of : place -> var = fst >> snd
+(* find the path for the given place *)
+let path_of : place -> path = snd >> snd
+
+(* find the root of a given place expr *)
+let expr_root_of : place_expr -> var = fst >> snd
+(* find the path for the given place_expr *)
+let expr_path_of : place_expr -> expr_path = snd >> snd
+
+(* is path2 a prefix of path1? *)
+let rec is_prefix_of (path1 : path) (path2 : path) : bool =
+  match (path1, path2) with
+  | (_, []) -> true
+  | ([], _) -> false
+  | (Field f1 :: path1, Field f2 :: path2) -> if f1 = f2 then is_prefix_of path1 path2 else false
+  | (Index i1 :: path1, Index i2 :: path2) -> if i1 = i2 then is_prefix_of path1 path2 else false
+  | (_, _) -> false
+
+let prefix_of (pi1 : place) (pi2 : place) : bool =
+  root_of pi1 = root_of pi2 && is_prefix_of (path_of pi1) (path_of pi2)
+
+(* is path2 a prefix of path1? *)
+let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
+  match (path1, path2) with
+  | (_, []) -> true
+  | ([], _) -> false
+  | (Field f1 :: path1, Field f2 :: path2) ->
+    if f1 = f2 then is_expr_prefix_of path1 path2 else false
+  | (Index i1 :: path1, Index i2 :: path2) ->
+    if i1 = i2 then is_expr_prefix_of path1 path2 else false
+  | (Deref :: path1, Deref :: path2) -> is_expr_prefix_of path1 path2
+  | (_, _) -> false
+
+let expr_prefix_of (phi1 : place_expr) (phi2 : place_expr) : bool =
+  expr_root_of phi1 = expr_root_of phi2 && is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2)
+
+let contains (prov : prov) (provs : provs) : bool =
+  provs |> List.map snd |> List.mem (snd prov)
+
 (* looks up var in gamma, and if the type is a closure, returns its closed over environment *)
 let env_of (var : var) (gamma : var_env) : env tc =
   match List.assoc_opt var gamma with
@@ -240,63 +372,41 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
     | (Some _, None) | (None, Some _) | (None, None) -> Succ ell
   in sub ell ty1 ty2
 
-(* use the path to decompose a type into a context and an inner type *)
-let rec decompose_by (path : path) (ty : ty) : (ty_ctx * ty) tc =
-  let (loc, ty) = ty
-  in match (ty, path) with
-  | (ty, []) -> Succ ((inferred, Hole), (loc, ty))
-  | (Rec pairs, (Field f) :: path) ->
-    let* (inner_ctx, inner_ty) = List.assoc f pairs |> decompose_by path
-    in let replace (pair : field * ty) : field * ty_ctx =
-      if fst pair = f then (f, inner_ctx) else (fst pair, (loc, Ty (loc, ty)))
-    in let ctx : ty_ctx = (loc, Rec (List.map replace pairs))
-    in Succ (ctx, inner_ty)
-  | (Tup tys, (Index n) :: path) ->
-    let* (inner_ctx, ty) = List.nth tys n |> decompose_by path
-    in let replace (idx : int) (ty : ty) : ty_ctx =
-      if idx = n then inner_ctx else (fst ty, Ty ty)
-    in let ctx : ty_ctx = (loc, Tup (List.mapi replace tys))
-    in Succ (ctx, ty)
-  | (Struct (name, provs, tys, Some ty), path) ->
-    let* (inner_ctx, ty) = decompose ty path
-    in let ctx : ty_ctx = (loc, Tagged (name, provs, tys, inner_ctx))
-    in Succ (ctx, ty)
-  | (Uninit ty, path) -> Fail (PartiallyMovedPath (ty, path))
-  | (ty, path) -> Fail (InvalidOperationOnType (path, (loc, ty)))
-and decompose (ty : ty) (path : path) : (ty_ctx * ty) tc = decompose_by path ty
-
 (* checks that prov2 outlives prov1, erroring otherwise *)
-let outlives (delta : tyvar_env) (ell : loan_env) (prov1: prov) (prov2 : prov) : unit tc =
+let rec outlives (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+                 (prov1: prov) (prov2 : prov) : loan_env tc =
   match (loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
-  | (Some _, Some _) -> Succ ()
-  | (None, Some _) ->
+  | (Some rep1, Some rep2) ->
+    let ellPrime = ell |> loan_env_exclude_all [prov1; prov2]
+    in ellPrime |> loan_env_include_all [prov1; prov2] (list_union rep1 rep2) |> succ
+  | (None, Some loans) ->
+    (* true if all the loans are reborrow loans from things that outlive the abstract provenance *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
-    else ProvDoesNotOutlive (prov1, prov2) |> fail
+    else loans |> List.map snd |> map (passed_provs delta ell gamma)
+               >>= (succ >> List.flatten)
+               >>= foldl (fun ell pv2 ->
+                            if snd pv2 <> snd prov2 then outlives delta ell gamma prov1 pv2
+                            else ProvDoesNotOutlive (prov1, prov2) |> fail) ell
   | (Some _, None) ->
     if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
-    else Succ ()
+    else Succ ell
   | (None, None) ->
     (* UP-AbstractProvenances *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
     else if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
     else if not $ tyvar_env_abs_sub delta prov1 prov2 then AbsProvsNotSubtype (prov1, prov2) |> fail
-    else Succ ()
-
-let check_bounds (delta : tyvar_env) (ell : loan_env) (bounds : bounds) : loan_env tc =
-  foldl (fun ell (prov1, prov2) -> subtype_prov Combine delta ell prov1 prov2) ell bounds
-
+    else Succ ell
 (* find the type of the expr path based on the original type in a context *)
 (* this will error if the context doesn't allow the operation,
    e.g. dereferencing a shared reference in a unique context *)
-let compute_ty_in (ctx : owned) (delta : tyvar_env) (ell : loan_env)
-                  (ty : ty) (path : expr_path) : ty tc =
-  let rec compute (passed : prov list) (path : expr_path) (ty : ty)  : ty tc =
-    let (loc, ty) = ty
-    in match (ty, path) with
-    | (ty, []) -> Succ (loc, ty)
+and compute_with_passed (ctx : owned) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+                        (phi : place_expr) : (provs * ty) tc =
+  let rec compute (passed : provs) (path : expr_path) (ty : ty)  : (provs * ty) tc =
+    match (snd ty, path) with
+    | (_, []) -> Succ (passed, ty)
     | (Ref (prov, omega, ty), Deref :: path) ->
       if is_at_least ctx omega then
-        let* () = outlives delta ell |> flip $ prov |> for_each passed
+        let* _ = foldr (fun pv ell -> outlives delta ell gamma pv prov) passed ell
         in compute (List.cons prov passed) path ty
       else Fail (PermissionErr (ty, path, ctx))
     | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
@@ -305,119 +415,27 @@ let compute_ty_in (ctx : owned) (delta : tyvar_env) (ell : loan_env)
     | (Uninit ty, path) ->
       let* _ = compute passed path ty
       in Fail (PartiallyMovedExprPath (ty, path))
-    | (ty, path) -> Fail (InvalidOperationOnTypeEP (path, (loc, ty)))
-  in compute [] path ty
+    | (_, path) -> Fail (InvalidOperationOnTypeEP (path, ty))
+  in let* root_ty = var_env_lookup_expr_root gamma phi
+  in compute [] (expr_path_of phi) root_ty
+and passed_provs (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+                 (phi : place_expr) : provs tc =
+  let* (passed, _) = compute_with_passed Shared delta ell gamma phi
+  in Succ passed
 
-(* find the type of the expr path based on the original type, assuming a shared use context*)
-let compute_ty (delta : tyvar_env) (ell : loan_env) (ty : ty) (path : expr_path) : ty tc =
-  compute_ty_in Shared delta ell ty path
+let compute_ty_in (ctx : owned) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+                  (phi : place_expr) : ty tc =
+  let* (_, ty) = compute_with_passed ctx delta ell gamma phi
+  in Succ ty
 
-let rec plug (fill : ty) (ctx : ty_ctx) : ty =
-  let (loc, ctx) = ctx
-  in match ctx with
-  | Hole -> fill
-  | Ty ty -> ty
-  | Tagged (tag, provs, tys, ctx) -> (loc, Struct (tag, provs, tys, Some (plug fill ctx)))
-  | Rec pair -> (loc, Rec (List.map (fun (f, ctx) -> (f, plug fill ctx)) pair))
-  | Tup ctx -> (loc, Tup (List.map (plug fill) ctx))
+(* find the type of the place expression, assuming a shared use context*)
+let compute_ty (delta : tyvar_env) (ell : loan_env) (gamma :var_env) (phi : place_expr) : ty tc =
+  compute_ty_in Shared delta ell gamma phi
 
-(* var env operations *)
-
-let var_env_lookup (gamma : var_env) (pi : place) : ty tc =
-  let (root, path) = snd pi
-  in match List.assoc_opt root gamma with
-  | Some ty ->
-    let* (_, ty) = decompose ty path
-    in Succ ty
-  | None -> Fail (UnboundPlace pi)
-let var_env_lookup_root (gamma : var_env) (pi : place) : ty tc =
-  let (root, _) = snd pi
-  in match List.assoc_opt root gamma with
-  | Some ty -> Succ ty
-  | None -> Fail (UnboundPlace pi)
-let var_env_lookup_expr_root (gamma : var_env) (phi : place_expr) : ty tc =
-  let (root, _) = snd phi
-  in match List.assoc_opt root gamma with
-  | Some ty -> Succ ty
-  | None -> Fail (UnboundPlaceExpr phi)
-let var_env_lookup_many (gamma : var_env) (pis : place list) : ty list tc =
-  let lookup_seq (pi : place) (tys : ty list) : ty list tc =
-    let* ty = var_env_lookup gamma pi
-    in Succ (List.cons ty tys)
-  in foldr lookup_seq pis []
-let var_env_lookup_opt (gamma : var_env) (pi : place) : (ty option) tc =
-  let (root, path) = snd pi
-  in match List.assoc_opt root gamma with
-  | Some ty ->
-    let* (_, ty) = decompose ty path
-    in Succ (Some ty)
-  | None -> Succ None
-let var_env_lookup_place_expr (gamma : var_env) (pi : place_expr) : ty tc =
-  match place_expr_to_place pi with
-  | Some pi -> var_env_lookup gamma pi
-  | None -> Fail (PlaceExprNotAPlace pi)
-let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
-  let (root, _) = snd pi
-  in match List.assoc_opt root gamma with
-  | Some _ -> true
-  | None -> false
-
-let var_env_type_update (gamma : var_env) (pi : place) (ty : ty) : var_env tc =
-  let (root, path) = snd pi
-  in match List.assoc_opt root gamma with
-  | Some root_ty ->
-    let* (ctx, _) = decompose root_ty path
-    in Succ (replace_assoc gamma root (plug ty ctx))
-  | None -> Fail (UnboundPlace pi)
-
-let var_env_uninit_many (gamma : var_env) (vars : var list) : var_env =
-  let work (entry : var * ty) : var * ty =
-    if List.mem (fst entry) vars then (fst entry, (inferred, Uninit (snd entry))) else entry
-  in List.map work gamma
-
-let var_env_include (gamma : var_env) (x : var) (typ : ty) = List.cons (x, typ) gamma
-let var_env_append (gamma1 : var_env) (gamma2 : var_env) = List.append gamma1 gamma2
-let var_env_exclude (gamma : var_env) (x : var) = List.remove_assoc x gamma
-
-(* find the root of a given place expr *)
-let root_of (pi : place) : var = sndfst pi
-(* find the path for the given place *)
-let path_of (pi : place) : path = sndsnd pi
-
-(* find the root of a given place expr *)
-let expr_root_of (phi : place_expr) : var = sndfst phi
-(* find the path for the given place_expr *)
-let expr_path_of (phi : place_expr) : expr_path = sndsnd phi
-
-(* is path2 a prefix of path1? *)
-let rec is_prefix_of (path1 : path) (path2 : path) : bool =
-  match (path1, path2) with
-  | (_, []) -> true
-  | ([], _) -> false
-  | (Field f1 :: path1, Field f2 :: path2) -> if f1 = f2 then is_prefix_of path1 path2 else false
-  | (Index i1 :: path1, Index i2 :: path2) -> if i1 = i2 then is_prefix_of path1 path2 else false
-  | (_, _) -> false
-
-let prefix_of (pi1 : place) (pi2 : place) : bool =
-  root_of pi1 = root_of pi2 && is_prefix_of (path_of pi1) (path_of pi2)
-
-(* is path2 a prefix of path1? *)
-let rec is_expr_prefix_of (path1 : expr_path) (path2 : expr_path) : bool =
-  match (path1, path2) with
-  | (_, []) -> true
-  | ([], _) -> false
-  | (Field f1 :: path1, Field f2 :: path2) ->
-    if f1 = f2 then is_expr_prefix_of path1 path2 else false
-  | (Index i1 :: path1, Index i2 :: path2) ->
-    if i1 = i2 then is_expr_prefix_of path1 path2 else false
-  | (Deref :: path1, Deref :: path2) -> is_expr_prefix_of path1 path2
-  | (_, _) -> false
-
-let expr_prefix_of (phi1 : place_expr) (phi2 : place_expr) : bool =
-  expr_root_of phi1 = expr_root_of phi2 && is_expr_prefix_of (expr_path_of phi1) (expr_path_of phi2)
-
-let contains (prov : prov) (provs : provs) : bool =
-  provs |> List.map snd |> List.mem (snd prov)
+(* checks that all the outlives bounds are satisfied in delta and ell *)
+let check_bounds (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+                 (bounds : bounds) : loan_env tc =
+  foldl (fun ell (prov1, prov2) -> outlives delta ell gamma prov1 prov2) ell bounds
 
 let rec contains_prov (gamma : var_env) (prov : prov) : bool =
   let rec ty_contains (ty : ty) : bool =
@@ -446,7 +464,7 @@ let envs_minus (keep_provs : provs) (ell : loan_env) (gamma : var_env)
     match ty with
     | Some (_, Ref (prov, _, ty)) ->
       let* (ell, gamma) = Some ty |> loop envs
-      in let new_gamma = sndfst pi |> var_env_exclude gamma
+      in let new_gamma = pi |> root_of |> var_env_exclude gamma
       in if not $ contains_prov new_gamma prov && not $ contains prov keep_provs then
         Succ (loan_env_exclude prov ell, new_gamma)
       else Succ (ell, new_gamma)
@@ -464,7 +482,7 @@ let envs_minus (keep_provs : provs) (ell : loan_env) (gamma : var_env)
     ell |> List.filter (not >> List.exists (expr_prefix_of |> flip $ pi_as_phi)
                             >> List.map snd >> snd)
   in let* opt = var_env_lookup_opt gamma pi
-  in let* (ell_out, gamma_out) = loop (ell, sndfst pi |> var_env_exclude gamma) opt
+  in let* (ell_out, gamma_out) = loop (ell, pi |> root_of |> var_env_exclude gamma) opt
   in Succ (remove_provs ell_out, gamma_out)
 
 let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
@@ -688,7 +706,8 @@ let rec ty_eq (ty1 : ty) (ty2 : ty) : bool =
   | (Fun (evs1, pvs1, tyvs1, tys1, env1, ty1, bs1), Fun (evs2, pvs2, tyvs2, tys2, env2, ty2, bs2)) ->
     evs1 = evs2 && List.map snd pvs1 = List.map snd pvs2 && tyvs1 = tyvs2 &&
     List.for_all2 ty_eq tys1 tys2 && env1 = env2 && ty_eq ty1 ty2 &&
-    List.map fstsnd bs1 = List.map fstsnd bs2 && List.map sndsnd bs1 = List.map sndsnd bs2
+    List.map (snd >> fst) bs1 = List.map (snd >> fst) bs2 &&
+    List.map (snd >> snd) bs1 = List.map (snd >> snd) bs2
   | (Array (ty1, len1), Array (ty2, len2)) -> len1 = len2 && ty_eq ty1 ty2
   | (Slice ty1, Slice ty2) -> ty_eq ty1 ty2
   | (Rec fields1, Rec fields2) ->
