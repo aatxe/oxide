@@ -88,18 +88,22 @@ let expr_disjoint_place (pi : place) (phi : place_expr) : bool =
   let (inner_pi, _) = decompose_place_expr phi
   in disjoint pi inner_pi
 
+(* check if the given place expression is safe to use in an omega context *)
 let ownership_safe (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
                    (omega : owned) (tl_phi : place_expr) : (ty * loans) tc =
+  (* check if the next operation in the suffix is permitted at this type *)
   let check_permission (ty : ty) (suffix : expr_path) : unit tc =
     match (snd ty, suffix) with
     | (Ref (_, omega_ref, _), Deref :: _) ->
       if is_at_least omega omega_ref then Succ ()
       else Fail (PermissionErr (ty, suffix, omega))
     | _ -> Succ ()
+  (* return the given suffix without the Deref at the front, failing if no Deref *)
   in let skip_deref (suffix : expr_path) : expr_path =
     match suffix with
     | Deref :: path -> path
     | _ -> failwith "unreachable: skip_deref called with non_suffix path"
+  (* remove all entries whose key is found in the exclusions list *)
   in let refine (exclusions : preplace list) (places : (place * ty) list) : (place * ty) list =
     List.filter (fun ((_, pi), _) -> not $ List.mem pi exclusions) places
   in let ref_places = expand_closures gamma |> collect_places |> keep_if_ref omega
@@ -139,7 +143,7 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
         let* () = check_permission ty suffix
         in let loans = if tyvar_env_prov_mem delta prov then [] else loan_env_lookup ell prov
         in let new_exclusions = List.map (snd >> fst >> decompose_place_expr >> snd) loans
-        in let exclusions = List.concat [[(snd inner_pi)]; new_exclusions; exclusions]
+        in let exclusions = List.concat [[snd inner_pi]; new_exclusions; exclusions]
         in let* safe_results =
           loans |> List.map (skip_deref suffix |> apply_suffix >> snd)
                 |> map (impl_safe exclusions)
