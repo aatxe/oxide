@@ -502,6 +502,8 @@ let envs_minus (keep_provs : provs) (ell : loan_env) (gamma : var_env)
   in let* (ell_out, gamma_out) = loop (ell, pi |> root_of |> var_env_exclude gamma) opt
   in Succ (remove_provs ell_out, gamma_out)
 
+(* is the given type non-copyable? *)
+(* note: this can only error if the type features a struct not defined in sigma *)
 let rec noncopyable (sigma : global_env) (typ : ty) : bool tc =
   match snd typ with
   | Any | Infer -> Succ true (* arbitrary types are always _not_ copyable *)
@@ -669,6 +671,8 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
      in foldr next_free exprs []
    in free expr
 
+(* all the free variables in expr that are at non-copyable types in gamma *)
+(* note: this function can only error if gamma contains struct types not defined in sigma *)
 let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) : vars tc =
   free_vars_helper expr
   (fun var ->
