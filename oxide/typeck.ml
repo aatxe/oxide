@@ -198,7 +198,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
        | _ -> failwith "T-BinOp: unreachable")
     (* T-Move and T-Copy *)
     | Move phi ->
-      let* computed_ty = compute_ty delta ell gamma phi 
+      let* computed_ty = compute_ty delta ell gamma phi
       in let* copy = copyable sigma computed_ty
       in let omega = if copy then Shared else Unique
       in (match ownership_safe sigma delta ell gamma omega phi with
