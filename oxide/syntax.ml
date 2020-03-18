@@ -381,6 +381,7 @@ type tc_error =
   | TypeMismatchFunction of ty (* found *)
   | TypeMismatchRef of ty (* found *)
   | TypeMismatchArray of ty (* found *)
+  | UnrelatedTypes of ty * ty (* neither ty1 nor ty2 are contained within one another *)
   | VarEnvMismatch of source_loc * var_env * var_env (* source_loc * expected * found *)
   | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
   | SafetyErr of (owned * place_expr) * (owned * place_expr)

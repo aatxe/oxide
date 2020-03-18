@@ -741,6 +741,18 @@ let rec ty_eq (ty1 : ty) (ty2 : ty) : bool =
   | (Uninit ty1, Uninit ty2) -> ty_eq ty1 ty2
   | _ -> false
 
+(* does ty2 occur in ty1? *)
+let rec ty_in (ty1 : ty) (ty2 : ty) : bool =
+  if ty_eq ty1 ty2 then true
+  else match snd ty1 with
+  | Any | Infer | BaseTy _ | TyVar _ | Fun _ | Uninit _ -> false
+  | Ref (_, _, ty1) | Array (ty1, _) | Slice ty1 -> ty_in ty1 ty2
+  | Rec fields -> fields |> List.map snd |> List.exists (fun ty1 -> ty_in ty1 ty2)
+  | Tup tys -> tys |> List.exists (fun ty1 -> ty_in ty1 ty2)
+  | Struct (_, _, tys, opt_ty) ->
+    opt_ty |> Option.to_list |> List.append tys |> List.exists (fun ty1 -> ty_in ty1 ty2)
+
+
 let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
   let combine (acc : loan_env) (entry : prov * loans) : loan_env =
     let (prov, loans) = entry

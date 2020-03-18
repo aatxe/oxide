@@ -31,8 +31,9 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (ga
       in let place_exprs =
         loan_env_lookup_opt ell prov |> Option.to_list |> List.flatten |> List.map snd
       in let check_ty (pi : place_expr) : unit tc =
-        let* _ = compute_ty delta ell gamma pi
-        in Succ () (* FIXME: check if ty_pi is reachable via some projections from ty *)
+        let* ty_pi = compute_ty delta ell gamma pi
+        in if ty_in ty_pi ty || ty_in ty ty_pi then Succ ()
+        else UnrelatedTypes (ty_pi, ty) |> fail
       in for_each_rev check_ty place_exprs
     | Fun (evs, provs, tyvars, param_tys, gamma_c, ret_ty, bounds) ->
       let* () = valid_env gamma_c
