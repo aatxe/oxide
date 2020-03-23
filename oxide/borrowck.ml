@@ -47,13 +47,13 @@ let rec expand_closures (gamma : var_env) : var_env =
 (* i.e. if context is unique, all references are significant for checking safety, and
         if context is shared, only unique references are significant *)
 let keep_if_ref (context : owned) (places : (place * ty) list) : (place * ty) list =
-  let significant_in_context (omega : owned) : bool =
+  let may_conflict_with_context (omega : owned) : bool =
     match (context, omega) with
     | (Unique, _) -> true
     | (Shared, Unique) -> true
     | (Shared, Shared) -> false
   in let ref_test (_, ty) =
-    match snd ty with Ref (_, omega, _) -> significant_in_context omega | _ -> false
+    match snd ty with Ref (_, omega, _) -> may_conflict_with_context omega | _ -> false
   in List.filter ref_test places
 
 (* decompose a place expression into an inner place and the rest of the expression path *)
