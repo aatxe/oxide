@@ -408,8 +408,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (ell : loan_env) (gamma 
       in let gammaPrime = List.fold_left var_include_fold gamma params
       in let deltaPrime = delta |> tyvar_env_add_provs provs |> tyvar_env_add_ty_vars tyvars
       in let* (ret_ty, ell_body, _) = tc deltaPrime ell gammaPrime body
-      in let* free_vars = free_vars body
-      in let free_vars = List.filter (fun var -> not (List.mem_assoc var params)) free_vars
+      in let* free_vars =
+        List.filter (fun var -> not $ List.mem_assoc var params) <$> free_vars body
       in let* moved_vars = free_nc_vars sigma gamma body
       in let gamma_c = List.map (fun var -> (var, List.assoc var gamma)) free_vars
       in let* () = find_refs_to_captured deltaPrime ell_body ret_ty gamma_c

@@ -431,15 +431,15 @@ type 'a tc =
   | Fail of tc_error
 [@@deriving show]
 
+let succ (elem : 'a) : 'a tc = Succ elem
+let fail (err : tc_error) : 'a tc = Fail err
+
 let bind (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc =
   match tc with
   | Succ x -> f x
   | Fail err -> Fail err
 let (>>=) (tc : 'a tc) (f : 'a -> 'b tc) : 'b tc = bind tc f
-
-
-let succ (elem : 'a) : 'a tc = Succ elem
-let fail (err : tc_error) : 'a tc = Fail err
+let (<$>) (f : 'a -> 'b) (tc : 'a tc) : 'b tc = tc >>= (succ >> f)
 
 let is_succ (elem : 'a tc) : bool = match elem with Succ _ -> true | Fail _ -> false
 let is_fail (elem : 'a tc) : bool = match elem with Fail _ -> true | Succ _ -> false
