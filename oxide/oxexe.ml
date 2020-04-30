@@ -5,20 +5,18 @@ open Oxide.Typeck
 open Borrowcktests (* examples from rust's borrowck tests *)
 open Polonius (* examples from me, Niko, or the nll tests *)
 
-let print_is_safe (delta : tyvar_env) (ell : loan_env) (gamma : var_env) (omega : owned)
-                  (pi : place_expr) =
-  match ownership_safe [] delta ell gamma omega pi with
+let print_is_safe (delta : tyvar_env) (gamma : var_env) (omega : owned) (pi : place_expr) =
+  match ownership_safe [] delta gamma omega pi with
   | Fail err ->
     Format.printf "ERROR: %a@." pp_tc_error err
   | Succ _ ->
     Format.printf "%a is %a safe in@.  %a@." pp_place_expr pi pp_owned omega pp_var_env gamma
 
 let print_tc (sigma : global_env) (expr : expr) =
-  match type_check sigma empty_delta empty_ell empty_gamma expr with
-  | Succ (ty, ellPrime, gammaPrime) ->
-    Format.printf "%a@. under %a@. and@. %a@."
+  match type_check sigma empty_delta empty_gamma expr with
+  | Succ (ty, gammaPrime) ->
+    Format.printf "%a@. under env:@. %a@."
       pp_ty ty
-      pp_loan_env ellPrime
       pp_var_env gammaPrime
   | Fail err -> Format.printf "ERROR: %a@." pp_tc_error err
 

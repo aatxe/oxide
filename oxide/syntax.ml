@@ -124,10 +124,18 @@ and ty = source_loc * prety [@@deriving show]
 and env =
   | Unboxed (* a dummy environment for function pointers, not closures *)
   | EnvVar of env_var (* a quantified environment variable *)
-  | Env of var_env (* a concrete environment *)
+  | Env of static_frame (* a concrete environment *)
   | EnvOf of var (* the environment of a specific bound function at closure type *)
 [@@deriving show]
-and var_env = (var * ty) list [@@deriving show]
+and frame_entry =
+  | Id of var * ty
+  | Prov of prov * loans
+and static_frame = frame_entry list [@@deriving show]
+
+let to_bindings (frame : static_frame) : (var * ty) list =
+  frame |> List.map (fun entry ->
+                       match entry with Id (id, ty) -> [(id, ty)] | Prov _ -> [])
+        |> List.flatten
 
 type tys = ty list [@@deriving show]
 
@@ -164,10 +172,10 @@ let rec is_init (typ : ty) : bool =
   | Uninit _ -> false
 and all_init (tys : ty list) : bool =
   List.fold_right (fun ty acc -> acc && is_init ty) tys true
-and var_env_init (gamma : env) : bool =
-  match gamma with
+and var_env_init (frame : env) : bool =
+  match frame with
   | Unboxed | EnvVar _ -> true
-  | Env gamma -> all_init (List.map snd gamma)
+  | Env frame -> frame |> to_bindings |> List.map snd |> all_init
   | EnvOf _ -> true
 
 type prim =
@@ -320,55 +328,71 @@ let tyvar_env_env_var_mem (delta : tyvar_env) (var : env_var) : bool =
 let tyvar_env_abs_sub (delta : tyvar_env) (v1 : prov) (v2 : prov) : bool =
   bounds_of delta |> List.mem (snd v1, snd v2) || (snd v1) = (snd v2)
 
-type loan_env = (prov * loans) list [@@deriving show]
-let empty_ell : loan_env = []
+type var_env = static_frame list [@@deriving show]
+let empty_gamma : var_env = [[]]
 
-let places_of (ell : loan_env) : place_expr list =
-  ell |> List.map snd |> List.flatten |> List.map snd
-let domain_of (ell : loan_env) : provs =
-  ell |> List.map fst
+(* shift the latest entry off the frame *)
+let shift (gamma : var_env) : var_env =
+  match gamma with
+  | (_ :: top_frame) :: rest_of_stack -> top_frame :: rest_of_stack
+  | [] :: _ -> failwith "cannot shift with empty frame on stack"
+  | [] -> failwith "unreachable: var_env should never have zero frames"
+
+(* shift the last n stack entries off the frame *)
+let rec shift_n (n : int) (gamma : var_env) : var_env =
+  match n with
+  | 0 -> gamma
+  | n -> shift gamma |> shift_n (pred n)
+
+(* pops off the top frame of the stack *)
+let pop (gamma : var_env) : var_env =
+  match gamma with
+  | _ :: [] -> [[]]
+  | _ :: rest_of_stack -> rest_of_stack
+  | [] -> failwith "unreachable: var_env should never have zero frames"
+
+(* get the places from the given frame entry *)
+let places_from_frame_entry (entry : frame_entry) : place_expr list =
+  match entry with
+  | Id _ -> []
+  | Prov (_, loans) -> loans |> List.map snd
+
+(* compute all the places in the loan sets occurring in gamma *)
+let places_of (gamma : var_env) : place_expr list =
+  gamma |> List.flatten
+        |> List.map places_from_frame_entry
+        |> List.flatten
+let prov_domain_of (gamma : var_env) : provs =
+  gamma |> List.flatten
+        |> List.map (fun entry -> match entry with Id _ -> [] | Prov (prov, _) -> [prov])
+        |> List.flatten
+
+let to_loan_env (gamma : var_env) : (prov * loans) list =
+  gamma |> List.flatten
+        |> List.map (fun entry ->
+                       match entry with Id _ -> [] | Prov (prov, loans) -> [(prov, loans)])
+        |> List.flatten
 
 let to_prov_var_keys (concrete : (prov * loans) list) : (prov_var * loans) list =
   List.map (fun ((_, prov), loans) -> (prov, loans)) concrete
 
-let loan_env_mem (ell : loan_env) (var : prov) : bool =
-  ell |> to_prov_var_keys |> List.mem_assoc (snd var)
-let loan_env_lookup_opt (ell : loan_env) (var : prov) : loans option =
-  ell |> to_prov_var_keys |> List.assoc_opt (snd var)
-let loan_env_lookup (ell : loan_env) (var : prov) : loans =
-  ell |> to_prov_var_keys |> List.assoc (snd var)
+let loan_env_mem (gamma : var_env) (var : prov) : bool =
+  gamma |> to_loan_env |> to_prov_var_keys |> List.mem_assoc (snd var)
+let loan_env_lookup_opt (gamma : var_env) (var : prov) : loans option =
+  gamma |> to_loan_env |> to_prov_var_keys |> List.assoc_opt (snd var)
+let loan_env_lookup (gamma : var_env) (var : prov) : loans =
+  gamma |> to_loan_env |> to_prov_var_keys |> List.assoc (snd var)
 
-let loan_env_eq (ell1: loan_env) (ell2: loan_env) : bool =
-  let concrete_dom = List.map (snd >> fst)
-  in let equal_loans (prov : prov) : bool =
-    equal_unordered (loan_env_lookup ell1 prov) (loan_env_lookup ell2 prov)
-  in equal_unordered (concrete_dom ell1) (concrete_dom ell2) &&
-     ell1 |> List.map fst |> List.for_all equal_loans
-
-let loan_env_filter_dom (ell : loan_env) (provs : provs) : loan_env =
-  let prov_vars = List.map snd provs
-  in ell |> List.filter (flip List.mem $ prov_vars >> snd >> fst)
-
-let loan_env_include (var : prov) (loans : loans) (ell : loan_env) : loan_env =
-  ell |> List.filter ((<>) (snd var) >> snd >> fst) |> List.cons (var, loans)
-let loan_env_include_all (provs : provs) (loans : loans) (ell : loan_env) : loan_env =
-  let entries = List.map (fun prov -> (prov, loans)) provs
-  in ell |> List.filter (fun (prov, _) -> provs |> List.map snd |> List.mem (snd prov) |> not)
-         |> List.append entries
-
-let loan_env_append (ell1 : loan_env) (ell2 : loan_env) : loan_env =
-  List.append ell1 ell2
-
-let loan_env_exclude (prov : prov) (ell : loan_env) : loan_env =
-  ell |> List.filter ((<>) (snd prov) >> snd >> fst)
-let loan_env_exclude_all (provs : provs) (ell : loan_env) : loan_env =
-  ell |> List.filter (fun ((_, prov), _) -> provs |> List.map snd |> List.mem prov |> not)
-
-let canonize (ell : loan_env) : loan_env =
-  ell |> List.sort_uniq compare_keys
-
-(* var_env is mutually recursive with ty and as such, is defined above *)
-let empty_gamma : var_env = []
+let loan_env_include (var : prov) (loans : loans) (gamma : var_env) : var_env =
+  match gamma with
+  | top_frame :: rest_of_stack -> (Prov (var, loans) :: top_frame) :: rest_of_stack
+  | [] -> failwith "unreachable: var_env should never have zero frames"
+let loan_env_include_all (provs : provs) (loans : loans) (gamma : var_env) : var_env =
+  match gamma with
+  | top_frame :: rest_of_stack ->
+    let new_provs = provs |> List.map (fun prov -> Prov (prov, loans)) |> List.rev
+    in List.append new_provs top_frame :: rest_of_stack
+  | [] -> failwith "unreachable: var_env should never have zero frames"
 
 (* useful for pretty-printing in ownership safety *)
 type place_env = (place * ty) list [@@deriving show]
@@ -383,7 +407,6 @@ type tc_error =
   | TypeMismatchArray of ty (* found *)
   | UnrelatedTypes of ty * ty (* neither ty1 nor ty2 are contained within one another *)
   | VarEnvMismatch of source_loc * var_env * var_env (* source_loc * expected * found *)
-  | LoanEnvMismatch of source_loc * loan_env * loan_env (* source_loc * expected * found *)
   | SafetyErr of (owned * place_expr) * (owned * place_expr)
                 (* attempted access * conflicting loan *)
   | PermissionErr of ty * expr_path * owned
@@ -406,6 +429,7 @@ type tc_error =
   | InvalidType of ty
   | InvalidEnvVar of env_var * ty (* invalid env var * the type it was found in *)
   | InvalidProv of prov
+  | CannotShadowProvenance of prov
   | ProvDoesNotOutlive of prov * prov (* the first provenance does not outlive the second *)
   | InvalidLoan of owned * place_expr
   | InvalidArrayLen of ty * int

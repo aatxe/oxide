@@ -44,9 +44,17 @@ let rec plug (fill : ty) (ctx : ty_ctx) : ty =
 
 (* var env operations *)
 
+let stack_to_bindings (gamma : var_env) : (var * ty) list =
+  gamma |> List.map to_bindings |> List.flatten
+
+let var_env_lookup_var (gamma : var_env) (id : var) : ty tc =
+  match gamma |> stack_to_bindings |> List.assoc_opt id with
+  | Some ty -> Succ ty
+  | None -> UnboundPlace ((inferred, (id, []))) |> fail
+
 let var_env_lookup (gamma : var_env) (pi : place) : ty tc =
   let (root, path) = snd pi
-  in match List.assoc_opt root gamma with
+  in match gamma |> stack_to_bindings |> List.assoc_opt root with
   | Some ty ->
     let* (_, ty) = decompose ty path
     in Succ ty
@@ -54,13 +62,13 @@ let var_env_lookup (gamma : var_env) (pi : place) : ty tc =
 
 let var_env_lookup_root (gamma : var_env) (pi : place) : ty tc =
   let (root, _) = snd pi
-  in match List.assoc_opt root gamma with
+  in match gamma |> stack_to_bindings |> List.assoc_opt root with
   | Some ty -> Succ ty
   | None -> UnboundPlace pi |> fail
 
 let var_env_lookup_expr_root (gamma : var_env) (phi : place_expr) : ty tc =
   let (root, _) = snd phi
-  in match List.assoc_opt root gamma with
+  in match gamma |> stack_to_bindings |> List.assoc_opt root with
   | Some ty -> Succ ty
   | None -> UnboundPlaceExpr phi |> fail
 
@@ -72,7 +80,7 @@ let var_env_lookup_many (gamma : var_env) (pis : place list) : ty list tc =
 
 let var_env_lookup_opt (gamma : var_env) (pi : place) : (ty option) tc =
   let (root, path) = snd pi
-  in match List.assoc_opt root gamma with
+  in match gamma |> stack_to_bindings |> List.assoc_opt root with
   | Some ty ->
     let* (_, ty) = decompose ty path
     in Some ty |> succ
@@ -85,42 +93,45 @@ let var_env_lookup_place_expr (gamma : var_env) (pi : place_expr) : ty tc =
 
 let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
   let (root, _) = snd pi
-  in match List.assoc_opt root gamma with
+  in match gamma |> stack_to_bindings |> List.assoc_opt root with
   | Some _ -> true
   | None -> false
 
-let var_env_type_update (gamma : var_env) (pi : place) (ty : ty) : var_env tc =
-  let (root, path) = snd pi
-  in match List.assoc_opt root gamma with
-  | Some root_ty ->
-    let* (ctx, _) = decompose root_ty path
-    in plug ty ctx |> replace_assoc gamma root |> succ
-  | None -> UnboundPlace pi |> fail
+let var_env_type_update (_ : var_env) (_ : place) (_ : ty) : var_env tc =
+  failwith "FIXME: type update"
+  (* let (root, path) = snd pi
+   * in match gamma |> stack_to_bindings |> List.assoc_opt root with
+   * | Some root_ty ->
+   *   let* (ctx, _) = decompose root_ty path
+   *   in plug ty ctx |> replace_assoc gamma root |> succ
+   * | None -> UnboundPlace pi |> fail *)
 
-let var_env_uninit_many (gamma : var_env) (vars : var list) : var_env =
-  let work (entry : var * ty) : var * ty =
-    if List.mem (fst entry) vars then (fst entry, (inferred, Uninit (snd entry))) else entry
-  in List.map work gamma
+let var_env_uninit_many (_ : var_env) (_ : var list) : var_env =
+  failwith "FIXME: uninit many"
+  (* let work (entry : var * ty) : var * ty =
+   *   if List.mem (fst entry) vars then (fst entry, (inferred, Uninit (snd entry)))
+   *   else entry
+   * in List.map work gamma *)
 
-let var_env_include (gamma : var_env) (x : var) (typ : ty) = List.cons (x, typ) gamma
-let var_env_append (gamma1 : var_env) (gamma2 : var_env) = List.append gamma1 gamma2
-let var_env_exclude (gamma : var_env) (x : var) = List.remove_assoc x gamma
+let var_env_include (gamma : var_env) (x : var) (typ : ty) =
+  match gamma with
+  | top_frame :: rest_of_stack -> (Id (x, typ) :: top_frame) :: rest_of_stack
+  | [] -> failwith "unreachable: var_env should never have zero frames"
 
-let var_env_diff (gam1 : var_env) (gam2 : var_env) : var_env =
-  let not_in_gam2 (entry1 : var * ty) : bool =
-    not $ List.exists (fun entry2 -> fst entry2 = fst entry1) gam2
-  in List.filter not_in_gam2 gam1
+let var_env_new_frame (gamma : var_env) (frame : static_frame) : var_env = frame :: gamma
 
 (* looks up var in gamma, and if the type is a closure, returns its closed over environment *)
 let env_of (var : var) (gamma : var_env) : env tc =
-  match List.assoc_opt var gamma with
+  match gamma |> stack_to_bindings |> List.assoc_opt var with
   | Some (_, Fun (_, _, _, _, gamma_c, _, _)) -> Succ gamma_c
   | Some ty -> TypeMismatchFunction ty |> fail
   | None -> UnboundPlace ((dummy, (var, []))) |> fail
 
 (* returns whether or not the given gamma contains the provenance in any types *)
-let rec contains_prov (gamma : var_env) (prov : prov) : bool =
-  let rec ty_contains (ty : ty) : bool =
+let contains_prov (gamma : var_env) (prov : prov) : bool =
+  let rec frame_contains (frame : static_frame) : bool =
+    frame |> to_bindings |> List.map snd |> tys_contains
+  and ty_contains (ty : ty) : bool =
     match snd ty with
     | Any | Infer | BaseTy _ | TyVar _ -> false
     | Ref (pv, _, ty) -> snd pv = snd prov || ty_contains ty
@@ -130,7 +141,7 @@ let rec contains_prov (gamma : var_env) (prov : prov) : bool =
         bounds |> List.map fst |> contains prov ||
         bounds |> List.map snd |> contains prov ||
         match gam with
-        | Env gam -> contains_prov gam prov
+        | Env gam -> frame_contains gam
         | Unboxed | EnvVar _ | EnvOf _ -> false
       else false
     | Uninit ty | Array (ty, _) | Slice ty -> ty_contains ty
@@ -138,7 +149,7 @@ let rec contains_prov (gamma : var_env) (prov : prov) : bool =
     | Tup tys -> tys_contains tys
     | Struct (_, pvs, _, _) -> List.mem prov pvs
   and tys_contains (tys : ty list) : bool = List.exists ty_contains tys
-  in List.exists (ty_contains >> snd) gamma
+  in List.exists frame_contains gamma
 
 
 (* is path2 a prefix of path1? *)
@@ -284,16 +295,17 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
 let subst_many (pairs : (ty * ty_var) list) (ty : ty) : ty =
   List.fold_right (fun pair ty -> subst ty (fst pair) (snd pair)) pairs ty
 
-let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
-    (prov1 : prov) (prov2 : prov) : loan_env tc =
+let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
+    (prov1 : prov) (prov2 : prov) : var_env tc =
+  (* FIXME: actual provenance updates *)
   match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
   | (Combine, Some rep1, Some rep2) ->
     (* UP-CombineLocalProvenances*)
-    let ellPrime = ell |> loan_env_exclude_all [prov1; prov2]
+    let ellPrime = ell (* |> loan_env_exclude_all [prov1; prov2] *)
     in ellPrime |> loan_env_include_all [prov1; prov2] (list_union rep1 rep2) |> succ
   | (Override, Some rep1, Some _) ->
     (* UP-OverrideLocalProvenances *)
-    let ellPrime = ell |> loan_env_exclude prov2
+    let ellPrime = ell (* |> loan_env_exclude prov2 *)
     in ellPrime |> loan_env_include prov2 rep1 |> succ
   | (_, None, Some _) ->
     (* UP-AbstractProvLocalProv *)
@@ -310,14 +322,14 @@ let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
     else if not $ tyvar_env_abs_sub delta prov1 prov2 then AbsProvsNotSubtype (prov1, prov2) |> fail
     else Succ ell
 
-let subtype_prov_many (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
-    (provs1 : provs) (provs2 : provs) : loan_env tc =
+let subtype_prov_many (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
+    (provs1 : provs) (provs2 : provs) : var_env tc =
   let* provs = combine_prov "subtype_prov_many" provs1 provs2
   in foldl (fun ell (prov1, prov2) -> subtype_prov mode delta ell prov1 prov2) ell provs
 
-let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
-            (ty1 : ty) (ty2 : ty) : loan_env tc =
-  let rec sub (ell : loan_env) (ty1 : ty) (ty2 : ty) : loan_env tc =
+let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
+            (ty1 : ty) (ty2 : ty) : var_env tc =
+  let rec sub (ell : var_env) (ty1 : ty) (ty2 : ty) : var_env tc =
     match (snd ty1, snd ty2) with
     (* UT-Refl for base types *)
     | (BaseTy bt1, BaseTy bt2) ->
@@ -342,7 +354,7 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
       let* ellPrime = subtype_prov mode delta ell v1 v2
       in let* ell1 = sub ellPrime t1 t2
       in let* ell2 = sub ellPrime t2 t1
-      in if canonize ell1 = canonize ell2 then Succ ell2
+      in if ell1 = ell2 then Succ ell2
       else Fail (UnificationFailed (t1, t2))
     (* UT-Tuple *)
     | (Tup tys1, Tup tys2) -> sub_many ell tys1 tys2
@@ -384,26 +396,26 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : loan_env)
         | Succ _ -> Fail (PartiallyMovedTypes (ty1, ty2))
         | Fail err -> Fail err)
     | (_, _) -> Fail (UnificationFailed (ty1, ty2))
-  and sub_many (ell : loan_env) (tys1 : ty list) (tys2 : ty list) : loan_env tc =
+  and sub_many (ell : var_env) (tys1 : ty list) (tys2 : ty list) : var_env tc =
     let* tys = combine_tys "subtype_many" tys1 tys2
     in foldl (fun ell (ty1, ty2) -> sub ell ty1 ty2) ell tys
-  and sub_opt (ell : loan_env) (ty1 : ty option) (ty2 : ty option) : loan_env tc =
+  and sub_opt (ell : var_env) (ty1 : ty option) (ty2 : ty option) : var_env tc =
     match (ty1, ty2) with
     | (Some ty1, Some ty2) -> sub ell ty1 ty2
     | (Some _, None) | (None, Some _) | (None, None) -> Succ ell
   in sub ell ty1 ty2
 
 (* invariant subtyping *)
-let unify (loc : source_loc) (delta : tyvar_env) (ell : loan_env)
-          (ty1 : ty) (ty2 : ty) : (loan_env * ty) tc =
+let unify (loc : source_loc) (delta : tyvar_env) (ell : var_env)
+          (ty1 : ty) (ty2 : ty) : (var_env * ty) tc =
   let* ell1 = subtype Combine delta ell ty1 ty2
   in let* ell2 = subtype Combine delta ell ty2 ty1
-  in if loan_env_eq ell1 ell2 then Succ (ell2, ty2)
-  else LoanEnvMismatch (loc, ell1, ell2) |> fail
+  in if ell1 = ell2 then Succ (ell2, ty2)
+  else VarEnvMismatch (loc, ell1, ell2) |> fail
 
 (* invariant subtyping for a sequence of types *)
-let unify_many (loc : source_loc) (delta :tyvar_env) (ell : loan_env)
-               (tys : ty list) : (loan_env * ty) tc =
+let unify_many (loc : source_loc) (delta :tyvar_env) (ell : var_env)
+               (tys : ty list) : (var_env * ty) tc =
   match tys with
   | [] -> Succ (ell, (loc, Any))
   | [ty] -> Succ (ell, ty)
@@ -411,40 +423,41 @@ let unify_many (loc : source_loc) (delta :tyvar_env) (ell : loan_env)
     foldl (fun (curr_ell, curr_ty) new_ty -> unify loc delta curr_ell curr_ty new_ty) (ell, ty) tys
 
 (* checks that prov2 outlives prov1, erroring otherwise *)
-let rec outlives (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
-                 (prov1: prov) (prov2 : prov) : loan_env tc =
-  match (loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
+let rec outlives (delta : tyvar_env) (gamma : var_env)
+                 (prov1: prov) (prov2 : prov) : var_env tc =
+  (* FIXME: actual provenance updates *)
+  match (loan_env_lookup_opt gamma prov1, loan_env_lookup_opt gamma prov2) with
   | (Some rep1, Some rep2) ->
-    let ellPrime = ell |> loan_env_exclude_all [prov1; prov2]
+    let ellPrime = gamma (* |> loan_env_exclude_all [prov1; prov2] *)
     in ellPrime |> loan_env_include_all [prov1; prov2] (list_union rep1 rep2) |> succ
   | (None, Some loans) ->
     (* true if all the loans are reborrow loans from things that outlive the abstract provenance *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
-    else loans |> List.map snd |> map (passed_provs delta ell gamma)
+    else loans |> List.map snd |> map (passed_provs delta gamma)
                >>= (succ >> List.flatten)
-               >>= foldl (fun ell pv2 ->
-                            if snd pv2 <> snd prov2 then outlives delta ell gamma prov1 pv2
-                            else ProvDoesNotOutlive (prov1, prov2) |> fail) ell
+               >>= foldl (fun gamma pv2 ->
+                            if snd pv2 <> snd prov2 then outlives delta gamma prov1 pv2
+                            else ProvDoesNotOutlive (prov1, prov2) |> fail) gamma
   | (Some _, None) ->
     if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
-    else Succ ell
+    else Succ gamma
   | (None, None) ->
     (* UP-AbstractProvenances *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
     else if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
     else if not $ tyvar_env_abs_sub delta prov1 prov2 then AbsProvsNotSubtype (prov1, prov2) |> fail
-    else Succ ell
+    else Succ gamma
 (* find the type of the expr path based on the original type in a context *)
 (* this will error if the context doesn't allow the operation,
    e.g. dereferencing a shared reference in a unique context *)
-and compute_with_passed (ctx : owned) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+and compute_with_passed (ctx : owned) (delta : tyvar_env) (gamma : var_env)
                         (phi : place_expr) : (provs * ty) tc =
   let rec compute (passed : provs) (path : expr_path) (ty : ty)  : (provs * ty) tc =
     match (snd ty, path) with
     | (_, []) -> Succ (passed, ty)
     | (Ref (prov, omega, ty), Deref :: path) ->
       if is_at_least ctx omega then
-        let* _ = foldr (fun pv ell -> outlives delta ell gamma pv prov) passed ell
+        let* _ = foldr (fun pv gamma -> outlives delta gamma pv prov) passed gamma
         in compute (List.cons prov passed) path ty
       else Fail (PermissionErr (ty, path, ctx))
     | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
@@ -456,51 +469,22 @@ and compute_with_passed (ctx : owned) (delta : tyvar_env) (ell : loan_env) (gamm
     | (_, path) -> Fail (InvalidOperationOnTypeEP (path, ty))
   in let* root_ty = var_env_lookup_expr_root gamma phi
   in compute [] (expr_path_of phi) root_ty
-and passed_provs (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
-                 (phi : place_expr) : provs tc =
-  let* (passed, _) = compute_with_passed Shared delta ell gamma phi
+and passed_provs (delta : tyvar_env) (gamma : var_env) (phi : place_expr) : provs tc =
+  let* (passed, _) = compute_with_passed Shared delta gamma phi
   in Succ passed
 
-let compute_ty_in (ctx : owned) (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
+let compute_ty_in (ctx : owned) (delta : tyvar_env) (gamma : var_env)
                   (phi : place_expr) : ty tc =
-  let* (_, ty) = compute_with_passed ctx delta ell gamma phi
+  let* (_, ty) = compute_with_passed ctx delta gamma phi
   in Succ ty
 
 (* find the type of the place expression, assuming a shared use context*)
-let compute_ty (delta : tyvar_env) (ell : loan_env) (gamma :var_env) (phi : place_expr) : ty tc =
-  compute_ty_in Shared delta ell gamma phi
+let compute_ty (delta : tyvar_env) (gamma :var_env) (phi : place_expr) : ty tc =
+  compute_ty_in Shared delta gamma phi
 
 (* checks that all the outlives bounds are satisfied in delta and ell *)
-let check_bounds (delta : tyvar_env) (ell : loan_env) (gamma : var_env)
-                 (bounds : bounds) : loan_env tc =
-  foldl (fun ell (prov1, prov2) -> outlives delta ell gamma prov1 prov2) ell bounds
-
-let envs_minus (keep_provs : provs) (ell : loan_env) (gamma : var_env)
-               (pi : place) : (loan_env * var_env) tc =
-  let rec loop (envs : loan_env * var_env) (ty : ty option) : (loan_env * var_env) tc =
-    match ty with
-    | Some (_, Ref (prov, _, ty)) ->
-      let* (ell, gamma) = Some ty |> loop envs
-      in let new_gamma = pi |> root_of |> var_env_exclude gamma
-      in if not $ contains_prov new_gamma prov && not $ contains prov keep_provs then
-        Succ (loan_env_exclude prov ell, new_gamma)
-      else Succ (ell, new_gamma)
-    | Some (_, Any) | Some (_, Infer) | Some (_, BaseTy _) | Some (_, TyVar _) | Some (_, Fun _)
-    | Some (_, Struct _) -> Succ envs
-    | Some (_, Uninit ty)
-    | Some (_, Array (ty, _))
-    | Some (_, Slice ty) -> Some ty |> loop envs
-    | Some (_, Rec pairs) -> List.map snd pairs |> loops envs
-    | Some (_, Tup tys) -> loops envs tys
-    | None -> Succ envs
-  and loops (envs : loan_env * var_env) = foldl loop envs >> List.map Option.some
-  in let pi_as_phi = place_to_place_expr pi
-  in let remove_provs (ell : loan_env) : loan_env =
-    ell |> List.filter (not >> List.exists (expr_prefix_of |> flip $ pi_as_phi)
-                            >> List.map snd >> snd)
-  in let* opt = var_env_lookup_opt gamma pi
-  in let* (ell_out, gamma_out) = loop (ell, pi |> root_of |> var_env_exclude gamma) opt
-  in Succ (remove_provs ell_out, gamma_out)
+let check_bounds (delta : tyvar_env) (gamma : var_env) (bounds : bounds) : var_env tc =
+  foldl (fun gamma (prov1, prov2) -> outlives delta gamma prov1 prov2) gamma bounds
 
 (* is the given type non-copyable? *)
 (* note: this can only error if the type features a struct not defined in sigma *)
@@ -525,7 +509,7 @@ and noncopyable_env (sigma : global_env) (env : env) : bool tc =
   match env with
   | Unboxed -> Succ true
   | EnvVar _ -> Succ true
-  | Env gamma_c -> gamma_c |> List.map snd |> any (noncopyable sigma)
+  | Env gamma_c -> gamma_c |> to_bindings |> List.map snd |> any (noncopyable sigma)
   | EnvOf _ -> Succ true
 
 let copyable (sigma : global_env) (typ : ty) : bool tc =
@@ -676,17 +660,18 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
 let free_nc_vars (sigma : global_env) (gamma : var_env) (expr : expr) : vars tc =
   free_vars_helper expr
   (fun var ->
-     match List.assoc_opt var gamma with
+     match gamma |> stack_to_bindings |> List.assoc_opt var with
      | Some ty -> noncopyable sigma ty
      (* if it's not in gamma, that means it's local to the expression, thus isn't free *)
      | None -> Succ false)
 
 let free_vars (expr : expr) : vars tc = free_vars_helper expr (fun _ -> Succ true)
 
-let free_provs_var_env : var_env -> provs = List.flatten >> List.map (free_provs_ty >> snd)
+let free_provs_var_env : var_env -> provs =
+  List.flatten >> List.map (free_provs_ty >> snd) >> stack_to_bindings
 
 (* produces an error if the loans in the given type are found in the parameter list *)
-let find_refs_to_params (delta : tyvar_env) (ell : loan_env)
+let find_refs_to_params (delta : tyvar_env) (ell : var_env)
                         (ty : ty) (params : (var * ty) list) : unit tc =
   let place_in_params (pi : place) : bool = List.mem_assoc (root_of pi) params
   in let rec impl (ty : ty) : unit tc =
@@ -711,9 +696,9 @@ let find_refs_to_params (delta : tyvar_env) (ell : loan_env)
     | Struct _ | Uninit _ -> Succ ()
   in impl ty
 
-let find_refs_to_captured (delta : tyvar_env) (ell : loan_env)
-                          (ty : ty) (gamma_c : var_env) : unit tc =
-  match find_refs_to_params delta ell ty gamma_c with
+let find_refs_to_captured (delta : tyvar_env) (ell : var_env)
+                          (ty : ty) (gamma_c : static_frame) : unit tc =
+  match gamma_c |> to_bindings |> find_refs_to_params delta ell ty with
   | Fail (NoReferenceToParameter pi) -> NoReferenceToCaptured pi |> fail
   | res -> res
 
@@ -752,31 +737,30 @@ let rec ty_in (ty1 : ty) (ty2 : ty) : bool =
   | Struct (_, _, tys, opt_ty) ->
     opt_ty |> Option.to_list |> List.append tys |> List.exists (fun ty1 -> ty_in ty1 ty2)
 
-
-let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
-  let combine (acc : loan_env) (entry : prov * loans) : loan_env =
-    let (prov, loans) = entry
-    in match loan_env_lookup_opt acc prov with
-    | Some curr_loans -> acc |> loan_env_exclude prov
-                             |> loan_env_include prov (list_union loans curr_loans)
-    | None -> acc |> loan_env_include prov loans
-  in List.fold_left combine ell1 ell2
-
-(* return only the common entries, taking uninit types over init types *)
-let merge (gamma1: var_env) (gamma2 : var_env) : var_env =
-  let merge_entry (name, ty1) =
-    match (ty1 |> snd, List.assoc_opt name gamma2) with
-    | (Uninit _ , Some ((_, Uninit _) as ty2)) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
-    | (Uninit inner, Some ty2) -> if ty_eq inner ty2 then Some (name, ty1) else None
-    | (_, Some ty2) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
-    | (_, None) -> None
-  in gamma1 |> List.map merge_entry |> List.filter Option.is_some |> List.map Option.get
-
-let intersect (envs1 : loan_env * var_env) (envs2 : loan_env * var_env) : loan_env * var_env =
-  let (ell1, gamma1) = envs1
-  in let (ell2, gamma2) = envs2
-  in let ell = union ell1 ell2
-  in (ell, merge gamma1 gamma2)
+(* let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
+ *   let combine (acc : loan_env) (entry : prov * loans) : loan_env =
+ *     let (prov, loans) = entry
+ *     in match loan_env_lookup_opt acc prov with
+ *     | Some curr_loans -> acc |> loan_env_exclude prov
+ *                              |> loan_env_include prov (list_union loans curr_loans)
+ *     | None -> acc |> loan_env_include prov loans
+ *   in List.fold_left combine ell1 ell2
+ * 
+ * (\* return only the common entries, taking uninit types over init types *\)
+ * let merge (gamma1: var_env) (gamma2 : var_env) : var_env =
+ *   let merge_entry (name, ty1) =
+ *     match (ty1 |> snd, List.assoc_opt name gamma2) with
+ *     | (Uninit _ , Some ((_, Uninit _) as ty2)) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
+ *     | (Uninit inner, Some ty2) -> if ty_eq inner ty2 then Some (name, ty1) else None
+ *     | (_, Some ty2) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
+ *     | (_, None) -> None
+ *   in gamma1 |> List.map merge_entry |> List.filter Option.is_some |> List.map Option.get
+ * 
+ * let intersect (envs1 : loan_env * var_env) (envs2 : loan_env * var_env) : loan_env * var_env =
+ *   let (ell1, gamma1) = envs1
+ *   in let (ell2, gamma2) = envs2
+ *   in let ell = union ell1 ell2
+ *   in (ell, merge gamma1 gamma2) *)
 
 (* populate the tagged section of struct types based on the global environment *)
 let struct_to_tagged (sigma : global_env) : global_env tc =
