@@ -100,7 +100,7 @@ let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
 
 let env_update (gamma : var_env) (should_update : frame_entry -> bool)
                (update : frame_entry -> frame_entry tc)
-               (error : tc_error) : var_env tc =
+               (base : var_env tc) : var_env tc =
   (* possibly updates the frame and returns false if so *)
   let rec frame_update (frame : static_frame) : (static_frame * bool) tc =
     match frame with
@@ -117,7 +117,7 @@ let env_update (gamma : var_env) (should_update : frame_entry -> bool)
       let* (frame, should_continue) = frame_update top_frame
       in if should_continue then update_until_stop rest_of_stack >>= (succ >> List.cons frame)
       else frame :: rest_of_stack |> succ
-    | [] -> error |> fail
+    | [] -> base
   in update_until_stop gamma
 
 let var_env_type_update (pi : place) (ty : ty) (gamma : var_env) : var_env tc =
@@ -130,7 +130,7 @@ let var_env_type_update (pi : place) (ty : ty) (gamma : var_env) : var_env tc =
         let* (ctx, _) = decompose root_ty path
         in Id (var, plug ty ctx) |> succ
     | _ -> failwith "unreachable: no type to update for non-binding frame entries"
-  in env_update gamma should_update update $ UnboundPlace pi
+  in UnboundPlace pi |> fail |> env_update gamma should_update update
 
 let loan_env_prov_update (prov : prov) (loans : loans) (gamma : var_env) : var_env tc =
   let should_update (entry : frame_entry) : bool =
@@ -139,7 +139,7 @@ let loan_env_prov_update (prov : prov) (loans : loans) (gamma : var_env) : var_e
     match entry with
     | Prov (prov, _) -> Prov (prov, loans) |> succ
     | _ -> failwith "unreachable: no loans to update for non-provenance frame entries"
-  in env_update gamma should_update update $ InvalidProv prov
+  in InvalidProv prov |> fail |> env_update gamma should_update update
 
 let var_env_uninit_many (gamma : var_env) (moved : var list) : var_env tc =
   let move_var (gamma : var_env) (moved : var) : var_env tc =
@@ -293,6 +293,14 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
   and sub_opt (ty : ty option) : ty option = Option.map sub ty
   in sub ty
 
+let subst_prov_in_env (this : prov) (that : prov) (gamma : var_env) : var_env tc =
+  let should_update (_ : frame_entry) : bool = true
+  in let update (entry : frame_entry) : frame_entry tc =
+    match entry with
+    | Id (var, root_ty) -> Id (var, subst_prov root_ty this that) |> succ
+    | _ -> failwith "unreachable: no type to update for non-binding frame entries"
+  in [] |> succ |> env_update gamma should_update update
+
 let subst_many_prov (pairs : (prov * prov) list) (ty : ty) : ty =
   List.fold_right (fun pair ty -> subst_prov ty (fst pair) (snd pair)) pairs ty
 
@@ -336,11 +344,9 @@ let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
     (* UP-CombineLocalProvenances*)
     let loans = list_union rep1 rep2
     in ell |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
-  | (Override, Some rep1, Some _) ->
+  | (Override, Some _, Some _) ->
     (* UP-OverrideLocalProvenances *)
-    (* FIXME: substitute *)
-    let ellPrime = ell (* |> loan_env_exclude prov2 *)
-    in ellPrime |> loan_env_include prov2 rep1 |> succ
+    subst_prov_in_env prov1 prov2 ell
   | (_, None, Some _) ->
     (* UP-AbstractProvLocalProv *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail

@@ -404,17 +404,15 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
                             in Id (var, ty) |> succ)
       in let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
         var_env_include gamma (fst pair) (snd pair)
-      in let gammaPrime = List.fold_left var_include_fold (var_env_new_frame gamma gamma_c) params
+      in let* gammaMoved = var_env_uninit_many gamma moved_vars
+      in let gammaPrime =
+        List.fold_left var_include_fold (var_env_new_frame gammaMoved gamma_c) params
       in let deltaPrime = delta |> tyvar_env_add_provs provs |> tyvar_env_add_ty_vars tyvars
       in let* (ret_ty, gamma_body) = tc deltaPrime gammaPrime body
       in let* () = find_refs_to_captured deltaPrime gamma_body ret_ty gamma_c
-      in let* gammaPrime = var_env_uninit_many gamma moved_vars
-      in let gamma =
-        List.fold_right kill_loans_for
-                        (List.map (fun x -> (inferred, (x, []))) moved_vars)
-                        gammaPrime
       in let fn_ty (ret_ty : ty) : ty =
            (inferred, Fun ([], provs, tyvars, List.map snd params, Env gamma_c, ret_ty, []))
+      in let gamma = pop gamma_body
       in (match opt_ret_ty with
           | Some ann_ret_ty ->
             let* gammaFinal = subtype Combine deltaPrime gamma ret_ty ann_ret_ty
