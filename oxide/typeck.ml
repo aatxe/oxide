@@ -201,7 +201,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
              let* noncopy = noncopyable sigma ty
              in if is_init ty then
                if noncopy then
-                 let* gammaPrime = var_env_type_update gamma pi $ uninit ty
+                 let* gammaPrime = gamma |> var_env_type_update pi (uninit ty)
                  in Succ gammaPrime
                else Succ gamma
              else PartiallyMoved (pi, ty) |> fail
@@ -220,7 +220,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | Some pi ->
          let* ty = var_env_lookup gamma pi
          in if is_init ty then
-           let* gammaPrime = var_env_type_update gamma pi $ uninit ty
+           let* gammaPrime = gamma |> var_env_type_update pi (uninit ty)
            in let gammaPrime = kill_loans_for phi gammaPrime
            in Succ ((inferred, BaseTy Unit), gammaPrime)
          else PartiallyMoved (pi, ty) |> fail
@@ -283,11 +283,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       (match tc delta gamma e1 with
        | Succ ((_, BaseTy Bool), gamma1) ->
          let* (ty2, gamma2) = tc delta gamma1 e2
-         in let* _ = tc delta gamma1 e3
-         (* in let (ellPrime, gammaPrime) = intersect (ell2, gamma2) (ell3, gamma3)
-          * in let* (ellFinal, tyFinal) = unify (fst expr) delta ellPrime ty2 ty3
-          * in let* () = valid_type sigma delta ellFinal gammaPrime tyFinal *)
-         in Succ (ty2, gamma2) (* FIXME: T-Branch *)
+         in let* (ty3, gamma3) = tc delta gamma1 e3
+         in let gammaPrime = intersect gamma2 gamma3
+         in let* (gammaFinal, tyFinal) = unify (fst expr) delta gammaPrime ty2 ty3
+         in let* () = valid_type sigma delta gammaFinal tyFinal
+         in Succ (tyFinal, gammaFinal)
        | Succ (found, _) -> TypeMismatch ((dummy, BaseTy Bool), found) |> fail
        | Fail err -> Fail err)
     (* T-LetProv *)
@@ -304,11 +304,6 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       else let gammaPrime = loan_env_include_all new_provs [] gamma
       in let* (ty_out, gamma_out) = tc delta gammaPrime e
       in Succ (ty_out, shift_n (List.length new_provs) gamma_out)
-      (* let to_loan_entry (var : prov) : prov * loans = (var, [])
-       * in let deltaPrime = tyvar_env_add_provs new_provs delta
-       * in let ellPrime = provs_of delta |> List.map to_loan_entry |> flip loan_env_append $ ell
-       * in let* (ty_out, ell_out, gamma_out) = tc deltaPrime ellPrime gamma e
-       * in Succ (ty_out, loan_env_exclude_all new_provs ell_out, gamma_out) *)
     (* T-LetInfer *)
     | Let (var, (_, Infer), e1, e2) ->
       let* (ty1, gamma1) = tc delta gamma e1
@@ -338,7 +333,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in (match place_expr_to_place phi with
        (* T-Assign *)
        | Some pi ->
-         let* gammaPrime = var_env_type_update gammaPrime pi ty_update
+         let* gammaPrime = gammaPrime |> var_env_type_update pi ty_update
          in Succ ((inferred, BaseTy Unit), gammaPrime)
        (* T-AssignDeref *)
        | None -> Succ ((inferred, BaseTy Unit), gammaPrime))
@@ -386,7 +381,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
             | Succ (ty, [(Unique, _)]) ->
               let* closure_copyable = copyable sigma ty
               in if closure_copyable then Succ (ty, gamma)
-              else let* gammaPrime = uninit ty |> var_env_type_update gamma (fst expr, (fn, []))
+              else let* gammaPrime = gamma |> var_env_type_update (fst expr, (fn, [])) (uninit ty)
               in Succ (ty, gammaPrime)
             | Succ _ -> failwith "T-Move as T-Function: unreachable"
             | Fail err -> Fail err)
@@ -413,7 +408,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let deltaPrime = delta |> tyvar_env_add_provs provs |> tyvar_env_add_ty_vars tyvars
       in let* (ret_ty, gamma_body) = tc deltaPrime gammaPrime body
       in let* () = find_refs_to_captured deltaPrime gamma_body ret_ty gamma_c
-      in let gammaPrime = var_env_uninit_many gamma moved_vars
+      in let* gammaPrime = var_env_uninit_many gamma moved_vars
       in let gamma =
         List.fold_right kill_loans_for
                         (List.map (fun x -> (inferred, (x, []))) moved_vars)

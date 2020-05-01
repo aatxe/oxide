@@ -1,4 +1,5 @@
 open Syntax
+open Edsl
 open Util
 
 (* checks that omega_prime is at least omega *)
@@ -97,21 +98,54 @@ let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
   | Some _ -> true
   | None -> false
 
-let var_env_type_update (_ : var_env) (_ : place) (_ : ty) : var_env tc =
-  failwith "FIXME: type update"
-  (* let (root, path) = snd pi
-   * in match gamma |> stack_to_bindings |> List.assoc_opt root with
-   * | Some root_ty ->
-   *   let* (ctx, _) = decompose root_ty path
-   *   in plug ty ctx |> replace_assoc gamma root |> succ
-   * | None -> UnboundPlace pi |> fail *)
+let env_update (gamma : var_env) (should_update : frame_entry -> bool)
+               (update : frame_entry -> frame_entry tc)
+               (error : tc_error) : var_env tc =
+  (* possibly updates the frame and returns false if so *)
+  let rec frame_update (frame : static_frame) : (static_frame * bool) tc =
+    match frame with
+    | entry :: rest_of_frame ->
+      if should_update entry
+      then let* new_entry = update entry
+      in (new_entry :: rest_of_frame, false) |> succ
+      else let* (rest_of_frame, should_continue) = frame_update rest_of_frame
+      in (entry :: rest_of_frame, should_continue) |> succ
+    | [] -> ([], true) |> succ
+  and update_until_stop (gamma : var_env) : var_env tc =
+    match gamma with
+    | top_frame :: rest_of_stack ->
+      let* (frame, should_continue) = frame_update top_frame
+      in if should_continue then update_until_stop rest_of_stack >>= (succ >> List.cons frame)
+      else frame :: rest_of_stack |> succ
+    | [] -> error |> fail
+  in update_until_stop gamma
 
-let var_env_uninit_many (_ : var_env) (_ : var list) : var_env =
-  failwith "FIXME: uninit many"
-  (* let work (entry : var * ty) : var * ty =
-   *   if List.mem (fst entry) vars then (fst entry, (inferred, Uninit (snd entry)))
-   *   else entry
-   * in List.map work gamma *)
+let var_env_type_update (pi : place) (ty : ty) (gamma : var_env) : var_env tc =
+  let (root, path) = snd pi
+  in let should_update (entry : frame_entry) : bool =
+    match entry with Id (var, _) -> var = root | _ -> false
+  in let update (entry : frame_entry) : frame_entry tc =
+    match entry with
+    | Id (var, root_ty) ->
+        let* (ctx, _) = decompose root_ty path
+        in Id (var, plug ty ctx) |> succ
+    | _ -> failwith "unreachable: no type to update for non-binding frame entries"
+  in env_update gamma should_update update $ UnboundPlace pi
+
+let loan_env_prov_update (prov : prov) (loans : loans) (gamma : var_env) : var_env tc =
+  let should_update (entry : frame_entry) : bool =
+    match entry with Prov (pv, _) -> snd prov = snd pv | _ -> false
+  in let update (entry : frame_entry) : frame_entry tc =
+    match entry with
+    | Prov (prov, _) -> Prov (prov, loans) |> succ
+    | _ -> failwith "unreachable: no loans to update for non-provenance frame entries"
+  in env_update gamma should_update update $ InvalidProv prov
+
+let var_env_uninit_many (gamma : var_env) (moved : var list) : var_env tc =
+  let move_var (gamma : var_env) (moved : var) : var_env tc =
+    let* ty = var_env_lookup_var gamma moved
+    in gamma |> var_env_type_update (inferred, (moved, [])) (uninit ty)
+  in foldl move_var gamma moved
 
 let var_env_include (gamma : var_env) (x : var) (typ : ty) =
   match gamma with
@@ -297,14 +331,14 @@ let subst_many (pairs : (ty * ty_var) list) (ty : ty) : ty =
 
 let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
     (prov1 : prov) (prov2 : prov) : var_env tc =
-  (* FIXME: actual provenance updates *)
   match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
   | (Combine, Some rep1, Some rep2) ->
     (* UP-CombineLocalProvenances*)
-    let ellPrime = ell (* |> loan_env_exclude_all [prov1; prov2] *)
-    in ellPrime |> loan_env_include_all [prov1; prov2] (list_union rep1 rep2) |> succ
+    let loans = list_union rep1 rep2
+    in ell |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
   | (Override, Some rep1, Some _) ->
     (* UP-OverrideLocalProvenances *)
+    (* FIXME: substitute *)
     let ellPrime = ell (* |> loan_env_exclude prov2 *)
     in ellPrime |> loan_env_include prov2 rep1 |> succ
   | (_, None, Some _) ->
@@ -425,11 +459,10 @@ let unify_many (loc : source_loc) (delta :tyvar_env) (ell : var_env)
 (* checks that prov2 outlives prov1, erroring otherwise *)
 let rec outlives (delta : tyvar_env) (gamma : var_env)
                  (prov1: prov) (prov2 : prov) : var_env tc =
-  (* FIXME: actual provenance updates *)
   match (loan_env_lookup_opt gamma prov1, loan_env_lookup_opt gamma prov2) with
   | (Some rep1, Some rep2) ->
-    let ellPrime = gamma (* |> loan_env_exclude_all [prov1; prov2] *)
-    in ellPrime |> loan_env_include_all [prov1; prov2] (list_union rep1 rep2) |> succ
+    let loans = list_union rep1 rep2
+    in gamma |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
   | (None, Some loans) ->
     (* true if all the loans are reborrow loans from things that outlive the abstract provenance *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
@@ -737,30 +770,32 @@ let rec ty_in (ty1 : ty) (ty2 : ty) : bool =
   | Struct (_, _, tys, opt_ty) ->
     opt_ty |> Option.to_list |> List.append tys |> List.exists (fun ty1 -> ty_in ty1 ty2)
 
-(* let union (ell1 : loan_env) (ell2 : loan_env) : loan_env =
- *   let combine (acc : loan_env) (entry : prov * loans) : loan_env =
- *     let (prov, loans) = entry
- *     in match loan_env_lookup_opt acc prov with
- *     | Some curr_loans -> acc |> loan_env_exclude prov
- *                              |> loan_env_include prov (list_union loans curr_loans)
- *     | None -> acc |> loan_env_include prov loans
- *   in List.fold_left combine ell1 ell2
- * 
- * (\* return only the common entries, taking uninit types over init types *\)
- * let merge (gamma1: var_env) (gamma2 : var_env) : var_env =
- *   let merge_entry (name, ty1) =
- *     match (ty1 |> snd, List.assoc_opt name gamma2) with
- *     | (Uninit _ , Some ((_, Uninit _) as ty2)) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
- *     | (Uninit inner, Some ty2) -> if ty_eq inner ty2 then Some (name, ty1) else None
- *     | (_, Some ty2) -> if ty_eq ty1 ty2 then Some (name, ty1) else None
- *     | (_, None) -> None
- *   in gamma1 |> List.map merge_entry |> List.filter Option.is_some |> List.map Option.get
- * 
- * let intersect (envs1 : loan_env * var_env) (envs2 : loan_env * var_env) : loan_env * var_env =
- *   let (ell1, gamma1) = envs1
- *   in let (ell2, gamma2) = envs2
- *   in let ell = union ell1 ell2
- *   in (ell, merge gamma1 gamma2) *)
+(* conservatively merge the two environments by:
+   - unioning loan sets for the same provenances
+   - taking uninitialized types over initialized types *)
+let rec intersect (gamma1 : var_env) (gamma2 : var_env) : var_env =
+  List.map2 merge_frame gamma1 gamma2
+and merge_frame (frame1 : static_frame) (frame2 : static_frame) : static_frame =
+  List.map2 merge_entry frame1 frame2
+and merge_entry (entry1 : frame_entry) (entry2 : frame_entry) : frame_entry =
+  match (entry1, entry2) with
+  | (Id (x, ty1), Id (y, ty2)) ->
+      if x <> y then failwith "merge_entry: environment ordering does not match"
+      else Id (x, merge_ty ty1 ty2)
+  | (Prov (prov1, loans1), Prov (prov2, loans2)) ->
+      if prov1 <> prov2 then failwith "merge_entry: environment ordering does not match"
+      else Prov (prov1, list_union loans1 loans2)
+  | (_, _) -> failwith "merge_entry: environment ordering does not match"
+and merge_ty (ty1 : ty) (ty2 : ty) : ty =
+  if ty_eq ty1 ty2 then ty1
+  else match (snd ty1, snd ty2) with
+  | (Uninit inner_ty1, _) ->
+      if ty_eq inner_ty1 ty2 then ty1
+      else failwith "unreachable: combining types can only differ by a dagger"
+  | (_, Uninit inner_ty2) ->
+      if ty_eq ty1 inner_ty2 then ty2
+      else failwith "unreachable: combining types can only differ by a dagger"
+  | (_, _) -> failwith "unreachable: combining types can only differ by a dagger"
 
 (* populate the tagged section of struct types based on the global environment *)
 let struct_to_tagged (sigma : global_env) : global_env tc =
