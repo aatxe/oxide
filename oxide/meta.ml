@@ -185,7 +185,6 @@ let contains_prov (gamma : var_env) (prov : prov) : bool =
   and tys_contains (tys : ty list) : bool = List.exists ty_contains tys
   in List.exists frame_contains gamma
 
-
 (* is path2 a prefix of path1? *)
 let rec is_prefix_of (path1 : path) (path2 : path) : bool =
   match (path1, path2) with
