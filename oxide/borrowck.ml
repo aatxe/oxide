@@ -3,11 +3,23 @@ open Meta
 open Syntax
 open Util
 
+(* local type definition for a frame with places exploded *)
+type place_frame = (place * ty) list
+
+(* collect all the frames from the top of the stack up to and including the one containing x *)
+let rec collect_frames (x : var) (gamma : var_env) : static_frame list =
+  let x_is_in_frame (frame : static_frame) : bool =
+    frame |> List.exists (fun entry -> match entry with Id (y, _) -> x <> y | Prov _ -> true)
+  in match gamma with
+  | top_frame :: _ when x_is_in_frame top_frame -> top_frame :: []
+  | top_frame :: rest_of_stack -> top_frame :: collect_frames x rest_of_stack
+  | [] -> []
+
 (* explode the given variable and type into all of its sub-places and their respective types *)
-let explode_places (var : var) (ty : ty) : (place * ty) list =
+let explode_places (var : var) (ty : ty) : place_frame =
   let proj (pi : place) (entry : path_entry) : place =
     (fst pi, (root_of pi, List.append (path_of pi) [entry]))
-  in let rec explode (ty : ty) (pi : place) : (place * ty) list =
+  in let rec explode (ty : ty) (pi : place) : place_frame =
     match snd ty with
     | Any | Infer | BaseTy _ | TyVar _ | Ref _ | Fun _ | Array _ | Slice _ -> [(pi, ty)]
     | Rec fields ->
@@ -22,35 +34,27 @@ let explode_places (var : var) (ty : ty) : (place * ty) list =
 (* collect all the places and their respective types within a variable environment *)
 (* n.b. this corresponds to \pi : \tau \in \Gamma *)
 (* invariant: all struct types should have already been tagged *)
-let collect_places (gamma : (var * ty) list) : (place * ty) list =
-  gamma |> flat_map (fun (var, ty) -> explode_places var ty)
+let collect_places (frames : static_frame list) : place_frame list =
+  frames |> List.map (flat_map (fun entry ->
+                                 match entry with
+                                 | Id (var, ty) -> explode_places var ty
+                                 | Prov _ -> []))
 
-(* push closed over environments to the top level *)
-let expand_closures (gamma : var_env) : (var * ty) list =
-  let rec expand_closure (ty : ty) : (var * ty) list =
-    match snd ty with
-    | Any | Infer | BaseTy _ | TyVar _ -> []
-    | Ref (_, _, ty) -> expand_closure ty
-    | Fun (_, _, _, _, Unboxed, _, _) -> []
-    | Fun (_, _, _, _, EnvVar _, _, _) -> []
-    | Fun (_, _, _, _, Env frame_c, _, _) -> expand_closures frame_c
-    | Fun (_, _, _, _, EnvOf _, _, _) -> failwith "expand_closure: unreachable"
-    | Array (ty, _) | Slice ty -> expand_closure ty
-    | Rec fields -> flat_map (expand_closure >> snd) fields
-    | Tup tys -> flat_map expand_closure tys
-    | Struct (_, _, _, Some ty) -> expand_closure ty
-    | Struct (_, _, _, None) -> failwith "expand_closure: unreachable"
-    | Uninit _ -> []
-  and expand_closures (frame : static_frame) : (var * ty) list =
-    frame |> to_bindings |> List.map snd |> List.map expand_closure
-          |> List.flatten |> List.append (to_bindings frame)
-  in gamma |> List.map expand_closures |> List.flatten
-           |> List.append (stack_to_bindings gamma)
+(* collect all the closed-over frames in the given place frame list *)
+let rec collect_closure_frames (frames : place_frame list) : static_frame list =
+  let find_closed_frames (frame : place_frame) : static_frame list =
+    frame |> List.map (fun ((_, ty) : place * ty) ->
+                         match snd ty with
+                         | Fun (_, _, _, _, Env frame_c, _, _) ->
+                             [frame_c] |> collect_places |> collect_closure_frames |> List.cons frame_c
+                         | _ -> [])
+          |> List.flatten
+  in frames |> List.map find_closed_frames |> List.flatten
 
 (* keep all the places whose type is a reference type significant in some context *)
 (* i.e. if context is unique, all references are significant for checking safety, and
         if context is shared, only unique references are significant *)
-let keep_if_ref (context : owned) (places : (place * ty) list) : (place * ty) list =
+let keep_if_ref (context : owned) (places : place_frame list) : place_frame list =
   let may_conflict_with_context (omega : owned) : bool =
     match (context, omega) with
     | (Unique, _) -> true
@@ -58,7 +62,7 @@ let keep_if_ref (context : owned) (places : (place * ty) list) : (place * ty) li
     | (Shared, Shared) -> false
   in let ref_test (_, ty) =
     match snd ty with Ref (_, omega, _) -> may_conflict_with_context omega | _ -> false
-  in List.filter ref_test places
+  in places |> List.map (List.filter ref_test)
 
 (* decompose a place expression into an inner place and the rest of the expression path *)
 (* invariant: if the path is non-empty, the first entry in the path will always be Deref *)
@@ -115,7 +119,9 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
   (* remove all entries whose key is found in the exclusions list *)
   in let refine (exclusions : preplace list) (places : (place * ty) list) : (place * ty) list =
     List.filter (fun ((_, pi), _) -> not $ List.mem pi exclusions) places
-  in let ref_places = expand_closures gamma |> collect_places |> keep_if_ref omega
+  in let recent_frames = gamma |> collect_frames (expr_root_of tl_phi) |> collect_places
+  in let closure_frames = recent_frames |> collect_closure_frames |> collect_places
+  in let ref_places = List.append closure_frames recent_frames |> keep_if_ref omega |> List.flatten
   in let rec impl_safe (exclusions : preplace list) (phi : place_expr) : (ty * loans) tc =
     match place_expr_to_place phi with
     (* O-UniqueSafety, O-SharedSafety *)
