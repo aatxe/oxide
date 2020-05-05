@@ -297,7 +297,7 @@ let subst_prov_in_env (this : prov) (that : prov) (gamma : var_env) : var_env tc
   in let update (entry : frame_entry) : frame_entry tc =
     match entry with
     | Id (var, root_ty) -> Id (var, subst_prov root_ty this that) |> succ
-    | _ -> failwith "unreachable: no type to update for non-binding frame entries"
+    | _ -> entry |> succ
   in [] |> succ |> env_update gamma should_update update
 
 let subst_many_prov (pairs : (prov * prov) list) (ty : ty) : ty =
