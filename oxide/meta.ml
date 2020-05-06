@@ -627,15 +627,14 @@ and free_provs (expr : expr) : provs =
     [e1; e2] |> List.map free_provs |> List.cons (free_provs_ty ty) |> List.flatten
   | Assign (_, e) -> free_provs e
   | Seq (e1, e2) -> free_provs_many [e1; e2]
-  | Fun (provs, _, params, ret_ty, body) ->
+  | Fun (provs, _, params, ret_ty, _) ->
     let free_in_params = params |> List.map (free_provs_ty >> snd) |> List.flatten
     in let free_in_ret =
       match ret_ty with
       | Some ty -> free_provs_ty ty
       | None -> []
-    in let free_in_body = free_provs body
     in List.filter (fun prov -> provs |> List.map snd |> List.mem (snd prov) |> not)
-                   (List.concat [free_in_params; free_in_ret; free_in_body])
+                   (List.concat [free_in_params; free_in_ret])
   | App (e1, _, provs, tys, es) ->
     List.concat [free_provs e1; provs;
                  List.map free_provs_ty tys |> List.flatten;
