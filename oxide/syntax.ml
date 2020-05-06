@@ -362,10 +362,13 @@ let places_of (gamma : var_env) : place_expr list =
   gamma |> List.flatten
         |> List.map places_from_frame_entry
         |> List.flatten
-let prov_domain_of (gamma : var_env) : provs =
-  gamma |> List.flatten
-        |> List.map (fun entry -> match entry with Id _ -> [] | Prov (prov, _) -> [prov])
+
+let provs_in (frame : static_frame) : provs =
+  frame |> List.map (fun entry -> match entry with Id _ -> [] | Prov (prov, _) -> [prov])
         |> List.flatten
+
+let prov_domain_of (gamma : var_env) : provs =
+  gamma |> List.flatten |> provs_in
 
 let to_loan_env (gamma : var_env) : (prov * loans) list =
   gamma |> List.flatten
@@ -431,6 +434,7 @@ type tc_error =
   | InvalidProv of prov
   | CannotShadowProvenance of prov
   | ProvDoesNotOutlive of prov * prov (* the first provenance does not outlive the second *)
+  | CannotCombineProvsInDifferentFrames of prov * prov
   | InvalidLoan of owned * place_expr
   | InvalidArrayLen of ty * int
   | InvalidOperationOnType of path * ty

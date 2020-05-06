@@ -336,13 +336,23 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
 let subst_many (pairs : (ty * ty_var) list) (ty : ty) : ty =
   List.fold_right (fun pair ty -> subst ty (fst pair) (snd pair)) pairs ty
 
+(* find the frame on the stack containing the given provenance *)
+let rec frame_of (prov : prov) (gamma : var_env) : static_frame tc =
+  match gamma with
+  | top_frame :: _ when provs_in top_frame |> List.mem prov -> top_frame |> succ
+  | _ :: rest_of_stack -> frame_of prov rest_of_stack
+  | [] -> InvalidProv prov |> fail
+
 let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
     (prov1 : prov) (prov2 : prov) : var_env tc =
   match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
   | (Combine, Some rep1, Some rep2) ->
     (* UP-CombineLocalProvenances*)
-    let loans = list_union rep1 rep2
-    in ell |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
+    let* prov1_frame = frame_of prov1 ell
+    in if provs_in prov1_frame |> List.mem prov2 then
+      let loans = list_union rep1 rep2
+      in ell |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
+    else CannotCombineProvsInDifferentFrames (prov1, prov2) |> fail
   | (Override, Some _, Some _) ->
     (* UP-OverrideLocalProvenances *)
     subst_prov_in_env prov1 prov2 ell
