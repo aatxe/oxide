@@ -349,7 +349,7 @@ let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
   | (Combine, Some rep1, Some rep2) ->
     (* UP-CombineLocalProvenances*)
     let* prov1_frame = frame_of prov1 ell
-    in if provs_in prov1_frame |> List.mem prov2 then
+    in if provs_in prov1_frame |> List.map snd |> List.mem (snd prov2) then
       let loans = list_union rep1 rep2
       in ell |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
     else CannotCombineProvsInDifferentFrames (prov1, prov2) |> fail
