@@ -409,7 +409,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
         List.fold_left var_include_fold (var_env_new_frame gammaMoved gamma_c) params
       in let deltaPrime = delta |> tyvar_env_add_provs provs |> tyvar_env_add_ty_vars tyvars
       in let not_in_provs (prov : prov) : bool =
-        not $ loan_env_mem gammaPrime prov && not $ List.mem prov provs
+        not $ loan_env_mem gammaPrime prov && not $ contains prov provs
       in let free_provs = free_provs body |> List.filter not_in_provs
       in let gammaPrime = gammaPrime |> loan_env_include_all free_provs []
       in let* (ret_ty, gamma_body) = tc deltaPrime gammaPrime body
@@ -526,8 +526,7 @@ let wf_global_env (sigma : global_env) : unit tc =
     match entry with
     (* WF-FunctionDef*)
     | FnDef (_, evs, provs, tyvars, params, ret_ty, bounds, body) ->
-      let not_in_provs (prov : prov) : bool =
-        provs |> List.map snd |> List.mem (snd prov) |> not
+      let not_in_provs (prov : prov) : bool = provs |> contains prov |> not
       in let free_provs = (* this lets us infer letprovs for unbound provenances *)
          free_provs body |> List.filter not_in_provs
       in let delta = empty_delta |> tyvar_env_add_env_vars evs

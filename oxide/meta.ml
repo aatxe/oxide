@@ -181,7 +181,7 @@ let contains_prov (gamma : var_env) (prov : prov) : bool =
     | Uninit ty | Array (ty, _) | Slice ty -> ty_contains ty
     | Rec pairs -> List.map snd pairs |> tys_contains
     | Tup tys -> tys_contains tys
-    | Struct (_, pvs, _, _) -> List.mem prov pvs
+    | Struct (_, provs, _, _) -> contains prov provs
   and tys_contains (tys : ty list) : bool = List.exists ty_contains tys
   in List.exists frame_contains gamma
 
@@ -349,7 +349,7 @@ let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
   | (Combine, Some rep1, Some rep2) ->
     (* UP-CombineLocalProvenances*)
     let* prov1_frame = frame_of prov1 ell
-    in if provs_in prov1_frame |> List.map snd |> List.mem (snd prov2) then
+    in if provs_in prov1_frame |> contains prov2 then
       let loans = list_union rep1 rep2
       in ell |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
     else CannotCombineProvsInDifferentFrames (prov1, prov2) |> fail
@@ -622,7 +622,7 @@ and free_provs (expr : expr) : provs =
   | BorrowSlice (prov, _, _, e1, e2) ->
     [e1; e2] |> free_provs_many |> List.cons prov
   | LetProv (provs, e) ->
-    free_provs e |> List.filter (fun prov -> provs |> List.map snd |> List.mem (snd prov) |> not)
+    free_provs e |> List.filter (fun prov -> provs |> contains prov |> not)
   | Let (_, ty, e1, e2) ->
     [e1; e2] |> List.map free_provs |> List.cons (free_provs_ty ty) |> List.flatten
   | Assign (_, e) -> free_provs e
@@ -633,7 +633,7 @@ and free_provs (expr : expr) : provs =
       match ret_ty with
       | Some ty -> free_provs_ty ty
       | None -> []
-    in List.filter (fun prov -> provs |> List.map snd |> List.mem (snd prov) |> not)
+    in List.filter (fun prov -> provs |> contains prov |> not)
                    (List.concat [free_in_params; free_in_ret])
   | App (e1, _, provs, tys, es) ->
     List.concat [free_provs e1; provs;
