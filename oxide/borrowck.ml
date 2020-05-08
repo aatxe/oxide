@@ -4,7 +4,8 @@ open Syntax
 open Util
 
 (* local type definition for a frame with places exploded *)
-type place_frame = (place * ty) list
+type place_frame = (place * ty) list [@@deriving show]
+type place_frames = place_frame list [@@deriving show]
 
 (* collect all the frames from the top of the stack up to and including the one containing x *)
 let rec collect_frames (x : var) (gamma : var_env) : static_frame list =
@@ -121,7 +122,7 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
     List.filter (fun ((_, pi), _) -> not $ List.mem pi exclusions) places
   in let recent_frames = gamma |> collect_frames (expr_root_of tl_phi) |> collect_places
   in let closure_frames = recent_frames |> collect_closure_frames |> collect_places
-  in let ref_places = List.append closure_frames recent_frames |> keep_if_ref omega |> List.flatten
+  in let ref_places = List.append recent_frames closure_frames |> keep_if_ref omega |> List.flatten
   in let rec impl_safe (exclusions : preplace list) (phi : place_expr) : (ty * loans) tc =
     match place_expr_to_place phi with
     (* O-UniqueSafety, O-SharedSafety *)
@@ -167,10 +168,15 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
           not >> expr_disjoint phi
         in let safety_test ((_, ty) : place * ty) : unit tc =
           match snd ty with
-          | Ref (prov, _, _) ->
-            let loans = if tyvar_env_prov_mem delta prov then [] else loan_env_lookup gamma prov
+          | Ref (pv, _, _) ->
+            let loans = if tyvar_env_prov_mem delta pv then [] else loan_env_lookup gamma pv
             in let conflicts = List.find_all (expr_not_disjoint_from phi >> snd) loans
-            in if is_empty conflicts then Succ ()
+            in let abstract_conflict =
+              tyvar_env_prov_mem delta prov &&
+              tyvar_env_prov_mem delta pv &&
+              snd prov = snd pv
+            in if is_empty conflicts && not $ abstract_conflict then Succ ()
+            else if abstract_conflict then AbstractSafetyErr (prov, pv) |> fail
             else SafetyErr ((omega, tl_phi), List.hd conflicts) |> fail
           | _ -> failwith "O-Deref/O-DerefAbs: unreachable"
         in let* () = for_each refined_places safety_test
