@@ -409,7 +409,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
         List.fold_left var_include_fold (var_env_new_frame gammaMoved gamma_c) params
       in let deltaPrime = delta |> tyvar_env_add_provs provs |> tyvar_env_add_ty_vars tyvars
       in let not_in_provs (prov : prov) : bool =
-        not $ loan_env_mem gammaPrime prov && not $ contains prov provs
+        not $ tyvar_env_prov_mem delta prov &&
+        not $ loan_env_mem gammaPrime prov &&
+        not $ contains prov provs
       in let free_provs = free_provs body |> List.filter not_in_provs
       in let gammaPrime = gammaPrime |> loan_env_include_all free_provs []
       in let* (ret_ty, gamma_body) = tc deltaPrime gammaPrime body
