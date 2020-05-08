@@ -4,8 +4,7 @@ open Syntax
 open Util
 
 (* local type definition for a frame with places exploded *)
-type place_frame = (place * ty) list [@@deriving show]
-type place_frames = place_frame list [@@deriving show]
+type place_frame = (place * ty) list
 
 (* collect all the frames from the top of the stack up to and including the one containing x *)
 let rec collect_frames (x : var) (gamma : var_env) : static_frame list =
