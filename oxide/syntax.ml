@@ -436,7 +436,6 @@ type tc_error =
   | CannotShadowProvenance of prov
   | ProvDoesNotOutlive of prov * prov (* the first provenance does not outlive the second *)
   | CannotCombineProvsInDifferentFrames of prov * prov
-  | InvalidLoan of owned * place_expr
   | InvalidArrayLen of ty * int
   | InvalidOperationOnType of path * ty
   | InvalidOperationOnTypeEP of expr_path * ty
@@ -444,7 +443,7 @@ type tc_error =
   | InvalidCopyImpl of struct_var * ty (* for struct * because of ty *)
   | UnboundPlace of place
   | UnboundPlaceExpr of place_expr
-  | UnboundLoanInProv of place_expr * prov (* unbound loan * in prov *)
+  | UnboundLoanInProv of loan * prov (* unbound loan * in prov *)
   | PlaceExprNotAPlace of place_expr
   | AbsProvsNotSubtype of prov * prov
   | CannotPromoteLocalProvToAbstract of prov * prov (* cannot promote local prov to abstract prov *)

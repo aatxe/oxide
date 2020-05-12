@@ -98,6 +98,10 @@ let var_env_contains_place_expr (gamma : var_env) (pi : place_expr) : bool =
   | Some _ -> true
   | None -> false
 
+let frame_contains (frame : static_frame) (pi : place_expr) : bool =
+  let (root, _) = snd pi
+  in frame |> to_bindings |> List.mem_assoc root
+
 let env_update (gamma : var_env) (should_update : frame_entry -> bool)
                (update : frame_entry -> frame_entry tc)
                (base : var_env tc) : var_env tc =

@@ -11,10 +11,11 @@ let valid_prov (delta : tyvar_env) (gamma : var_env) (prov : prov) : unit tc =
     if tyvar_env_prov_mem delta prov then Succ ()
     else InvalidProv prov |> fail
   | Some loans ->
-    let invalid_loans = List.filter (not >> var_env_contains_place_expr gamma >> snd) loans
+    let* frame = frame_of prov gamma
+    in let invalid_loans = loans |> List.filter (not >> frame_contains frame >> snd)
     in match invalid_loans with
     | [] -> Succ ()
-    | (omega, pi) :: _ -> InvalidLoan (omega, pi) |> fail
+    | loan :: _ -> UnboundLoanInProv (loan, prov) |> fail
 
 (* type validity judgment *)
 let rec valid_type (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
@@ -95,7 +96,7 @@ let ty_valid_before_after (sigma : global_env) (delta : tyvar_env) (ty : ty)
     | Some loans ->
       let missing = List.find_all (not >> var_env_contains_place_expr gamma_after >> snd) loans
       in if is_empty missing then Succ ()
-      else UnboundLoanInProv (missing |> List.hd |> snd, prov) |> fail
+      else UnboundLoanInProv (List.hd missing, prov) |> fail
     | None -> Fail err)
   | (Succ (), Fail err) -> Fail err
   | (Fail err, _) -> Fail err
@@ -232,7 +233,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
         let* passed = passed_provs delta gamma pi
         in let* _ = foldl (fun gamma -> outlives delta gamma prov) gamma passed
         in Succ ((inferred, Ref (prov, omega, ty)), gamma)
-      else Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans gamma)
+      else let* updated_gamma = loan_env_prov_update prov loans gamma
+      in Succ ((inferred, Ref (prov, omega, ty)), updated_gamma)
     (* T-BorrowIndex *)
     | BorrowIdx (prov, omega, pi, e) ->
       (match tc delta gamma e with
@@ -242,7 +244,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
            let* passed = passed_provs delta gamma1 pi
            in let* _ = foldl (fun _ -> outlives delta gamma1 prov) gamma1 passed
            in Succ ((inferred, Ref (prov, omega, ty)), gamma1)
-         else Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans gamma1)
+         else let* updated_gamma = loan_env_prov_update prov loans gamma1
+         in Succ ((inferred, Ref (prov, omega, ty)), updated_gamma)
        | Succ (found, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
        | Fail err -> Fail err)
     (* T-BorrowSlice *)
@@ -256,7 +259,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
               let* passed = passed_provs delta gamma pi
               in let* _ = foldl (fun _ -> outlives delta gamma2 prov) gamma2 passed
               in Succ ((inferred, Ref (prov, omega, ty)), gamma2)
-            else Succ ((inferred, Ref (prov, omega, ty)), loan_env_include prov loans gamma2)
+            else let* updated_gamma = loan_env_prov_update prov loans gamma2
+            in Succ ((inferred, Ref (prov, omega, ty)), updated_gamma)
           | Succ (found, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
           | Fail err -> Fail err)
        | Succ (found, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
@@ -303,7 +307,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
         | Id _ -> failwith "unreachable: entry_in_new_provs never returns true for Id"
       else let gammaPrime = loan_env_include_all new_provs [] gamma
       in let* (ty_out, gamma_out) = tc delta gammaPrime e
-      in Succ (ty_out, shift_n (List.length new_provs) gamma_out)
+      in let final_gamma = shift_n (List.length new_provs) gamma_out
+      in let* () = valid_type sigma delta final_gamma ty_out
+      in Succ (ty_out, final_gamma)
     (* T-LetInfer *)
     | Let (var, (_, Infer), e1, e2) ->
       let* (ty1, gamma1) = tc delta gamma e1
@@ -518,7 +524,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       let* (ty, gammaPrime) = tc delta curr_gamma e
       in Succ (List.cons ty curr_tys, gammaPrime)
     in foldr tc_next exprs ([], gamma)
-  in tc delta gamma expr
+  in let* (out_ty, out_gamma) = tc delta gamma expr
+  in let* () = valid_type sigma delta out_gamma out_ty
+  in (out_ty, out_gamma) |> succ
 
 (* global environment validity judgment *)
 let wf_global_env (sigma : global_env) : unit tc =
