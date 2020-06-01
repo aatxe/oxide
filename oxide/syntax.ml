@@ -436,6 +436,7 @@ type tc_error =
   | CannotShadowProvenance of prov
   | ProvDoesNotOutlive of prov * prov (* the first provenance does not outlive the second *)
   | CannotCombineProvsInDifferentFrames of prov * prov
+  | CannotBorrowIntoAbstractProvenance of prov
   | InvalidArrayLen of ty * int
   | InvalidOperationOnType of path * ty
   | InvalidOperationOnTypeEP of expr_path * ty
