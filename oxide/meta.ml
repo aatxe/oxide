@@ -347,38 +347,66 @@ let rec frame_of (prov : prov) (gamma : var_env) : static_frame tc =
   | _ :: rest_of_stack -> frame_of prov rest_of_stack
   | [] -> InvalidProv prov |> fail
 
-let subtype_prov (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
-    (prov1 : prov) (prov2 : prov) : var_env tc =
-  match (mode, loan_env_lookup_opt ell prov1, loan_env_lookup_opt ell prov2) with
+(* checks that prov2 outlives prov1, erroring otherwise *)
+let rec outlives (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env)
+                 (prov1: prov) (prov2 : prov) : var_env tc =
+  match (mode, loan_env_lookup_opt gamma prov1, loan_env_lookup_opt gamma prov2) with
   | (Combine, Some rep1, Some rep2) ->
     (* UP-CombineLocalProvenances*)
-    let* prov1_frame = frame_of prov1 ell
+    let* prov1_frame = frame_of prov1 gamma
     in if provs_in prov1_frame |> contains prov2 then
       let loans = list_union rep1 rep2
-      in ell |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
+      in gamma |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
     else CannotCombineProvsInDifferentFrames (prov1, prov2) |> fail
   | (Override, Some _, Some _) ->
     (* UP-OverrideLocalProvenances *)
-    subst_prov_in_env prov1 prov2 ell
-  | (_, None, Some _) ->
-    (* UP-AbstractProvLocalProv *)
+    subst_prov_in_env prov1 prov2 gamma
+  | (_, None, Some loans) ->
+    (* true if all the loans are reborrow loans from things that outlive the abstract provenance *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
-    else AbsProvsNotSubtype (prov1, prov2) |> fail
+    else loans |> List.map snd |> map (passed_provs delta gamma)
+               >>= (succ >> List.flatten)
+               >>= foldl (fun gamma pv2 ->
+                            if snd pv2 <> snd prov2 then outlives mode delta gamma prov1 pv2
+                            else ProvDoesNotOutlive (prov1, prov2) |> fail) gamma
   | (_, Some _, None) ->
-    (* UP-LocalProvAbstractProv *)
     if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
-    else CannotPromoteLocalProvToAbstract (prov1, prov2) |> fail
+    else Succ gamma
   | (_, None, None) ->
     (* UP-AbstractProvenances *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
     else if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
     else if not $ tyvar_env_abs_sub delta prov1 prov2 then AbsProvsNotSubtype (prov1, prov2) |> fail
-    else Succ ell
-
-let subtype_prov_many (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
-    (provs1 : provs) (provs2 : provs) : var_env tc =
-  let* provs = combine_prov "subtype_prov_many" provs1 provs2
-  in foldl (fun ell (prov1, prov2) -> subtype_prov mode delta ell prov1 prov2) ell provs
+    else Succ gamma
+and outlives_many (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env)
+                  (provs1 : provs) (provs2 : provs) : var_env tc =
+  let* provs = combine_prov "outlives_many" provs1 provs2
+  in foldl (fun gamma (prov1, prov2) -> outlives mode delta gamma prov1 prov2) gamma provs
+(* find the type of the expr path based on the original type in a context *)
+(* this will error if the context doesn't allow the operation,
+   e.g. dereferencing a shared reference in a unique context *)
+and compute_with_passed (ctx : owned) (delta : tyvar_env) (gamma : var_env)
+                        (phi : place_expr) : (provs * ty) tc =
+  let rec compute (passed : provs) (path : expr_path) (ty : ty)  : (provs * ty) tc =
+    match (snd ty, path) with
+    | (_, []) -> Succ (passed, ty)
+    | (Ref (prov, omega, ty), Deref :: path) ->
+      if is_at_least ctx omega then
+        let* _ = foldr (fun pv gamma -> outlives Combine delta gamma pv prov) passed gamma
+        in compute (List.cons prov passed) path ty
+      else Fail (PermissionErr (ty, path, ctx))
+    | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
+    | (Tup tys, (Index n) :: path) -> List.nth tys n |> compute passed path
+    | (Struct (_, _, _, Some ty), path) -> compute passed path ty
+    | (Uninit ty, path) ->
+      let* _ = compute passed path ty
+      in Fail (PartiallyMovedExprPath (ty, path))
+    | (_, path) -> Fail (InvalidOperationOnTypeEP (path, ty))
+  in let* root_ty = var_env_lookup_expr_root gamma phi
+  in compute [] (expr_path_of phi) root_ty
+and passed_provs (delta : tyvar_env) (gamma : var_env) (phi : place_expr) : provs tc =
+  let* (passed, _) = compute_with_passed Shared delta gamma phi
+  in Succ passed
 
 let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
             (ty1 : ty) (ty2 : ty) : var_env tc =
@@ -400,11 +428,11 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
     | (Slice t1, Slice t2) -> sub ell t1 t2
     (* UT-SharedRef *)
     | (Ref (v1, Shared, t1), Ref (v2, Shared, t2)) ->
-      let* ellPrime = subtype_prov mode delta ell v1 v2
+      let* ellPrime = outlives mode delta ell v1 v2
       in sub ellPrime t1 t2
     (* UT-UniqueRef *)
     | (Ref (v1, Unique, t1), Ref (v2, _, t2)) ->
-      let* ellPrime = subtype_prov mode delta ell v1 v2
+      let* ellPrime = outlives mode delta ell v1 v2
       in let* ell1 = sub ellPrime t1 t2
       in let* ell2 = sub ellPrime t2 t1
       in if ell1 = ell2 then Succ ell2
@@ -419,7 +447,7 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
     (* UT-Struct *)
     | (Struct (name1, provs1, tys1, tagged_ty1), Struct (name2, provs2, tys2, tagged_ty2)) ->
       if name1 = name2 then
-        let* ell_provs = subtype_prov_many mode delta ell provs1 provs2
+        let* ell_provs = outlives_many mode delta ell provs1 provs2
         in let* ell_tys = sub_many ell_provs tys1 tys2
         in sub_opt ell_tys tagged_ty1 tagged_ty2
       else Fail (UnificationFailed (ty1, ty2))
@@ -475,56 +503,6 @@ let unify_many (loc : source_loc) (delta :tyvar_env) (ell : var_env)
   | ty :: tys ->
     foldl (fun (curr_ell, curr_ty) new_ty -> unify loc delta curr_ell curr_ty new_ty) (ell, ty) tys
 
-(* checks that prov2 outlives prov1, erroring otherwise *)
-let rec outlives (delta : tyvar_env) (gamma : var_env)
-                 (prov1: prov) (prov2 : prov) : var_env tc =
-  match (loan_env_lookup_opt gamma prov1, loan_env_lookup_opt gamma prov2) with
-  | (Some rep1, Some rep2) ->
-    let loans = list_union rep1 rep2
-    in gamma |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
-  | (None, Some loans) ->
-    (* true if all the loans are reborrow loans from things that outlive the abstract provenance *)
-    if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
-    else loans |> List.map snd |> map (passed_provs delta gamma)
-               >>= (succ >> List.flatten)
-               >>= foldl (fun gamma pv2 ->
-                            if snd pv2 <> snd prov2 then outlives delta gamma prov1 pv2
-                            else ProvDoesNotOutlive (prov1, prov2) |> fail) gamma
-  | (Some _, None) ->
-    if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
-    else Succ gamma
-  | (None, None) ->
-    (* UP-AbstractProvenances *)
-    if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
-    else if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
-    else if not $ tyvar_env_abs_sub delta prov1 prov2 then AbsProvsNotSubtype (prov1, prov2) |> fail
-    else Succ gamma
-(* find the type of the expr path based on the original type in a context *)
-(* this will error if the context doesn't allow the operation,
-   e.g. dereferencing a shared reference in a unique context *)
-and compute_with_passed (ctx : owned) (delta : tyvar_env) (gamma : var_env)
-                        (phi : place_expr) : (provs * ty) tc =
-  let rec compute (passed : provs) (path : expr_path) (ty : ty)  : (provs * ty) tc =
-    match (snd ty, path) with
-    | (_, []) -> Succ (passed, ty)
-    | (Ref (prov, omega, ty), Deref :: path) ->
-      if is_at_least ctx omega then
-        let* _ = foldr (fun pv gamma -> outlives delta gamma pv prov) passed gamma
-        in compute (List.cons prov passed) path ty
-      else Fail (PermissionErr (ty, path, ctx))
-    | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
-    | (Tup tys, (Index n) :: path) -> List.nth tys n |> compute passed path
-    | (Struct (_, _, _, Some ty), path) -> compute passed path ty
-    | (Uninit ty, path) ->
-      let* _ = compute passed path ty
-      in Fail (PartiallyMovedExprPath (ty, path))
-    | (_, path) -> Fail (InvalidOperationOnTypeEP (path, ty))
-  in let* root_ty = var_env_lookup_expr_root gamma phi
-  in compute [] (expr_path_of phi) root_ty
-and passed_provs (delta : tyvar_env) (gamma : var_env) (phi : place_expr) : provs tc =
-  let* (passed, _) = compute_with_passed Shared delta gamma phi
-  in Succ passed
-
 let compute_ty_in (ctx : owned) (delta : tyvar_env) (gamma : var_env)
                   (phi : place_expr) : ty tc =
   let* (_, ty) = compute_with_passed ctx delta gamma phi
@@ -536,7 +514,7 @@ let compute_ty (delta : tyvar_env) (gamma :var_env) (phi : place_expr) : ty tc =
 
 (* checks that all the outlives bounds are satisfied in delta and ell *)
 let check_bounds (delta : tyvar_env) (gamma : var_env) (bounds : bounds) : var_env tc =
-  foldl (fun gamma (prov1, prov2) -> outlives delta gamma prov1 prov2) gamma bounds
+  foldl (fun gamma (prov1, prov2) -> outlives Combine delta gamma prov1 prov2) gamma bounds
 
 (* is the given type non-copyable? *)
 (* note: this can only error if the type features a struct not defined in sigma *)
