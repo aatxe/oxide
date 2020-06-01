@@ -170,12 +170,7 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
           | Ref (pv, _, _) ->
             let loans = if tyvar_env_prov_mem delta pv then [] else loan_env_lookup gamma pv
             in let conflicts = List.find_all (expr_not_disjoint_from phi >> snd) loans
-            in let abstract_conflict =
-              tyvar_env_prov_mem delta prov &&
-              tyvar_env_prov_mem delta pv &&
-              snd prov = snd pv
-            in if is_empty conflicts && not $ abstract_conflict then Succ ()
-            else if abstract_conflict then AbstractSafetyErr (prov, pv) |> fail
+            in if is_empty conflicts then Succ ()
             else SafetyErr ((omega, tl_phi), List.hd conflicts) |> fail
           | _ -> failwith "O-Deref/O-DerefAbs: unreachable"
         in let* () = for_each refined_places safety_test

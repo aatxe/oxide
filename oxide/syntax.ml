@@ -412,7 +412,6 @@ type tc_error =
   | VarEnvMismatch of source_loc * var_env * var_env (* source_loc * expected * found *)
   | SafetyErr of (owned * place_expr) * (owned * place_expr)
                 (* attempted access * conflicting loan *)
-  | AbstractSafetyErr of prov * prov (* attempted access * conflicting provenance *)
   | PermissionErr of ty * expr_path * owned
                      (* type not allowing access * operation being performed * context *)
   | NoReferenceToParameter of place
