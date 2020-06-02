@@ -352,18 +352,21 @@ let rec outlives (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env)
                  (prov1: prov) (prov2 : prov) : var_env tc =
   match (mode, loan_env_lookup_opt gamma prov1, loan_env_lookup_opt gamma prov2) with
   | (Combine, Some rep1, Some rep2) ->
-    (* UP-CombineLocalProvenances*)
+    (* OL-CombineLocalProvenances *)
     let* prov1_frame = frame_of prov1 gamma
     in if provs_in prov1_frame |> contains prov2 then
       let loans = list_union rep1 rep2
       in gamma |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
     else CannotCombineProvsInDifferentFrames (prov1, prov2) |> fail
   | (Override, Some _, Some _) ->
-    (* UP-OverrideLocalProvenances *)
+    (* OL-OverrideLocalProvenances *)
     subst_prov_in_env prov1 prov2 gamma
+    (* OL-AbsProvLocalProv *)
   | (_, None, Some loans) ->
     (* true if all the loans are reborrow loans from things that outlive the abstract provenance *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
+    else if loans |> List.map snd |> List.exists place_expr_is_place then
+      CannotPromoteLocalProvToAbstract (prov2, prov1) |> fail
     else loans |> List.map snd |> map (passed_provs delta gamma)
                >>= (succ >> List.flatten)
                >>= foldl (fun gamma pv2 ->
@@ -428,11 +431,11 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
     | (Slice t1, Slice t2) -> sub ell t1 t2
     (* UT-SharedRef *)
     | (Ref (v1, Shared, t1), Ref (v2, Shared, t2)) ->
-      let* ellPrime = outlives mode delta ell v1 v2
+      let* ellPrime = outlives mode delta ell v2 v1
       in sub ellPrime t1 t2
     (* UT-UniqueRef *)
     | (Ref (v1, Unique, t1), Ref (v2, _, t2)) ->
-      let* ellPrime = outlives mode delta ell v1 v2
+      let* ellPrime = outlives mode delta ell v2 v1
       in let* ell1 = sub ellPrime t1 t2
       in let* ell2 = sub ellPrime t2 t1
       in if ell1 = ell2 then Succ ell2
@@ -447,7 +450,7 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
     (* UT-Struct *)
     | (Struct (name1, provs1, tys1, tagged_ty1), Struct (name2, provs2, tys2, tagged_ty2)) ->
       if name1 = name2 then
-        let* ell_provs = outlives_many mode delta ell provs1 provs2
+        let* ell_provs = outlives_many mode delta ell provs2 provs1
         in let* ell_tys = sub_many ell_provs tys1 tys2
         in sub_opt ell_tys tagged_ty1 tagged_ty2
       else Fail (UnificationFailed (ty1, ty2))
