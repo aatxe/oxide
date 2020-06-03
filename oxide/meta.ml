@@ -340,12 +340,18 @@ let subst (ty : ty) (this : ty)  (that : ty_var) : ty =
 let subst_many (pairs : (ty * ty_var) list) (ty : ty) : ty =
   List.fold_right (fun pair ty -> subst ty (fst pair) (snd pair)) pairs ty
 
+(* drop frames on the stack until the top frame contains the given provenance *)
+let rec drop_frames_until (prov : prov) (gamma : var_env) : var_env tc =
+  match gamma with
+  | top_frame :: rest_of_stack when provs_in top_frame |> contains prov ->
+    top_frame :: rest_of_stack |> succ
+  | _ :: rest_of_stack -> drop_frames_until prov rest_of_stack
+  | [] -> InvalidProv prov |> fail
+
 (* find the frame on the stack containing the given provenance *)
 let rec frame_of (prov : prov) (gamma : var_env) : static_frame tc =
-  match gamma with
-  | top_frame :: _ when provs_in top_frame |> contains prov -> top_frame |> succ
-  | _ :: rest_of_stack -> frame_of prov rest_of_stack
-  | [] -> InvalidProv prov |> fail
+  let* frames = drop_frames_until prov gamma
+  in List.hd frames |> succ
 
 (* checks that prov2 outlives prov1, erroring otherwise *)
 let rec outlives (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env)

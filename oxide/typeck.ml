@@ -11,8 +11,8 @@ let valid_prov (delta : tyvar_env) (gamma : var_env) (prov : prov) : unit tc =
     if tyvar_env_prov_mem delta prov then Succ ()
     else InvalidProv prov |> fail
   | Some loans ->
-    let* frame = frame_of prov gamma
-    in let invalid_loans = loans |> List.filter (not >> frame_contains frame >> snd)
+    let* frames = drop_frames_until prov gamma
+    in let invalid_loans = loans |> List.filter (not >> var_env_contains_place_expr frames >> snd)
     in match invalid_loans with
     | [] -> Succ ()
     | loan :: _ -> UnboundLoanInProv (loan, prov) |> fail
