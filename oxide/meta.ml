@@ -343,7 +343,7 @@ let subst_many (pairs : (ty * ty_var) list) (ty : ty) : ty =
 (* find the frame on the stack containing the given provenance *)
 let rec frame_of (prov : prov) (gamma : var_env) : static_frame tc =
   match gamma with
-  | top_frame :: _ when provs_in top_frame |> List.mem prov -> top_frame |> succ
+  | top_frame :: _ when provs_in top_frame |> contains prov -> top_frame |> succ
   | _ :: rest_of_stack -> frame_of prov rest_of_stack
   | [] -> InvalidProv prov |> fail
 
