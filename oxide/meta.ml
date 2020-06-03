@@ -349,7 +349,7 @@ let rec drop_frames_until (prov : prov) (gamma : var_env) : var_env tc =
   | [] -> InvalidProv prov |> fail
 
 (* find the frame on the stack containing the given provenance *)
-let rec frame_of (prov : prov) (gamma : var_env) : static_frame tc =
+let frame_of (prov : prov) (gamma : var_env) : static_frame tc =
   let* frames = drop_frames_until prov gamma
   in List.hd frames |> succ
 
