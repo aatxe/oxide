@@ -279,7 +279,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | Succ ((_, BaseTy Bool), gamma1) ->
          let* (ty2, gamma2) = tc delta gamma1 e2
          in let* (ty3, gamma3) = tc delta gamma1 e3
-         in let gammaPrime = intersect gamma2 gamma3
+         in let gammaPrime = union gamma2 gamma3
          in let* (gammaFinal, tyFinal) = unify (fst expr) delta gammaPrime ty2 ty3
          in let* () = valid_type sigma delta gammaFinal tyFinal
          in Succ (tyFinal, gammaFinal)

@@ -403,14 +403,14 @@ and compute_with_passed (ctx : owned) (delta : tyvar_env) (gamma : var_env)
       if is_at_least ctx omega then
         let* _ = foldr (fun pv gamma -> outlives Combine delta gamma pv prov) passed gamma
         in compute (List.cons prov passed) path ty
-      else Fail (PermissionErr (ty, path, ctx))
+      else PermissionErr (ty, path, ctx) |> fail
     | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
     | (Tup tys, (Index n) :: path) -> List.nth tys n |> compute passed path
     | (Struct (_, _, _, Some ty), path) -> compute passed path ty
     | (Uninit ty, path) ->
       let* _ = compute passed path ty
-      in Fail (PartiallyMovedExprPath (ty, path))
-    | (_, path) -> Fail (InvalidOperationOnTypeEP (path, ty))
+      in PartiallyMovedExprPath (ty, path) |> fail
+    | (_, path) -> InvalidOperationOnTypeEP (path, ty) |> fail
   in let* root_ty = var_env_lookup_expr_root gamma phi
   in compute [] (expr_path_of phi) root_ty
 and passed_provs (delta : tyvar_env) (gamma : var_env) (phi : place_expr) : provs tc =
@@ -775,10 +775,10 @@ let rec ty_in (ty1 : ty) (ty2 : ty) : bool =
   | Struct (_, _, tys, opt_ty) ->
     opt_ty |> Option.to_list |> List.append tys |> List.exists (fun ty1 -> ty_in ty1 ty2)
 
-(* conservatively merge the two environments by:
+(* conservatively merge the static environment by:
    - unioning loan sets for the same provenances
    - taking uninitialized types over initialized types *)
-let rec intersect (gamma1 : var_env) (gamma2 : var_env) : var_env =
+let rec union (gamma1 : var_env) (gamma2 : var_env) : var_env =
   List.map2 merge_frame gamma1 gamma2
 and merge_frame (frame1 : static_frame) (frame2 : static_frame) : static_frame =
   List.map2 merge_entry frame1 frame2
