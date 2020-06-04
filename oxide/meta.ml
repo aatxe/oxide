@@ -371,13 +371,14 @@ let rec outlives (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env)
   | (_, None, Some loans) ->
     (* true if all the loans are reborrow loans from things that outlive the abstract provenance *)
     if not $ tyvar_env_prov_mem delta prov1 then InvalidProv prov1 |> fail
-    else if loans |> List.map snd |> List.exists place_expr_is_place then
+    else if loans |> List.map snd |> List.exists place_expr_is_place || loans |> is_empty then
       CannotPromoteLocalProvToAbstract (prov2, prov1) |> fail
     else loans |> List.map snd |> map (passed_provs delta gamma)
                >>= (succ >> List.flatten)
                >>= foldl (fun gamma pv2 ->
                             if snd pv2 <> snd prov2 then outlives mode delta gamma prov1 pv2
                             else ProvDoesNotOutlive (prov1, prov2) |> fail) gamma
+    (* OL-LocalProvAbsProv *)
   | (_, Some _, None) ->
     if not $ tyvar_env_prov_mem delta prov2 then InvalidProv prov2 |> fail
     else Succ gamma
