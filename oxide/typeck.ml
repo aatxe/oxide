@@ -409,7 +409,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
         not $ tyvar_env_prov_mem delta prov &&
         not $ loan_env_mem gammaPrime prov &&
         not $ contains prov provs
-      in let free_provs = free_provs body |> List.filter not_in_provs
+      in let free_provs =
+        free_provs body |> List.filter not_in_provs
+                        |> List.sort_uniq (fun (_, p1) (_, p2) -> String.compare p1 p2)
       in let gammaPrime = gammaPrime |> loan_env_include_all free_provs []
       in let* (ret_ty, gamma_body) = tc deltaPrime gammaPrime body
       in let* () = find_refs_to_captured deltaPrime gamma_body ret_ty gamma_c
@@ -530,6 +532,7 @@ let wf_global_env (sigma : global_env) : unit tc =
       let not_in_provs (prov : prov) : bool = provs |> contains prov |> not
       in let free_provs = (* this lets us infer letprovs for unbound provenances *)
          free_provs body |> List.filter not_in_provs
+                         |> List.sort_uniq (fun (_, p1) (_, p2) -> String.compare p1 p2)
       in let delta = empty_delta |> tyvar_env_add_env_vars evs
                                  |> tyvar_env_add_provs provs
                                  |> tyvar_env_add_ty_vars tyvars
