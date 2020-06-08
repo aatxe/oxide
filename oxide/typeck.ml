@@ -191,11 +191,14 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | _ -> failwith "T-BinOp: unreachable")
     (* T-Move and T-Copy *)
     | Move phi ->
+      (* we compute an initial type to determine whether we're in Move or Copy *)
       let* computed_ty = compute_ty delta gamma phi
       in let* copy = copyable sigma computed_ty
       in let omega = if copy then Shared else Unique
+      (* but we recompute the type with the right context to do permissions checking *)
+      in let* ty = compute_ty_in omega delta gamma phi
       in (match ownership_safe sigma delta gamma omega phi with
-       | Succ (ty, [(Unique, pi)]) ->
+       | Succ [(Unique, pi)] ->
          let* gammaPrime =
            match place_expr_to_place pi with
            | Some pi ->
@@ -211,7 +214,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
              in if copy then Succ gamma
              else failwith "T-Move: unreachable"
          in Succ (ty, gammaPrime)
-       | Succ (ty, _) ->
+       | Succ _ ->
          if copy then Succ (ty, gamma)
          else failwith "T-Copy: unreachable"
        | Fail err -> Fail err)
@@ -228,7 +231,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | None -> CannotMove phi |> fail)
     (* T-Borrow *)
     | Borrow (prov, omega, pi) ->
-      let* (ty, loans) = ownership_safe sigma delta gamma omega pi
+      let* loans = ownership_safe sigma delta gamma omega pi
+      in let* ty = compute_ty_in omega delta gamma pi
       in if tyvar_env_prov_mem delta prov then CannotBorrowIntoAbstractProvenance prov |> fail
       else let* updated_gamma = loan_env_prov_update prov loans gamma
       in Succ ((inferred, Ref (prov, omega, ty)), updated_gamma)
@@ -236,7 +240,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
     | BorrowIdx (prov, omega, pi, e) ->
       (match tc delta gamma e with
        | Succ ((_, BaseTy U32), gamma1) ->
-         let* (ty, loans) = ownership_safe sigma delta gamma1 omega pi
+         let* loans = ownership_safe sigma delta gamma1 omega pi
+         in let* ty = compute_ty_in omega delta gamma1 pi
          in if tyvar_env_prov_mem delta prov then CannotBorrowIntoAbstractProvenance prov |> fail
          else let* updated_gamma = loan_env_prov_update prov loans gamma1
          in Succ ((inferred, Ref (prov, omega, ty)), updated_gamma)
@@ -248,7 +253,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | Succ ((_, BaseTy U32), gamma1) ->
          (match tc delta gamma1 e2 with
           | Succ ((_, BaseTy U32), gamma2) ->
-            let* (ty, loans) = ownership_safe sigma delta gamma2 omega pi
+            let* loans = ownership_safe sigma delta gamma2 omega pi
+            in let* ty = compute_ty_in omega delta gamma2 pi
             in if tyvar_env_prov_mem delta prov then CannotBorrowIntoAbstractProvenance prov |> fail
             else let* updated_gamma = loan_env_prov_update prov loans gamma2
             in Succ ((inferred, Ref (prov, omega, ty)), updated_gamma)
@@ -260,12 +266,13 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
     | Idx (pi, e) ->
       (match tc delta gamma e with
        | Succ ((_, BaseTy U32), gamma1) ->
-         (match ownership_safe sigma delta gamma1 Shared pi with
-          | Succ ((_, Array (ty, _)), _) ->
+         let* _ = ownership_safe sigma delta gamma1 Shared pi
+         in (match compute_ty_in Shared delta gamma1 pi with
+          | Succ (_, Array (ty, _)) ->
             let* copy = copyable sigma ty
             in if copy then (ty, gamma1) |> succ
             else CannotMove pi |> fail
-          | Succ (found, _) -> TypeMismatchArray found |> fail
+          | Succ found -> TypeMismatchArray found |> fail
           | Fail err -> Fail err)
        | Succ (found, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
        | Fail err -> Fail err)
@@ -324,7 +331,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
     (* T-Assign and T-AssignDeref *)
     | Assign (phi, e) ->
       let gamma = kill_loans_for phi gamma
-      in let* (ty_old, _) = ownership_safe sigma delta gamma Unique phi
+      in let* _ = ownership_safe sigma delta gamma Unique phi
+      in let* ty_old = compute_ty_in Unique delta gamma phi
       in let* (ty_update, gamma1) = tc delta gamma e
       in let* gammaPrime = subtype Override delta gamma1 ty_update ty_old
       in (match place_expr_to_place phi with
@@ -375,8 +383,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
           (* T-Move for a closure *)
           | Some (_, Fun _) ->
             (match ownership_safe sigma delta gamma Unique (fst expr, (fn, [])) with
-            | Succ (ty, [(Unique, _)]) ->
-              let* closure_copyable = copyable sigma ty
+            | Succ [(Unique, _)] ->
+              let* ty = compute_ty_in Unique delta gamma (fst expr, (fn, []))
+              in let* closure_copyable = copyable sigma ty
               in if closure_copyable then Succ (ty, gamma)
               else let* gammaPrime = gamma |> var_env_type_update (fst expr, (fn, [])) (uninit ty)
               in Succ (ty, gammaPrime)
@@ -386,7 +395,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
             MovedFunction (expr, uninit_fn_ty) |> fail
           | (Some (_, Ref (_, omega, ((_, Fun _))))) ->
             (match ownership_safe sigma delta gamma omega (fst expr, (fn, [Deref])) with
-            | Succ (ty, _) -> Succ (ty, gamma)
+            | Succ _ -> let* ty = compute_ty_in omega delta gamma (fst expr, (fn, [Deref]))
+                        in Succ (ty, gamma)
             | Fail err -> Fail err)
           | Some ty -> TypeMismatchFunction ty |> fail
           | None -> UnknownFunction (fst expr, fn) |> fail))

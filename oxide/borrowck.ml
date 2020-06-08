@@ -103,7 +103,7 @@ let expr_disjoint_place (pi : place) (phi : place_expr) : bool =
 
 (* check if the given place expression is safe to use in an omega context *)
 let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
-                   (omega : owned) (tl_phi : place_expr) : (ty * loans) tc =
+                   (omega : owned) (tl_phi : place_expr) : loans tc =
   (* check if the next operation in the suffix is permitted at this type *)
   let check_permission (ty : ty) (suffix : expr_path) : unit tc =
     match (snd ty, suffix) with
@@ -122,7 +122,7 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
   in let recent_frames = gamma |> collect_frames (expr_root_of tl_phi) |> collect_places
   in let closure_frames = recent_frames |> collect_closure_frames |> collect_places
   in let ref_places = List.append recent_frames closure_frames |> keep_if_ref omega |> List.flatten
-  in let rec impl_safe (exclusions : preplace list) (phi : place_expr) : (ty * loans) tc =
+  in let rec impl_safe (exclusions : preplace list) (phi : place_expr) : loans tc =
     match place_expr_to_place phi with
     (* O-UniqueSafety, O-SharedSafety *)
     | Some (loc, pi) ->
@@ -147,8 +147,7 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
           else Fail (SafetyErr ((omega, tl_phi), conflicts |> List.hd |> snd))
         | _ -> failwith "O-UniqueSafety/O-SharedSafety: unreachable"
       in let* () = for_each refined_places safety_test
-      in let* ty = compute_ty_in omega delta gamma phi
-      in Succ (ty, [(omega, phi)])
+      in Succ [(omega, phi)]
     (* O-Deref, O-DerefAbs *)
     | None ->
       let (inner_pi, suffix) = decompose_place_expr phi
@@ -159,9 +158,9 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
         in let loans = if tyvar_env_prov_mem delta prov then [] else loan_env_lookup gamma prov
         in let new_exclusions = List.map (snd >> fst >> decompose_place_expr >> snd) loans
         in let exclusions = List.concat [[snd inner_pi]; new_exclusions; exclusions]
-        in let* safe_results =
+        in let* loans =
           loans |> List.map (skip_deref suffix |> apply_suffix >> snd)
-                |> map (impl_safe exclusions)
+                |> map (impl_safe exclusions) >>= (succ >> List.flatten)
         in let refined_places = refine exclusions ref_places
         in let expr_not_disjoint_from (phi : place_expr) : place_expr -> bool =
           not >> expr_disjoint phi
@@ -174,9 +173,7 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
             else SafetyErr ((omega, tl_phi), List.hd conflicts) |> fail
           | _ -> failwith "O-Deref/O-DerefAbs: unreachable"
         in let* () = for_each refined_places safety_test
-        in let loans = flat_map snd safe_results
-        in let* ty = compute_ty_in omega delta gamma phi
-        in Succ (ty, List.cons (omega, phi) loans)
+        in (omega, phi) :: loans |> succ
       | Uninit (loc, Ref (prov, omega, ty)) ->
         PartiallyMoved (inner_pi, (loc, Ref (prov, omega, ty))) |> fail
       | _ -> TypeMismatchRef ty |> fail

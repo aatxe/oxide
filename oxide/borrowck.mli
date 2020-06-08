@@ -5,4 +5,4 @@ val kill_loans_for :
 
 val ownership_safe :
   global_env -> tyvar_env -> var_env -> owned ->
-  place_expr -> (ty * loans) tc
+  place_expr -> loans tc
