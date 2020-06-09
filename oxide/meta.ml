@@ -400,11 +400,11 @@ and compute_with_passed (ctx : owned) (delta : tyvar_env) (gamma : var_env)
   let rec compute (passed : provs) (path : expr_path) (ty : ty)  : (provs * ty) tc =
     match (snd ty, path) with
     | (_, []) -> Succ (passed, ty)
-    | (Ref (prov, omega, ty), Deref :: path) ->
+    | (Ref (prov, omega, inner_ty), Deref :: path) ->
       if is_at_least ctx omega then
         let* _ = foldr (fun pv gamma -> outlives Combine delta gamma pv prov) passed gamma
-        in compute (List.cons prov passed) path ty
-      else PermissionErr (ty, path, ctx) |> fail
+        in compute (List.cons prov passed) path inner_ty
+      else PermissionErr (ty, Deref :: path, ctx) |> fail
     | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
     | (Tup tys, (Index n) :: path) -> List.nth tys n |> compute passed path
     | (Struct (_, _, _, Some ty), path) -> compute passed path ty
