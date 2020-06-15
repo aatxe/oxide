@@ -651,7 +651,7 @@ and free_provs_many (exprs : expr list) : provs = exprs |> List.map free_provs |
 
 let rec used_provs (gamma : var_env) : provs =
   gamma |> stack_to_bindings |> flat_map (provs_used_in_ty >> snd)
-    (* this is free_provs_ty but Uninit doesn't recur *)
+    (* this is free_provs_ty but doesn't include provenances under uninitialized types *)
 and provs_used_in_ty (ty : ty) : provs =
   match snd ty with
   | Any | Infer | BaseTy _ | TyVar _ | Uninit _ -> []
@@ -669,16 +669,16 @@ and provs_used_in_ty (ty : ty) : provs =
   | Struct (_, provs, tys, _) -> tys |> List.map provs_used_in_ty |> List.cons provs |> List.flatten
 
 (* uninitialize pi if not already done, and empty out any provenances that are now unused *)
-let var_env_uninit (gamma : var_env) (pi : place) : var_env tc =
+let var_env_uninit (gamma : var_env) (res_ty : ty) (pi : place) : var_env tc =
   let* ty_pi = var_env_lookup gamma pi
   in let provs = free_provs_ty ty_pi
   in let* gammaPrime =
     if is_uninit ty_pi then gamma |> succ
     else gamma |> var_env_type_update pi (uninit ty_pi)
-  in let still_used = used_provs gammaPrime
+  in let still_used = List.concat [used_provs gammaPrime; provs_used_in_ty res_ty]
   in let should_update (entry : frame_entry) : bool =
     match entry with
-    | Prov (prov, _) -> provs |> contains prov && still_used |> contains prov
+    | Prov (prov, _) -> contains prov provs && not $ contains prov still_used
     | _ -> false
   in let update (entry : frame_entry) : frame_entry tc =
     match entry with

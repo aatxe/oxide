@@ -219,7 +219,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
              let* noncopy = noncopyable sigma ty
              in if is_init ty then
                if noncopy then
-                 let* gammaPrime = var_env_uninit gamma pi
+                 let* gammaPrime = var_env_uninit gamma ty pi
                  in Succ gammaPrime
                else Succ gamma
              else PartiallyMoved (pi, ty) |> fail
@@ -238,7 +238,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | Some pi ->
          let* ty = var_env_lookup gamma pi
          in if is_init ty then
-           let* gammaPrime = var_env_uninit gamma pi
+           let* gammaPrime = var_env_uninit gamma ty pi
            in Succ ((inferred, BaseTy Unit), gammaPrime)
          else PartiallyMoved (pi, ty) |> fail
        | None -> CannotMove phi |> fail)
@@ -327,7 +327,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let* () = valid_type sigma delta gamma1 ty1
       in let gamma1Prime = var_env_include gamma1 var ty1
       in let* (ty2, gamma2) = tc delta gamma1Prime e2
-      in let* gamma2Prime = var |> var_to_place |> var_env_uninit gamma2 >>= (succ >> shift)
+      in let* gamma2Prime = var |> var_to_place |> var_env_uninit gamma2 ty2 >>= (succ >> shift)
       in let* () = ty_valid_before_after sigma delta ty2 gamma2 gamma2Prime
       in Succ (ty2, gamma2Prime)
     (* T-Let *)
@@ -338,7 +338,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let* ann_ty = flow_closed_envs_forward ty1 ann_ty
       in let gamma1Prime = var_env_include gamma1Prime var ann_ty
       in let* (ty2, gamma2) = tc delta gamma1Prime e2
-      in let* gamma2Prime = var |> var_to_place |> var_env_uninit gamma2 >>= (succ >> shift)
+      in let* gamma2Prime = var |> var_to_place |> var_env_uninit gamma2 ty2 >>= (succ >> shift)
       in let* () = ty_valid_before_after sigma delta ty2 gamma2 gamma2Prime
       in Succ (ty2, gamma2Prime)
     (* T-Assign and T-AssignDeref *)
