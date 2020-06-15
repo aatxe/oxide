@@ -73,8 +73,12 @@ and valid_loan (_ : global_env) (delta : tyvar_env) (gamma : var_env)
   let (omega, phi) = loan
   in match compute_ty_in omega delta gamma phi with
      | Succ _ -> Succ ()
-     | Fail (UnboundPlaceExpr _) -> UnboundLoanInProv (loan, prov) |> fail
-     | Fail err -> Fail err
+     | Fail (UnboundPlaceExpr _) ->
+       if gamma |> used_provs |> contains prov then UnboundLoanInProv (loan, prov) |> fail
+       else Succ ()
+     | Fail err ->
+       if gamma |> used_provs |> contains prov then Fail err
+       else Succ ()
 and valid_prov_entry (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
     (entry : prov * loans) : unit tc =
   let (prov, loans) = entry
@@ -238,7 +242,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | Some pi ->
          let* ty = var_env_lookup gamma pi
          in if is_init ty then
-           let* gammaPrime = var_env_uninit gamma ty pi
+           let* gammaPrime = var_env_uninit gamma (inferred, BaseTy Unit) pi
            in Succ ((inferred, BaseTy Unit), gammaPrime)
          else PartiallyMoved (pi, ty) |> fail
        | None -> CannotMove phi |> fail)
