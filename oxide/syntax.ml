@@ -36,11 +36,15 @@ type preplace_expr = var * expr_path [@@deriving show]
 type place_expr = source_loc * preplace_expr [@@deriving show]
 type place_exprs = place_expr list [@@deriving show]
 
+(* convert a var into a place with an inferred location *)
+let var_to_place (var : var) : place = (inferred, (var, []))
 (* find the root of a given place expr *)
 let root_of : place -> var = fst >> snd
 (* find the path for the given place *)
 let path_of : place -> path = snd >> snd
 
+(* convert a var into a place expression with an inferred location *)
+let var_to_place_expr (var : var) : place_expr = (inferred, (var, []))
 (* find the root of a given place expr *)
 let expr_root_of : place_expr -> var = fst >> snd
 (* find the path for the given place_expr *)
@@ -156,6 +160,10 @@ let is_sized (typ : ty) : bool =
   match snd typ with
   | Slice _ -> false
   | _ -> true
+
+(* is the outer-most constructor for this type daggered? *)
+let is_uninit (typ : ty) : bool =
+  match snd typ with Uninit _ -> true | _ -> false
 
 (* is the given type fully initialized? *)
 let rec is_init (typ : ty) : bool =

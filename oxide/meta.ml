@@ -145,7 +145,7 @@ let loan_env_prov_update (prov : prov) (loans : loans) (gamma : var_env) : var_e
     | _ -> failwith "unreachable: no loans to update for non-provenance frame entries"
   in InvalidProv prov |> fail |> env_update gamma should_update update
 
-let var_env_uninit_many (gamma : var_env) (moved : var list) : var_env tc =
+let var_env_move_many (gamma : var_env) (moved : var list) : var_env tc =
   let move_var (gamma : var_env) (moved : var) : var_env tc =
     let* ty = var_env_lookup_var gamma moved
     in gamma |> var_env_type_update (inferred, (moved, [])) (uninit ty)
@@ -164,6 +164,13 @@ let env_of (var : var) (gamma : var_env) : env tc =
   | Some (_, Fun (_, _, _, _, gamma_c, _, _)) -> Succ gamma_c
   | Some ty -> TypeMismatchFunction ty |> fail
   | None -> UnboundPlace ((dummy, (var, []))) |> fail
+
+(* get all the types in the given environment *)
+let env_to_tys (env : env) : ty list =
+  match env with
+  | Unboxed | EnvVar _ -> []
+  | Env frame -> frame |> to_bindings |> List.map snd
+  | EnvOf _ -> failwith "unreachable: no env-of environments for env_to_tys"
 
 (* returns whether or not the given gamma contains the provenance in any types *)
 let contains_prov (gamma : var_env) (prov : prov) : bool =
@@ -595,11 +602,12 @@ let rec free_provs_ty (ty : ty) : provs =
   | Any | Infer | BaseTy _ | TyVar _ -> []
   | Uninit ty -> free_provs_ty ty
   | Ref (prov, _, ty) -> free_provs_ty ty |> List.cons prov
-  | Fun (_, provs, _, tys, _, ty, bounds) ->
+  | Fun (_, provs, _, tys, env, ty, bounds) ->
     [tys |> List.map free_provs_ty |> List.flatten;
      free_provs_ty ty;
      bounds |> List.map fst;
-     bounds |> List.map snd] |>
+     bounds |> List.map snd;
+     env |> env_to_tys |> List.map free_provs_ty |> List.flatten] |>
     List.concat |> List.filter (fun pv -> provs |> List.map snd |> List.mem (snd pv) |> not)
   | Array (ty, _) | Slice ty -> free_provs_ty ty
   | Rec tys -> tys |> List.map (free_provs_ty >> snd) |> List.flatten
@@ -640,6 +648,43 @@ and free_provs (expr : expr) : provs =
     es |> List.map (free_provs >> snd) |> List.cons provs |> List.flatten
   | TupStruct (_, provs, _, es) -> free_provs_many es |> List.append provs
 and free_provs_many (exprs : expr list) : provs = exprs |> List.map free_provs |> List.flatten
+
+let rec used_provs (gamma : var_env) : provs =
+  gamma |> stack_to_bindings |> flat_map (provs_used_in_ty >> snd)
+    (* this is free_provs_ty but Uninit doesn't recur *)
+and provs_used_in_ty (ty : ty) : provs =
+  match snd ty with
+  | Any | Infer | BaseTy _ | TyVar _ | Uninit _ -> []
+  | Ref (prov, _, ty) -> provs_used_in_ty ty |> List.cons prov
+  | Fun (_, provs, _, tys, env, ty, bounds) ->
+    [tys |> List.map provs_used_in_ty |> List.flatten;
+     provs_used_in_ty ty;
+     bounds |> List.map fst;
+     bounds |> List.map snd;
+     env |> env_to_tys |> List.map provs_used_in_ty |> List.flatten] |>
+    List.concat |> List.filter (fun pv -> provs |> List.map snd |> List.mem (snd pv) |> not)
+  | Array (ty, _) | Slice ty -> provs_used_in_ty ty
+  | Rec tys -> tys |> List.map (provs_used_in_ty >> snd) |> List.flatten
+  | Tup tys -> tys |> List.map provs_used_in_ty |> List.flatten
+  | Struct (_, provs, tys, _) -> tys |> List.map provs_used_in_ty |> List.cons provs |> List.flatten
+
+(* uninitialize pi if not already done, and empty out any provenances that are now unused *)
+let var_env_uninit (gamma : var_env) (pi : place) : var_env tc =
+  let* ty_pi = var_env_lookup gamma pi
+  in let provs = free_provs_ty ty_pi
+  in let* gammaPrime =
+    if is_uninit ty_pi then gamma |> succ
+    else gamma |> var_env_type_update pi (uninit ty_pi)
+  in let still_used = used_provs gammaPrime
+  in let should_update (entry : frame_entry) : bool =
+    match entry with
+    | Prov (prov, _) -> provs |> contains prov && still_used |> contains prov
+    | _ -> false
+  in let update (entry : frame_entry) : frame_entry tc =
+    match entry with
+    | Prov (prov, _) -> Prov (prov, []) |> succ
+    | Id _ -> failwith "unreachable: var_env_uninit should_update always returns false for bindings"
+  in [] |> succ |> env_update gammaPrime should_update update
 
 let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
    let rec free (expr : expr) : vars tc =

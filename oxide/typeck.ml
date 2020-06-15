@@ -68,11 +68,25 @@ let rec valid_type (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
 and valid_types (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
     (tys : ty list) : unit tc =
   for_each_rev (valid_type sigma delta gamma) tys
-(* loan environment validity judgment *)
+and valid_loan (_ : global_env) (delta : tyvar_env) (gamma : var_env)
+    (prov : prov) (loan : loan) =
+  let (omega, phi) = loan
+  in match compute_ty_in omega delta gamma phi with
+     | Succ _ -> Succ ()
+     | Fail (UnboundPlaceExpr _) -> UnboundLoanInProv (loan, prov) |> fail
+     | Fail err -> Fail err
+and valid_prov_entry (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
+    (entry : prov * loans) : unit tc =
+  let (prov, loans) = entry
+  in for_each_rev (valid_loan sigma delta gamma prov) loans
+and valid_prov_entries (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
+    (entries : (prov * loans) list) : unit tc =
+  for_each_rev (valid_prov_entry sigma delta gamma) entries
 (* variable environment validity judgment *)
 and valid_var_env (sigma : global_env) (delta : tyvar_env)
     (gamma : var_env) : unit tc =
-  gamma |> stack_to_bindings |> List.map snd |> valid_types sigma delta gamma
+  let* () = gamma |> stack_to_bindings |> List.map snd |> valid_types sigma delta gamma
+  in gamma |> to_loan_env |> valid_prov_entries sigma delta gamma
 (* environment validity judgment, assuming global environment is well-formed *)
 and valid_envs (sigma : global_env) (delta : tyvar_env) (gamma : var_env) : unit tc =
   (* note: delta is well-formed by construction since it splits type variables by kind *)
@@ -205,7 +219,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
              let* noncopy = noncopyable sigma ty
              in if is_init ty then
                if noncopy then
-                 let* gammaPrime = gamma |> var_env_type_update pi (uninit ty)
+                 let* gammaPrime = var_env_uninit gamma pi
                  in Succ gammaPrime
                else Succ gamma
              else PartiallyMoved (pi, ty) |> fail
@@ -224,8 +238,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | Some pi ->
          let* ty = var_env_lookup gamma pi
          in if is_init ty then
-           let* gammaPrime = gamma |> var_env_type_update pi (uninit ty)
-           in let gammaPrime = kill_loans_for phi gammaPrime
+           let* gammaPrime = var_env_uninit gamma pi
            in Succ ((inferred, BaseTy Unit), gammaPrime)
          else PartiallyMoved (pi, ty) |> fail
        | None -> CannotMove phi |> fail)
@@ -314,7 +327,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let* () = valid_type sigma delta gamma1 ty1
       in let gamma1Prime = var_env_include gamma1 var ty1
       in let* (ty2, gamma2) = tc delta gamma1Prime e2
-      in let gamma2Prime = shift gamma2
+      in let* gamma2Prime = var |> var_to_place |> var_env_uninit gamma2 >>= (succ >> shift)
       in let* () = ty_valid_before_after sigma delta ty2 gamma2 gamma2Prime
       in Succ (ty2, gamma2Prime)
     (* T-Let *)
@@ -325,7 +338,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let* ann_ty = flow_closed_envs_forward ty1 ann_ty
       in let gamma1Prime = var_env_include gamma1Prime var ann_ty
       in let* (ty2, gamma2) = tc delta gamma1Prime e2
-      in let gamma2Prime = shift gamma2
+      in let* gamma2Prime = var |> var_to_place |> var_env_uninit gamma2 >>= (succ >> shift)
       in let* () = ty_valid_before_after sigma delta ty2 gamma2 gamma2Prime
       in Succ (ty2, gamma2Prime)
     (* T-Assign and T-AssignDeref *)
@@ -411,7 +424,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
                             in Id (var, ty) |> succ)
       in let var_include_fold (gamma : var_env) (pair : var * ty) : var_env =
         var_env_include gamma (fst pair) (snd pair)
-      in let* gammaMoved = var_env_uninit_many gamma moved_vars
+      in let* gammaMoved = var_env_move_many gamma moved_vars
       in let gammaPrime =
         List.fold_left var_include_fold (var_env_new_frame gammaMoved gamma_c) params
       in let deltaPrime = delta |> tyvar_env_add_provs provs |> tyvar_env_add_ty_vars tyvars
