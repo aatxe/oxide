@@ -677,10 +677,8 @@ let var_env_uninit (gamma : var_env) (res_ty : ty) (pi : place) : var_env tc =
   in let still_used = List.concat [used_provs gammaPrime; provs_used_in_ty res_ty]
   in let update (entry : frame_entry) : frame_entry tc =
     match entry with
-    | Prov (prov, loans) ->
-      if contains prov provs && not $ contains prov still_used then Prov (prov, []) |> succ
-      else Prov (prov, loans) |> succ
-    | Id _ -> failwith "unreachable: var_env_uninit should_update always returns false for bindings"
+    | Prov (prov, _) when contains prov provs && not $ contains prov still_used -> Prov (prov, []) |> succ
+    | Prov _ | Id _ -> entry |> succ
   in map (map update) gammaPrime
 
 let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
