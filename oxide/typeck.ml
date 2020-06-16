@@ -73,12 +73,8 @@ and valid_loan (_ : global_env) (delta : tyvar_env) (gamma : var_env)
   let (omega, phi) = loan
   in match compute_ty_in omega delta gamma phi with
      | Succ _ -> Succ ()
-     | Fail (UnboundPlaceExpr _) ->
-       if gamma |> used_provs |> contains prov then UnboundLoanInProv (loan, prov) |> fail
-       else Succ ()
-     | Fail err ->
-       if gamma |> used_provs |> contains prov then Fail err
-       else Succ ()
+     | Fail (UnboundPlaceExpr _) -> UnboundLoanInProv (loan, prov) |> fail
+     | Fail err -> Fail err
 and valid_prov_entry (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
     (entry : prov * loans) : unit tc =
   let (prov, loans) = entry
@@ -296,7 +292,9 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
     (* T-Seq *)
     | Seq (e1, e2) ->
       let* (_, gamma1) = tc delta gamma e1
-      in tc delta gamma1 e2
+      in let still_used_provs = used_provs gamma1
+      in let* gamma1Prime = clear_unused_provenances still_used_provs gamma1
+      in tc delta gamma1Prime e2
     (* T-Branch *)
     | Branch (e1, e2, e3) ->
       (match tc delta gamma e1 with
@@ -341,6 +339,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let* gamma1Prime = subtype Combine delta gamma1 ty1 ann_ty
       in let* ann_ty = flow_closed_envs_forward ty1 ann_ty
       in let gamma1Prime = var_env_include gamma1Prime var ann_ty
+      in let still_used = used_provs gamma1Prime
+      in let* gamma1Prime = gamma1Prime |> clear_unused_provenances still_used
       in let* (ty2, gamma2) = tc delta gamma1Prime e2
       in let* gamma2Prime = var |> var_to_place |> var_env_uninit gamma2 ty2 >>= (succ >> shift)
       in let* () = ty_valid_before_after sigma delta ty2 gamma2 gamma2Prime
@@ -442,9 +442,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let gammaPrime = gammaPrime |> loan_env_include_all free_provs []
       in let* (ret_ty, gamma_body) = tc deltaPrime gammaPrime body
       in let* () = find_refs_to_captured deltaPrime gamma_body ret_ty gamma_c
+      in let still_used = List.concat [used_provs gammaPrime; provs_used_in_ty ret_ty]
       in let fn_ty (ret_ty : ty) : ty =
            (inferred, Fun ([], provs, tyvars, List.map snd params, Env gamma_c, ret_ty, []))
-      in let gamma = pop gamma_body
+      in let gamma = pop gamma_body |> clear_unused_provenances still_used
       in (match opt_ret_ty with
           | Some ann_ret_ty ->
             let* gammaFinal = subtype Combine deltaPrime gamma ret_ty ann_ret_ty

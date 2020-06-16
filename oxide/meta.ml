@@ -668,6 +668,14 @@ and provs_used_in_ty (ty : ty) : provs =
   | Tup tys -> tys |> List.map provs_used_in_ty |> List.flatten
   | Struct (_, provs, tys, _) -> tys |> List.map provs_used_in_ty |> List.cons provs |> List.flatten
 
+(* empties any provenances that are not in the still_used list *)
+let clear_unused_provenances (still_used : provs) (gamma : var_env) : var_env tc =
+  let update (entry : frame_entry) : frame_entry tc =
+    match entry with
+    | Prov (prov, _) when not $ contains prov still_used -> Prov (prov, []) |> succ
+    | Prov _ | Id _ -> entry |> succ
+  in map (map update) gamma
+
 (* uninitialize pi if not already done, and empty out any provenances that are now unused *)
 let var_env_uninit (gamma : var_env) (res_ty : ty) (pi : place) : var_env tc =
   let* ty_pi = var_env_lookup gamma pi
