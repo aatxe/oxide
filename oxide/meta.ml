@@ -363,16 +363,17 @@ let frame_of (prov : prov) (gamma : var_env) : static_frame tc =
 let rec outlives (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env)
                  (prov1: prov) (prov2 : prov) : var_env tc =
   match (mode, loan_env_lookup_opt gamma prov1, loan_env_lookup_opt gamma prov2) with
-  | (Combine, Some rep1, Some rep2) ->
     (* OL-CombineLocalProvenances *)
+  | (Combine, Some rep1, Some rep2) ->
     let* prov1_frame = frame_of prov1 gamma
     in if provs_in prov1_frame |> contains prov2 then
       let loans = list_union rep1 rep2
       in gamma |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
     else CannotCombineProvsInDifferentFrames (prov1, prov2) |> fail
-  | (Override, Some _, Some _) ->
     (* OL-OverrideLocalProvenances *)
-    subst_prov_in_env prov1 prov2 gamma
+  | (Override, Some _, Some loans) ->
+    (* subst_prov_in_env prov2 prov1 gamma *)
+    gamma |> loan_env_prov_update prov1 loans
     (* OL-AbsProvLocalProv *)
   | (_, None, Some loans) ->
     (* true if all the loans are reborrow loans from things that outlive the abstract provenance *)
