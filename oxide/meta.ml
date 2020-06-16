@@ -304,12 +304,11 @@ let subst_prov (ty : ty) (this : prov) (that : prov) : ty =
   in sub ty
 
 let subst_prov_in_env (this : prov) (that : prov) (gamma : var_env) : var_env tc =
-  let should_update (_ : frame_entry) : bool = true
-  in let update (entry : frame_entry) : frame_entry tc =
+  let update (entry : frame_entry) : frame_entry tc =
     match entry with
     | Id (var, root_ty) -> Id (var, subst_prov root_ty this that) |> succ
     | _ -> entry |> succ
-  in [] |> succ |> env_update gamma should_update update
+  in map (map update) gamma
 
 let subst_many_prov (pairs : (prov * prov) list) (ty : ty) : ty =
   List.fold_right (fun pair ty -> subst_prov ty (fst pair) (snd pair)) pairs ty
@@ -676,15 +675,13 @@ let var_env_uninit (gamma : var_env) (res_ty : ty) (pi : place) : var_env tc =
     if is_uninit ty_pi then gamma |> succ
     else gamma |> var_env_type_update pi (uninit ty_pi)
   in let still_used = List.concat [used_provs gammaPrime; provs_used_in_ty res_ty]
-  in let should_update (entry : frame_entry) : bool =
-    match entry with
-    | Prov (prov, _) -> contains prov provs && not $ contains prov still_used
-    | _ -> false
   in let update (entry : frame_entry) : frame_entry tc =
     match entry with
-    | Prov (prov, _) -> Prov (prov, []) |> succ
+    | Prov (prov, loans) ->
+      if contains prov provs && not $ contains prov still_used then Prov (prov, []) |> succ
+      else Prov (prov, loans) |> succ
     | Id _ -> failwith "unreachable: var_env_uninit should_update always returns false for bindings"
-  in [] |> succ |> env_update gammaPrime should_update update
+  in map (map update) gammaPrime
 
 let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
    let rec free (expr : expr) : vars tc =
