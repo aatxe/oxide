@@ -445,7 +445,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let still_used = List.concat [used_provs gammaPrime; provs_used_in_ty ret_ty]
       in let fn_ty (ret_ty : ty) : ty =
            (inferred, Fun ([], provs, tyvars, List.map snd params, Env gamma_c, ret_ty, []))
-      in let gamma = pop gamma_body |> clear_unused_provenances still_used
+      in let* gamma = pop gamma_body |> clear_unused_provenances still_used
       in (match opt_ret_ty with
           | Some ann_ret_ty ->
             let* gammaFinal = subtype Combine deltaPrime gamma ret_ty ann_ret_ty
