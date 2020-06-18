@@ -128,25 +128,28 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
     | Some (loc, pi) ->
       let exclusions = List.cons pi exclusions
       in let refined_places = refine exclusions ref_places
-      in let not_disjoint_from (pi : place) : place -> bool = not >> disjoint pi
-      in let expr_not_disjoint_from (pi : place) : place_expr -> bool =
-        not >> expr_disjoint_place pi
-      in let safety_test ((_, ty) : place * ty) : unit tc =
-        match snd ty with
-        | Ref (prov, _, _) ->
-          let loans = if tyvar_env_prov_mem delta prov then [] else loan_env_lookup gamma prov
-          in let loan_to_place : loan -> place option = place_expr_to_place >> snd
-          in let places_with_loans = List.map (fun loan -> (loan_to_place loan, loan)) loans
-          in let conflicts =
-            List.find_all (fun (opt_pi, (_, phi)) ->
-                             match opt_pi with
-                             | Some loan_pi -> not_disjoint_from (loc, pi) loan_pi
-                             | None -> expr_not_disjoint_from (loc, pi) phi)
-                          places_with_loans
-          in if is_empty conflicts then Succ ()
-          else Fail (SafetyErr ((omega, tl_phi), conflicts |> List.hd |> snd))
-        | _ -> failwith "O-UniqueSafety/O-SharedSafety: unreachable"
-      in let* () = for_each refined_places safety_test
+      in let used_provs = refined_places |> flat_map (provs_used_in_ty >> snd)
+      in let* excluded_types =
+        exclusions |> map (var_env_lookup gamma >> (fun pi -> (inferred, pi)))
+      in let excluded_provs =
+        excluded_types |> flat_map provs_used_in_ty
+                       |> List.filter (not >> prov_in used_provs)
+      in let safety_test (prov : prov) : unit tc =
+        let loans = loan_env_lookup gamma prov
+        in let loan_to_place : loan -> place option = place_expr_to_place >> snd
+        in let places_with_loans = List.map (fun loan -> (loan_to_place loan, loan)) loans
+        in let conflicts =
+          List.find_all (not >> fun (opt_pi, (omegaPrime, phi)) ->
+                                  (omega <> Unique && omegaPrime <> Unique) ||
+                                  match opt_pi with
+                                  | Some loan_pi -> disjoint (loc, pi) loan_pi
+                                  | None -> expr_disjoint_place (loc, pi) phi)
+                        places_with_loans
+        in if is_empty conflicts then Succ ()
+        else Fail (SafetyErr ((omega, tl_phi), conflicts |> List.hd |> snd))
+      in let* () = gamma |> to_loan_env |> List.map fst
+                         |> List.filter (not >> prov_in excluded_provs)
+                         |> for_each_rev safety_test
       in Succ [(omega, phi)]
     (* O-Deref, O-DerefAbs *)
     | None ->

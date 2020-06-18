@@ -103,6 +103,7 @@ type bounds = bound list [@@deriving show]
 (* does the given provenance list contain the given provenance? *)
 let contains (prov : prov) (provs : provs) : bool =
   provs |> List.map snd |> List.mem (snd prov)
+let prov_in : provs -> prov -> bool = flip contains
 
 (* are the two given bounds lists equal? *)
 let eq_bounds (bounds1 : bounds) (bounds2 : bounds) : bool =
