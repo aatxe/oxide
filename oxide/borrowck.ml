@@ -165,17 +165,22 @@ let ownership_safe (_ : global_env) (delta : tyvar_env) (gamma : var_env)
           loans |> List.map (skip_deref suffix |> apply_suffix >> snd)
                 |> map (impl_safe exclusions) >>= (succ >> List.flatten)
         in let refined_places = refine exclusions ref_places
-        in let expr_not_disjoint_from (phi : place_expr) : place_expr -> bool =
-          not >> expr_disjoint phi
-        in let safety_test ((_, ty) : place * ty) : unit tc =
-          match snd ty with
-          | Ref (pv, _, _) ->
-            let loans = if tyvar_env_prov_mem delta pv then [] else loan_env_lookup gamma pv
-            in let conflicts = List.find_all (expr_not_disjoint_from phi >> snd) loans
-            in if is_empty conflicts then Succ ()
-            else SafetyErr ((omega, tl_phi), List.hd conflicts) |> fail
-          | _ -> failwith "O-Deref/O-DerefAbs: unreachable"
-        in let* () = for_each refined_places safety_test
+        in let used_provs = refined_places |> flat_map (provs_used_in_ty >> snd)
+        in let* excluded_types =
+          exclusions |> map (var_env_lookup gamma >> (fun pi -> (inferred, pi)))
+        in let excluded_provs =
+          excluded_types |> flat_map provs_used_in_ty
+                        |> List.filter (not >> prov_in used_provs)
+        in let safety_test (prov : prov) : unit tc =
+          let loans = loan_env_lookup gamma prov
+          in let conflicts = List.find_all (not >> fun (omegaPrime, phiPrime) ->
+                                                      (omega <> Unique && omegaPrime <> Unique) ||
+                                                      expr_disjoint phi phiPrime) loans
+          in if is_empty conflicts then Succ ()
+          else SafetyErr ((omega, tl_phi), List.hd conflicts) |> fail
+        in let* () = gamma |> to_loan_env |> List.map fst
+                           |> List.filter (not >> prov_in excluded_provs)
+                           |> for_each_rev safety_test
         in (omega, phi) :: loans |> succ
       | Uninit (loc, Ref (prov, omega, ty)) ->
         PartiallyMoved (inner_pi, (loc, Ref (prov, omega, ty))) |> fail
