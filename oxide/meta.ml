@@ -679,16 +679,11 @@ let clear_unused_provenances (still_used : provs) (gamma : var_env) : var_env tc
 (* uninitialize pi if not already done, and empty out any provenances that are now unused *)
 let var_env_uninit (gamma : var_env) (res_ty : ty) (pi : place) : var_env tc =
   let* ty_pi = var_env_lookup gamma pi
-  in let provs = free_provs_ty ty_pi
   in let* gammaPrime =
     if is_uninit ty_pi then gamma |> succ
     else gamma |> var_env_type_update pi (uninit ty_pi)
   in let still_used = List.concat [used_provs gammaPrime; provs_used_in_ty res_ty]
-  in let update (entry : frame_entry) : frame_entry tc =
-    match entry with
-    | Prov (prov, _) when contains prov provs && not $ contains prov still_used -> Prov (prov, []) |> succ
-    | Prov _ | Id _ -> entry |> succ
-  in map (map update) gammaPrime
+  in clear_unused_provenances still_used gammaPrime
 
 let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
    let rec free (expr : expr) : vars tc =
