@@ -249,6 +249,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       let* loans = ownership_safe sigma delta gamma omega pi
       in let* ty = compute_ty_in omega delta gamma pi
       in if tyvar_env_prov_mem delta prov then CannotBorrowIntoAbstractProvenance prov |> fail
+      else if prov |> loan_env_lookup gamma |> non_empty then
+        CannotBorrowIntoInUseProvenance prov |> fail
       else let* updated_gamma = loan_env_prov_update prov loans gamma
       in Succ ((inferred, Ref (prov, omega, ty)), updated_gamma)
     (* T-BorrowIndex *)
@@ -258,6 +260,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
          let* loans = ownership_safe sigma delta gamma1 omega pi
          in let* ty = compute_ty_in omega delta gamma1 pi
          in if tyvar_env_prov_mem delta prov then CannotBorrowIntoAbstractProvenance prov |> fail
+         else if prov |> loan_env_lookup gamma |> non_empty then
+           CannotBorrowIntoInUseProvenance prov |> fail
          else let* updated_gamma = loan_env_prov_update prov loans gamma1
          in Succ ((inferred, Ref (prov, omega, ty)), updated_gamma)
        | Succ (found, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
@@ -271,6 +275,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
             let* loans = ownership_safe sigma delta gamma2 omega pi
             in let* ty = compute_ty_in omega delta gamma2 pi
             in if tyvar_env_prov_mem delta prov then CannotBorrowIntoAbstractProvenance prov |> fail
+            else if prov |> loan_env_lookup gamma |> non_empty then
+              CannotBorrowIntoInUseProvenance prov |> fail
             else let* updated_gamma = loan_env_prov_update prov loans gamma2
             in Succ ((inferred, Ref (prov, omega, ty)), updated_gamma)
           | Succ (found, _) -> TypeMismatch ((dummy, BaseTy U32), found) |> fail
