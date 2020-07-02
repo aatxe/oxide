@@ -368,7 +368,7 @@ let rec outlives (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env)
     let* prov1_frame = frame_of prov1 gamma
     in if provs_in prov1_frame |> contains prov2 then
       let loans = list_union rep1 rep2
-      in gamma |> loan_env_prov_update prov1 loans >>= loan_env_prov_update prov2 loans
+      in gamma |> loan_env_prov_update prov1 loans
     else CannotCombineProvsInDifferentFrames (prov1, prov2) |> fail
     (* OL-OverrideLocalProvenances *)
   | (Override, Some _, Some loans) ->
