@@ -380,7 +380,11 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       (match tc delta gamma e1 with
        | Succ ((_, BaseTy Bool), gamma1) ->
          let* (_, gamma2) =  tc delta gamma1 e2
-         in tc delta gamma2 e2
+         in (match tc delta gamma2 e1 with
+            | Succ ((_, BaseTy Bool), gamma3) when gamma2 = gamma3 -> tc delta gamma2 e2
+            | Succ ((_, BaseTy Bool), gamma3) -> VarEnvMismatch (fst expr, gamma2, gamma3) |> fail
+            | Succ (found, _) -> TypeMismatch ((dummy, BaseTy  Bool), found) |> fail
+            | Fail err -> Fail err)
        | Succ (found, _) -> TypeMismatch ((dummy, BaseTy Bool), found) |> fail
        | Fail err -> Fail err)
     (* T-ForArray, T-ForSlice *)
