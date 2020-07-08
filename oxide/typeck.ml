@@ -238,9 +238,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | Some pi ->
          let* ty = var_env_lookup gamma pi
          in if is_init ty then
-           let still_used = List.concat [used_provs gamma]
-           in let* gammaPrime = var_env_uninit gamma (inferred, BaseTy Unit) pi >>=
-                                clear_unused_provenances still_used
+           let* gammaPrime = var_env_uninit gamma (inferred, BaseTy Unit) pi
            in Succ ((inferred, BaseTy Unit), gammaPrime)
          else PartiallyMoved (pi, ty) |> fail
        | None -> CannotMove phi |> fail)
