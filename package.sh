@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This script packages up this repository for (hopefully) anonymous submission.
-DIR=oxide-popl20
+DIR=oxide-popl21
 REV=`git rev-parse --short HEAD`
 rm -rf $DIR
 
