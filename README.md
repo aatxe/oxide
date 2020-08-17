@@ -1,6 +1,6 @@
 # Oxide
 
-Distilling the Essence of Rust.
+An implementation of Oxide as described in [_Oxide: The Essence of Rust_][arxiv].
 
 ## Background
 
@@ -49,6 +49,7 @@ This repository is split into six parts:
 - [A Step-Indexed Model of Substructural State][substruct]
 - [Checking Interference with Fractional Permissions][fracperm] ([[No Paywall]][fracperm-cc])
 
+[arxiv]: https://arxiv.org/abs/1903.00982
 [obseq]: http://smallcultfollowing.com/babysteps/blog/2016/10/02/observational-equivalence-and-unsafe-code/
 [nll]: http://smallcultfollowing.com/babysteps/blog/2018/04/27/an-alias-based-formulation-of-the-borrow-checker/
 [linrgn]: http://www.ccs.neu.edu/home/amal/papers/linrgn.pdf
