@@ -357,6 +357,13 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let* gamma2Prime = gamma2Prime |> clear_unused_provenances still_used >>= (succ >> shift)
       in let* () = ty_valid_before_after sigma delta ty2 gamma2 gamma2Prime
       in Succ (ty2, gamma2Prime)
+    (* T-Shift *)
+    | Shift e ->
+      let* (ty, gammaPrime) = tc delta gamma e
+      in Succ (ty, gammaPrime |> shift)
+    | Framed e ->
+      let* (ty, gammaPrime) = tc delta gamma e
+      in Succ (ty, List.tl gammaPrime)
     (* T-Assign and T-AssignDeref *)
     | Assign (phi, e) ->
       let gamma = kill_loans_for phi gamma
@@ -373,6 +380,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        | None -> Succ ((inferred, BaseTy Unit), gammaPrime))
     (* T-Abort *)
     | Abort _ -> Succ ((inferred, Any), gamma)
+    (* T-Dead *)
+    | Dead -> Succ (uninit (inferred, Any), gamma)
     (* T-While *)
     | While (e1, e2) ->
       (match tc delta gamma e1 with
@@ -509,6 +518,12 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in let* (gammaFinal, unified_ty) = unify_many (fst expr) delta gammaPrime tys
       in let final_ty : ty = (inferred, Array (unified_ty, List.length tys))
       in Succ (final_ty, gammaFinal)
+    (* T-Slice *)
+    | ArraySlice exprs ->
+      let* (tys, gammaPrime) = tc_many delta gamma exprs
+      in let* (gammaFinal, unified_ty) = unify_many (fst expr) delta gammaPrime tys
+      in let final_ty : ty = (inferred, Slice unified_ty)
+      in Succ (final_ty, gammaFinal)
     (* T-RecordStruct *)
     | RecStruct (name, provs, tys, fields) ->
       (match global_env_find_struct sigma name with
@@ -555,6 +570,8 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
          else WrongStructConstructor (fst expr, name, Tup) |> fail)
     (* T-Pointer *)
     | Ptr _ -> failwith "unimplemented: T-Pointer"
+    (* T-Closure *)
+    | Closure _ -> failwith "unimplemented: T-Closure"
   and tc_many (delta : tyvar_env) (gamma : var_env)
               (exprs : expr list) : (ty list * var_env) tc =
     let tc_next (e : expr) ((curr_tys, curr_gamma) : ty list * var_env) =

@@ -615,7 +615,7 @@ let rec free_provs_ty (ty : ty) : provs =
   | Struct (_, provs, tys, _) -> tys |> List.map free_provs_ty |> List.cons provs |> List.flatten
 and free_provs (expr : expr) : provs =
   match snd expr with
-  | Prim _ | Move _ | Drop _ | Fn _ | Abort _ | Ptr _ -> []
+  | Prim _ | Move _ | Drop _ | Fn _ | Abort _ | Ptr _ | Dead -> []
   | BinOp (_, e1, e2) -> free_provs_many [e1; e2]
   | Borrow (prov, _, _) -> [prov]
   | BorrowIdx (prov, _, _, e) -> free_provs e |> List.cons prov
@@ -643,10 +643,18 @@ and free_provs (expr : expr) : provs =
   | Branch (e1, e2, e3) ->
     List.concat [free_provs e1; free_provs e2; free_provs e3]
   | While (e1, e2) | For (_, e1, e2) -> free_provs_many [e1; e2]
-  | Tup es | Array es -> free_provs_many es
+  | Tup es | Array es | ArraySlice es -> free_provs_many es
   | RecStruct (_, provs, _, es) ->
     es |> List.map (free_provs >> snd) |> List.cons provs |> List.flatten
   | TupStruct (_, provs, _, es) -> free_provs_many es |> List.append provs
+  | Framed e | Shift e -> free_provs e
+  | Closure (_, params, ret_ty, _) -> 
+    let free_in_params = params |> List.map (free_provs_ty >> snd) |> List.flatten
+    in let free_in_ret =
+      match ret_ty with
+      | Some ty -> free_provs_ty ty
+      | None -> []
+    in List.concat [free_in_params; free_in_ret]
 and free_provs_many (exprs : expr list) : provs = exprs |> List.map free_provs |> List.flatten
 
 let rec used_provs (gamma : var_env) : provs =
@@ -685,7 +693,7 @@ let var_env_uninit (gamma : var_env) (_ : ty) (pi : place) : var_env tc =
 let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
    let rec free (expr : expr) : vars tc =
      match snd expr with
-     | Prim _ | Fn _ | Abort _ -> Succ []
+     | Prim _ | Fn _ | Abort _ | Dead -> Succ []
      | BinOp (_, e1, e2)
      | While (e1, e2)
      | Seq (e1, e2) ->
@@ -708,13 +716,13 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
        in let* free2 = free e2
        in let* should_include = should_include root
        in List.concat [if should_include then [root] else []; free1; free2] |> succ
-     | LetProv (_, e) -> free e
+     | LetProv (_, e) | Framed e | Shift e -> free e
      | Let (x, _, e1, e2)
      | For (x, e1, e2) ->
        let* free1 = free e1
        in let* free2 = free e2
        in free2 |> List.filter ((<>) x) |> List.append free1 |> succ
-     | Fun (_, _, params, _, body) ->
+     | Fun (_, _, params, _, body) | Closure (_, params, _, body) ->
        let* free = free body
        in free |> List.filter (fun var -> params |> List.map fst |> List.mem var |> not) |> succ
      | App (e1, _, _, _, exprs) ->
@@ -726,7 +734,7 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
        in let* free2 = free e2
        in let* free3 = free e3
        in List.concat [free1; free2; free3] |> succ
-     | Tup exprs | Array exprs -> free_many exprs
+     | Tup exprs | Array exprs | ArraySlice exprs -> free_many exprs
      | RecStruct _ | TupStruct _ -> Succ [] (* FIXME: implement *)
    and free_many (exprs : expr list) : vars tc =
      let next_free (expr : expr) (free_vars : var list) : vars tc =
@@ -849,7 +857,7 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
   let rec do_expr (ctx : struct_var list) (expr : expr) : expr tc =
     let (loc, expr) = expr
     in match expr with
-    | Prim _ | Move _ | Drop _ | Borrow _ | Fn _ | Abort _ | Ptr _ -> Succ (loc, expr)
+    | Prim _ | Move _ | Drop _ | Borrow _ | Fn _ | Abort _ | Ptr _ | Dead -> Succ (loc, expr)
     | BinOp (op, e1, e2) ->
       let* e1 = do_expr ctx e1
       in let* e2 = do_expr ctx e2
@@ -882,6 +890,12 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       in let* body = do_expr ctx body
       in let fn : preexpr = Fun (provs, tyvars, params, res, body)
       in Succ (loc, fn)
+    | Closure (frame, params, res, body) ->
+      let* params = do_params ctx params
+      in let* res = do_opt_ty ctx res
+      in let* body = do_expr ctx body
+      in let cls : preexpr = Closure (frame, params, res, body)
+      in Succ (loc, cls)
     | App (fn, envs, provs, tys, args) ->
       let* fn = do_expr ctx fn
       in let* tys = do_tys ctx tys
@@ -890,6 +904,12 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
     | Idx (p, e) ->
       let* e = do_expr ctx e
       in Succ (loc, Idx (p, e))
+    | Framed e ->
+      let* e = do_expr ctx e
+      in Succ (loc, Framed e)
+    | Shift e ->
+      let* e = do_expr ctx e
+      in Succ (loc, Framed e)
     | Branch (e1, e2, e3) ->
       let* e1 = do_expr ctx e1
       in let* e2 = do_expr ctx e2
@@ -911,6 +931,10 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       let* exprs = do_exprs ctx exprs
       in let array : preexpr = Array exprs
       in Succ (loc, array)
+    | ArraySlice exprs ->
+        let* exprs = do_exprs ctx exprs
+        in let slice : preexpr = ArraySlice exprs
+        in Succ (loc, slice)
     | RecStruct (sn, provs, tys, args) ->
       let* tys = do_tys ctx tys
       in let* args = do_args ctx args

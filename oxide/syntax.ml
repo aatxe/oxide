@@ -225,7 +225,16 @@ let binop_to_types (op : binop) : ty option * ty option * ty =
   | And | Or -> (Some bool, Some bool, bool)
   | Eq | Lt | Le | Ne | Ge | Gt -> (None, None, bool)
 
-type preexpr =
+type value =
+  | ValSlice of value list
+  | ValDead
+  | ValFramed of expr
+  | ValShift of expr
+  | ValPtr of owned * place
+  | ValClosure of stack_frame * (var * ty) list * (ty option) * expr
+and stack_frame = (var * value) list
+and stack = stack_frame list
+and preexpr =
   | Prim of prim
   | BinOp of binop * expr * expr
   | Move of place_expr
@@ -249,20 +258,15 @@ type preexpr =
   | Array of expr list
   | RecStruct of struct_var * prov list * ty list * (field * expr) list
   | TupStruct of struct_var * prov list * ty list * expr list
+  (* runtime terms *)
+  | ArraySlice of expr list
+  | Dead
+  | Framed of expr
+  | Shift of expr
   | Ptr of owned * place
+  | Closure of stack_frame * (var * ty) list * (ty option) * expr
 and expr = source_loc * preexpr
 [@@deriving show]
-
-type value =
-  | Dead
-  | Prim of prim
-  | Fun of prov list * ty_var list * (var * ty) list * expr
-  | Tup of value list
-  | Array of value list
-  | Ptr of owned * place
-[@@deriving show]
-
-type store = (var * value) list [@@deriving show]
 
 (* name * env vars * prov vars * type vars * parameters * return type * bounds * body *)
 type fn_def = fn_var * env_vars * provs * ty_var list * (var * ty) list * ty * bounds * expr
