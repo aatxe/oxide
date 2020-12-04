@@ -225,6 +225,9 @@ let binop_to_types (op : binop) : ty option * ty option * ty =
   | And | Or -> (Some bool, Some bool, bool)
   | Eq | Lt | Le | Ne | Ge | Gt -> (None, None, bool)
 
+type referent = unit
+[@@deriving show]
+
 type preexpr =
   | Prim of prim
   | BinOp of binop * expr * expr
@@ -249,17 +252,27 @@ type preexpr =
   | Array of expr list
   | RecStruct of struct_var * prov list * ty list * (field * expr) list
   | TupStruct of struct_var * prov list * ty list * expr list
-  | Ptr of owned * place
+  | Ptr of referent
 and expr = source_loc * preexpr
 [@@deriving show]
 
 type value =
   | Dead
   | Prim of prim
-  | Fun of prov list * ty_var list * (var * ty) list * expr
+  | Fun of prov list * ty_var list * (var * ty) list * (ty option) * expr
   | Tup of value list
   | Array of value list
-  | Ptr of owned * place
+  | Ptr of referent
+[@@deriving show]
+
+type value_ctx =
+  | Hole
+  | Dead
+  | Prim of prim
+  | Fun of prov list * ty_var list * (var * ty) list * (ty option) * expr
+  | Tup of value_ctx list
+  | Array of value_ctx list
+  | Ptr of referent
 [@@deriving show]
 
 type store = (var * value) list [@@deriving show]

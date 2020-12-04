@@ -694,8 +694,7 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
        in List.append free1 free2 |> succ
      | Move (_, (root, _))
      | Drop (_, (root, _))
-     | Borrow (_, _, (_, (root, _)))
-     | Ptr (_, (_, (root, _))) ->
+     | Borrow (_, _, (_, (root, _))) ->
        let* should_include = should_include root
        in if should_include then Succ [root] else Succ []
      | BorrowIdx (_, _, (_, (root, _)), e1)
@@ -728,6 +727,7 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
        in List.concat [free1; free2; free3] |> succ
      | Tup exprs | Array exprs -> free_many exprs
      | RecStruct _ | TupStruct _ -> Succ [] (* FIXME: implement *)
+     | Ptr _ -> Succ [] (* FIXME: pointers don't really occur in source expressions *)
    and free_many (exprs : expr list) : vars tc =
      let next_free (expr : expr) (free_vars : var list) : vars tc =
        let* free = free expr
