@@ -615,7 +615,7 @@ let rec free_provs_ty (ty : ty) : provs =
   | Struct (_, provs, tys, _) -> tys |> List.map free_provs_ty |> List.cons provs |> List.flatten
 and free_provs (expr : expr) : provs =
   match snd expr with
-  | Prim _ | Move _ | Drop _ | Fn _ | Abort _ | Ptr _ -> []
+  | Prim _ | Move _ | Drop _ | Fn _ | Abort _ | Ptr _ | ClosureVal _ -> []
   | BinOp (_, e1, e2) -> free_provs_many [e1; e2]
   | Borrow (prov, _, _) -> [prov]
   | BorrowIdx (prov, _, _, e) -> free_provs e |> List.cons prov
@@ -727,7 +727,7 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
        in List.concat [free1; free2; free3] |> succ
      | Tup exprs | Array exprs -> free_many exprs
      | RecStruct _ | TupStruct _ -> Succ [] (* FIXME: implement *)
-     | Ptr _ -> Succ [] (* FIXME: pointers don't really occur in source expressions *)
+     | Ptr _ | ClosureVal _ -> Succ [] (* FIXME: does not occur in source expressions *)
    and free_many (exprs : expr list) : vars tc =
      let next_free (expr : expr) (free_vars : var list) : vars tc =
        let* free = free expr
@@ -849,7 +849,8 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
   let rec do_expr (ctx : struct_var list) (expr : expr) : expr tc =
     let (loc, expr) = expr
     in match expr with
-    | Prim _ | Move _ | Drop _ | Borrow _ | Fn _ | Abort _ | Ptr _ -> Succ (loc, expr)
+    | Prim _ | Move _ | Drop _ | Borrow _ | Fn _ | Abort _
+    | Ptr _ | ClosureVal _ -> Succ (loc, expr)
     | BinOp (op, e1, e2) ->
       let* e1 = do_expr ctx e1
       in let* e2 = do_expr ctx e2

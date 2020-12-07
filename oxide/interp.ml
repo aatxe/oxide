@@ -1,3 +1,4 @@
+open Meta
 open Syntax
 open Util
 
@@ -28,6 +29,7 @@ let (let*) (rt : 'a rt) (f : 'a -> 'b rt) : 'b rt = bind rt f
 
 let extend (sigma : store) (id : var) (v : value) = failwith "unimplemented"
 let update (sigma : store) (id : var) (v : value) = failwith "unimplemented"
+let update_all (sigma : store) (ids : vars) (v : value) = failwith "unimplemented"
 
 let from_store : source_loc = ("<store>", (-1, -1), (-1, -1))
 let rec value_to_expr (value : value) : expr =
@@ -45,6 +47,8 @@ let expr_to_value (_ : expr) : value rt = failwith "unimplemented"
 let is_value (_ : expr) : bool = false
 
 let copyable (_ : value) : bool = false
+
+let free_nc_vars_rt (_ : store) (_ : expr) : vars rt = failwith "unimplemented"
 
 (* evaluate a binary operator on two primitive values *)
 let delta (op : binop) (p1 : prim) (p2 : prim) : prim rt =
@@ -136,8 +140,15 @@ let rec step (sigma : store) (e : expr) : (store * expr) rt =
     else let* (sigmaPrime, e1Prime) = step sigma e1
     in (sigmaPrime, (fst e, Seq (e1Prime, e2))) |> succ
   | Fn _ -> failwith "unimplemented"
-  | Fun (provs, tyvars, params, ret_ty, body) ->
-    StuckAtValue (Fun (provs, tyvars, params, ret_ty, body)) |> fail
+  | Fun ([], [], params, ret_ty, body) ->
+    (match free_vars body with
+    | Fail _ -> failwith "unreachable: free_vars on closure body cannot error at runtime"
+    | Succ _ (* xfs *) ->
+      let* xncs = free_nc_vars_rt sigma body
+      (* in let captured_frame = sigma |> List.flatten |> List.filter ((flip List.mem $ xfs) >> fst) *)
+      in let sigmaPrime = update_all sigma xncs Dead
+      in let ePrime : expr = (inferred, ClosureVal ((), params, ret_ty, body))
+      in (sigmaPrime, ePrime) |> succ)
   | App (_, _, _, _, _) -> failwith "unimplemented" (* TODO: add closure values *)
   | Idx (phi, (_, Prim (Num idx))) ->
     (match eval_place_expr sigma phi with
