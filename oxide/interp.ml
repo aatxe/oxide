@@ -15,6 +15,11 @@ and 'a rt =
 let succ (elem : 'a) : 'a rt = Succ elem
 let fail (err : rt_error) : 'a rt = Fail err
 
+let unwrap (rt : 'a rt) : 'a =
+  match rt with
+  | Succ x -> x
+  | Fail err ->
+
 let bind (rt : 'a rt) (f : 'a -> 'b rt) : 'b rt =
   match rt with
   | Succ x -> f x
@@ -35,14 +40,22 @@ let from_store : source_loc = ("<store>", (-1, -1), (-1, -1))
 let rec value_to_expr (value : value) : expr =
   match value with
   | Dead -> failwith "cannot convert dead to an expression"
-  | Prim prim -> (from_store, Prim prim)
-  | Fun (provs, tyvars, params, ret_ty, body) ->
-    (from_store, Fun (provs, tyvars, params, ret_ty, body))
-  | Tup values -> (from_store, Tup (values |> List.map value_to_expr))
-  | Array values -> (from_store, Array (values |> List.map value_to_expr))
-  | Ptr referent -> (from_store, Ptr referent)
+  | PrimVal prim -> (from_store, Prim prim)
+  | FnVal fn_var -> (from_store, Fn fn_var)
+  | ClosureVal (frame, params, ret_ty, body) ->
+    (from_store, Closure (frame, params, ret_ty, body))
+  | TupVal values -> (from_store, Tup (values |> List.map value_to_expr))
+  | ArrayVal values -> (from_store, Array (values |> List.map value_to_expr))
+  | PtrVal referent -> (from_store, Ptr referent)
 
 let expr_to_value (_ : expr) : value rt = failwith "unimplemented"
+
+let unsafe_expr_to_value (e : expr) : value =
+  match expr_to_value e with
+  | Succ v -> v
+  | Fail  err ->
+    let () = pp_rt_error Format.str_formatter err
+    in failwith "unsafe_expr_to_value: " ^ Format.flush_str_formatter()
 
 let is_value (_ : expr) : bool = false
 
@@ -72,7 +85,7 @@ let plug_value_ctx (ctx : value_ctx) (v : value) : value rt =
 
 let rec step (sigma : store) (e : expr) : (store * expr) rt =
   match snd e with
-  | Prim prim -> StuckAtValue (Prim prim) |> fail
+  | Prim prim -> StuckAtValue (PrimVal prim) |> fail
   | BinOp (op, (_, Prim p1), (_, Prim p2)) ->
     let* res = delta op p1 p2
     in let ePrime : expr = (inferred, Prim res)
@@ -96,7 +109,7 @@ let rec step (sigma : store) (e : expr) : (store * expr) rt =
   | BorrowIdx (_, _, phi, (_, Prim (Num n))) ->
     let* (referent, value) = eval_place_expr sigma phi
     in (match value with
-    | Array values ->
+    | ArrayVal values ->
       if n < 0 then Aborted "negative array index out of bounds" |> fail
       else if n > List.length values then Aborted "array index out of bounds" |> fail
       else let ptr : expr = (inferred, Ptr referent)
@@ -108,7 +121,7 @@ let rec step (sigma : store) (e : expr) : (store * expr) rt =
   | BorrowSlice (_, _, phi, (_, Prim (Num n1)), (_, Prim (Num n2))) ->
     let* (referent, value) = eval_place_expr sigma phi
     in (match value with
-    | Array values ->
+    | ArrayVal values ->
       if n1 < 0 then Aborted "negative slice out of bounds" |> fail
       else if n2 > List.length values then Aborted "slice out of bounds" |> fail
       else if n1 > n2 then Aborted "negative-sized slice" |> fail
@@ -139,20 +152,34 @@ let rec step (sigma : store) (e : expr) : (store * expr) rt =
     if is_value e1 then (sigma, e2) |> succ
     else let* (sigmaPrime, e1Prime) = step sigma e1
     in (sigmaPrime, (fst e, Seq (e1Prime, e2))) |> succ
-  | Fn _ -> failwith "unimplemented"
+  | Fn fn_var -> StuckAtValue (FnVal fn_var) |> fail
   | Fun ([], [], params, ret_ty, body) ->
     (match free_vars body with
     | Fail _ -> failwith "unreachable: free_vars on closure body cannot error at runtime"
-    | Succ _ (* xfs *) ->
+    | Succ xfs ->
       let* xncs = free_nc_vars_rt sigma body
-      (* in let captured_frame = sigma |> List.flatten |> List.filter ((flip List.mem $ xfs) >> fst) *)
+      in let captured_frame = sigma |> List.flatten |> List.filter ((flip List.mem $ xfs) >> fst)
       in let sigmaPrime = update_all sigma xncs Dead
-      in let ePrime : expr = (inferred, ClosureVal ((), params, ret_ty, body))
+      in let ePrime : expr = (inferred, Closure (captured_frame, params, ret_ty, body))
       in (sigmaPrime, ePrime) |> succ)
-  | App (_, _, _, _, _) -> failwith "unimplemented" (* TODO: add closure values *)
+  | App ((_, Fn _), _, _, _, _) -> failwith "unimplemented: need global ctx"
+  | App ((_, Closure (frame, params, _, body)) as cls, [], [], [], args) ->
+    let (already_values, to_be_evaluated) = partition is_value args
+    in if is_empty to_be_evaluated then
+      let vars = List.map fst params
+      in let arg_values : value list = List.map unsafe_expr_to_value args
+      in let top_frame = List.concat [List.combine vars arg_values; frame]
+      in (top_frame :: sigma, body) |> succ
+    else let* (sigmaPrime, hdPrime) = to_be_evaluated |> List.hd |> step sigma
+    in let new_args = List.concat [already_values; [hdPrime]; List.tl to_be_evaluated]
+    in let ePrime : expr = (fst e, App (cls, [], [], [], new_args))
+    in (sigmaPrime, ePrime) |> succ
+  | App (e, envs, provs, tys, args) ->
+    let* (sigmaPrime, ePrime) = step sigma e
+    in (sigmaPrime, (fst e, App (ePrime, envs, provs, tys, args))) |> succ
   | Idx (phi, (_, Prim (Num idx))) ->
     (match eval_place_expr sigma phi with
-     | Succ (_, Array values) ->
+     | Succ (_, ArrayVal values) ->
          if idx < 0 then Aborted "negative array index out of bounds" |> fail
          else if idx > List.length values then Aborted "array index out of bounds" |> fail
          else (sigma, List.nth values idx |> value_to_expr) |> succ
@@ -210,7 +237,7 @@ let rec step (sigma : store) (e : expr) : (store * expr) rt =
                                      List.tl to_be_evaluated])
     in let ePrime : expr = (fst e, TupStruct (sn, provs, tys, new_exprs))
     in (sigmaPrime, ePrime) |> succ
-  | Ptr referent -> StuckAtValue (Ptr referent) |> fail
+  | Ptr referent -> StuckAtValue (PtrVal referent) |> fail
   | _ -> failwith "unimplemented"
 
 let interp (exp : expr) : value rt =

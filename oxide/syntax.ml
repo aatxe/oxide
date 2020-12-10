@@ -253,18 +253,17 @@ type preexpr =
   | RecStruct of struct_var * prov list * ty list * (field * expr) list
   | TupStruct of struct_var * prov list * ty list * expr list
   | Ptr of referent
-  | ClosureVal of unit * (var * ty) list * (ty option) * expr (* FIXME: captured stack frame *)
+  | Closure of stack_frame * (var * ty) list * (ty option) * expr
 and expr = source_loc * preexpr
 [@@deriving show]
-
-type value =
+and value =
   | Dead
-  | Prim of prim
+  | PrimVal of prim
   | FnVal of fn_var
   | ClosureVal of stack_frame * (var * ty) list * (ty option) * expr
-  | Tup of value list
-  | Array of value list
-  | Ptr of referent
+  | TupVal of value list
+  | ArrayVal of value list
+  | PtrVal of referent
 [@@deriving show]
 and stack_frame = (var * value) list [@@deriving show]
 

@@ -556,7 +556,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
     (* T-Pointer *)
     | Ptr _ -> failwith "unimplemented: T-Pointer"
     (* T-ClosureValue *)
-    | ClosureVal _ -> failwith "unimplemented: T-ClosureValue"
+    | Closure _ -> failwith "unimplemented: T-ClosureValue"
   and tc_many (delta : tyvar_env) (gamma : var_env)
               (exprs : expr list) : (ty list * var_env) tc =
     let tc_next (e : expr) ((curr_tys, curr_gamma) : ty list * var_env) =
