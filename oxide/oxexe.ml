@@ -1,6 +1,7 @@
 open Oxide.Syntax
 open Oxide.Borrowck
 open Oxide.Typeck
+open Oxide.Interp
 
 open Borrowcktests (* examples from rust's borrowck tests *)
 open Polonius (* examples from me, Niko, or the nll tests *)

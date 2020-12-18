@@ -8,6 +8,9 @@ type rt_error =
   | CannotMovePlaceExpr of place_expr
   | NotAnArray of value
   | NoFunctionDefined of fn_var * global_env
+  | NotANumber of prim
+  | NotABoolean of prim
+  | NotUnit of prim
 and 'a rt =
   | Succ of 'a
   | Fail of rt_error
@@ -51,7 +54,7 @@ let unsafe_expr_to_value (e : expr) : value =
   | Succ v -> v
   | Fail  err ->
     let () = pp_rt_error Format.str_formatter err
-    in failwith "unsafe_expr_to_value: " ^ Format.flush_str_formatter()
+    in failwith ("unsafe_expr_to_value: " ^ Format.flush_str_formatter())
 
 let is_value (_ : expr) : bool = false
 
@@ -61,7 +64,55 @@ let free_nc_vars_rt (_ : store) (_ : expr) : vars rt = failwith "unimplemented"
 
 (* evaluate a binary operator on two primitive values *)
 let delta (op : binop) (p1 : prim) (p2 : prim) : prim rt =
-  failwith "unimplemented"
+  (* mod in ocaml allows negative results, this redefines mod to be remainder *)
+  let (mod) x y = ((x mod y) + y) mod y
+  in match (op, p1, p2) with
+  | (Add, Num n1, Num n2) -> Num (n1 + n2) |> succ
+  | (Sub, Num n1, Num n2) -> Num (n1 - n2) |> succ
+  | (Mul, Num n1, Num n2) -> Num (n1 * n2) |> succ
+  | (Div, Num n1, Num n2) -> Num (n1 / n2) |> succ
+  | (Rem, Num n1, Num n2) -> Num (n1 mod n2) |> succ
+  | (BitXor, Num n1, Num n2) -> Num (n1 lxor n2) |> succ
+  | (BitAnd, Num n1, Num n2) -> Num (n1 land n2) |> succ
+  | (BitOr, Num n1, Num n2) -> Num (n1 lor n2) |> succ
+  | (Shl, Num n1, Num n2) -> Num (n1 lsl n2) |> succ
+  | (Shr, Num n1, Num n2) -> Num (n1 lsr n2) |> succ
+  | (Add, Num _, p) | (Add, p, _) -> NotANumber p |> fail
+  | (Sub, Num _, p) | (Sub, p, _) -> NotANumber p |> fail
+  | (Mul, Num _, p) | (Mul, p, _) -> NotANumber p |> fail
+  | (Div, Num _, p) | (Div, p, _) -> NotANumber p |> fail
+  | (Rem, Num _, p) | (Rem, p, _) -> NotANumber p |> fail
+  | (BitXor, Num _, p) | (BitXor, p, _) -> NotANumber p |> fail
+  | (BitAnd, Num _, p) | (BitAnd, p, _) -> NotANumber p |> fail
+  | (BitOr, Num _, p) | (BitOr, p, _) -> NotANumber p |> fail
+  | (Shl, Num _, p) | (Shl, p, _) -> NotANumber p |> fail
+  | (Shr, Num _, p) | (Shr, p, _) -> NotANumber p |> fail
+  | (And, True, True) -> True |> succ
+  | (And, True, False) | (And, False, True) | (And, False, False) -> False |> succ
+  | (Or, True, True) | (Or, True, False) | (Or, False, True) -> True |> succ
+  | (Or, False, False) -> False |> succ
+  | (And, True, p) | (And, False, p) | (And, p, _) -> NotABoolean p |> fail
+  | (Or, True, p) | (Or, False, p) | (Or, p, _) -> NotABoolean p |> fail
+  | (Eq, Num n1, Num n2) -> if n1 == n2 then True |> succ else False |> succ
+  | (Lt, Num n1, Num n2) -> if n1 < n2 then True |> succ else False |> succ
+  | (Le, Num n1, Num n2) -> if n1 <= n2 then True |> succ else False |> succ
+  | (Ne, Num n1, Num n2) -> if n1 <> n2 then True |> succ else False |> succ
+  | (Ge, Num n1, Num n2) -> if n1 >= n2 then True |> succ else False |> succ
+  | (Gt, Num n1, Num n2) -> if n1 > n2 then True |> succ else False |> succ
+  | (Lt, Num _, p) | (Lt, p, _) -> NotANumber p |> fail
+  | (Le, Num _, p) | (Le, p, _) -> NotANumber p |> fail
+  | (Ge, Num _, p) | (Ge, p, _) -> NotANumber p |> fail
+  | (Gt, Num _, p) | (Gt, p, _) -> NotANumber p |> fail
+  | (Eq, True, True) | (Eq, False, False) -> True |> succ
+  | (Eq, True, False) | (Eq, False, True) -> False |> succ
+  | (Ne, True, True) | (Ne, False, False) -> False |> succ
+  | (Ne, True, False) | (Ne, False, True) -> True |> succ
+  | (Eq, Unit, Unit) -> True |> succ
+  | (Ne, Unit, Unit) -> False |> succ
+  | (Eq, Num _, p) | (Ne, Num _, p) -> NotANumber p |> fail
+  | (Eq, True, p) | (Eq, False, p)
+  | (Ne, True, p) | (Ne, False, p) -> NotABoolean p |> fail
+  | (Eq, Unit, p) | (Ne, Unit, p) -> NotUnit p |> fail
 
 (* replace pi's value in sigma with dead *)
 let moved (pi : place) (sigma : sigma) : sigma rt =
@@ -97,6 +148,11 @@ let step (globals : global_env) (sigma : store) (e : expr) : (store * expr) rt =
       let* (_, value) = eval_place_expr sigma phi
       in if copyable value then (sigma, value_to_expr value) |> succ
       else (match place_expr_to_place phi with
+      | Some pi -> (moved pi sigma, value_to_expr value) |> succ
+      | None -> CannotMovePlaceExpr phi |> fail)
+    | Drop phi ->
+      let* (_, value) = eval_place_expr sigma phi
+      in (match place_expr_to_place phi with
       | Some pi -> (moved pi sigma, value_to_expr value) |> succ
       | None -> CannotMovePlaceExpr phi |> fail)
     | Borrow (_, _, phi) ->
@@ -159,6 +215,7 @@ let step (globals : global_env) (sigma : store) (e : expr) : (store * expr) rt =
         in let sigmaPrime = update_all sigma xncs Dead
         in let ePrime : expr = (inferred, Closure (captured_frame, params, ret_ty, body))
         in (sigmaPrime, ePrime) |> succ)
+    | Fun (_, _, _, _, _) -> failwith "unreachable: closures cannot be polymorphic"
     | App ((_, Fn fn_var) as fn, _, _, _, args) ->
       let (already_values, to_be_evaluated) = partition is_value args
       in if is_empty to_be_evaluated then
