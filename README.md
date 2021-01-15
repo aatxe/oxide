@@ -19,7 +19,7 @@ similarities to our approach, and may aid in its understanding.
   current _language level_ (relative) without the use of Rust's `unsafe` block.
 - _Lifetime_ — the span of time from when a value is allocated to when it is deallocated.
 - _Region_ — the space on the stack where a value is allocated for its _lifetime_ (see also:
-  [`why-regions.md`](notes/why-regions.md)).
+  [`why-regions.md`](history/notes/why-regions.md)).
 
 ## Navigating this repository
 
