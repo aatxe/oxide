@@ -402,15 +402,13 @@ and outlives_many (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env
 (* find the type of the expr path based on the original type in a context *)
 (* this will error if the context doesn't allow the operation,
    e.g. dereferencing a shared reference in a unique context *)
-and compute_with_passed (ctx : owned) (delta : tyvar_env) (gamma : var_env)
+and compute_with_passed (ctx : owned) (_ : tyvar_env) (gamma : var_env)
                         (phi : place_expr) : (provs * ty) tc =
   let rec compute (passed : provs) (path : expr_path) (ty : ty)  : (provs * ty) tc =
     match (snd ty, path) with
     | (_, []) -> Succ (passed, ty)
     | (Ref (prov, omega, inner_ty), Deref :: path) ->
-      if is_at_least ctx omega then
-        let* _ = foldr (fun pv gamma -> outlives Combine delta gamma pv prov) passed gamma
-        in compute (List.cons prov passed) path inner_ty
+      if is_at_least ctx omega then compute (List.cons prov passed) path inner_ty
       else PermissionErr (ty, Deref :: path, ctx) |> fail
     | (Rec pairs, (Field f) :: path) -> List.assoc f pairs |> compute passed path
     | (Tup tys, (Index n) :: path) -> List.nth tys n |> compute passed path
