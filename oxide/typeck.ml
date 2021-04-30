@@ -359,10 +359,10 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       in Succ (ty2, gamma2Prime)
     (* T-Assign and T-AssignDeref *)
     | Assign (phi, e) ->
-      let gamma = kill_loans_for phi gamma
-      in let* _ = ownership_safe sigma delta gamma Unique phi
-      in let* ty_old = compute_ty_in Unique delta gamma phi
-      in let* (ty_update, gamma1) = tc delta gamma e
+      let* (ty_update, gamma1) = tc delta gamma e
+      in let* ty_old = compute_ty_in Unique delta gamma1 phi
+      in let gamma1 = kill_loans_for phi gamma1
+      in let* _ = ownership_safe sigma delta gamma1 Unique phi
       in let* gammaPrime = subtype Override delta gamma1 ty_update ty_old
       in (match place_expr_to_place phi with
        (* T-Assign *)
