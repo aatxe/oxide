@@ -449,9 +449,7 @@ let subtype (mode : subtype_modality) (delta : tyvar_env) (ell : var_env)
     | (Ref (v1, Unique, t1), Ref (v2, _, t2)) ->
       let* ellPrime = outlives mode delta ell v2 v1
       in let* ell1 = sub ellPrime t1 t2
-      in let* ell2 = sub ellPrime t2 t1
-      in if ell1 = ell2 then Succ ell2
-      else Fail (UnificationFailed (t1, t2))
+      in Succ ell1
     (* UT-Tuple *)
     | (Tup tys1, Tup tys2) -> sub_many ell tys1 tys2
     (* UT-Record *)
