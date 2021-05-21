@@ -11,6 +11,7 @@ type rt_error =
   | NotANumber of prim
   | NotABoolean of prim
   | NotUnit of prim
+  | CannotProj of expr_path_entry * value
 and 'a rt =
   | Succ of 'a
   | Fail of rt_error
@@ -31,6 +32,7 @@ let is_fail (elem : 'a rt) : bool = match elem with Fail _ -> true | Succ _ -> f
 
 let (let*) (rt : 'a rt) (f : 'a -> 'b rt) : 'b rt = bind rt f
 
+let lookup (sigma : store) (id : var ) : value rt = failwith "unimplemented"
 let extend (sigma : store) (id : var) (v : value) = failwith "unimplemented"
 let update (sigma : store) (id : var) (v : value) = failwith "unimplemented"
 let update_all (sigma : store) (ids : vars) (v : value) = failwith "unimplemented"
@@ -114,21 +116,51 @@ let delta (op : binop) (p1 : prim) (p2 : prim) : prim rt =
   | (Ne, True, p) | (Ne, False, p) -> NotABoolean p |> fail
   | (Eq, Unit, p) | (Ne, Unit, p) -> NotUnit p |> fail
 
-(* replace pi's value in sigma with dead *)
-let moved (pi : place) (sigma : sigma) : sigma rt =
+let eval_referent (sigma : store) (path : expr_path) (rf : referent) : (referent * value) rt =
   failwith "unimplemented"
 
 (* evaluates a place expression to a referent and its associated value in sigma *)
 let eval_place_expr (sigma : store) (phi : place_expr) : (referent * value) rt =
-  failwith "unimplemented"
+  let (root, path) = snd phi
+  in eval_referent sigma path $ RefId root
+
+let rec value_to_value_ctx (v : value) : value_ctx =
+  match v with
+  | Dead -> Dead
+  | PrimVal prim -> PrimVal prim
+  | FnVal fn -> FnVal fn
+  | ClosureVal (frame, params, ret_ty, body) -> ClosureVal (frame, params, ret_ty, body)
+  | TupVal vals -> TupVal (List.map value_to_value_ctx vals)
+  | ArrayVal vals -> ArrayVal (List.map value_to_value_ctx vals)
+  | PtrVal referent -> PtrVal referent
 
 (* computes the value context for the value bound to phi in sigma *)
 let value_ctx_in (sigma : store) (phi : place_expr) : value_ctx rt =
-  failwith "unimplemented"
+  let (root, path) = snd phi
+  in let rec work (path : expr_path) (v : value) : value_ctx rt =
+    match (path, v) with
+    | ([], _) -> Hole 0 |> succ
+    | (Index n :: rest_of_path, TupVal vs) ->
+      (match List.nth_opt vs n with
+       | None -> failwith "unimplemented"
+       | Some v ->
+         let* ctx = work rest_of_path v
+         in let (pre_vs, post_vs) = vs |> List.map value_to_value_ctx |> split_at n
+         in let ctx_list = List.concat [pre_vs; [ctx]; List.tl post_vs]
+         in TupVal ctx_list |> succ)
+    | (Index _ as idx :: _, v) -> CannotProj (idx, v) |> fail
+    | (Field _ :: _, _) -> failwith "unimplemented: structs are not currently values"
+  in lookup sigma root >>= work path
 
 (* plugs the holes in the value context using the given value *)
 let plug_value_ctx (ctx : value_ctx) (v : value) : value rt =
   failwith "unimplemented"
+
+(* replace pi's value in sigma with dead *)
+let moved (pi : place) (sigma : store) : store rt =
+  let* ctx = pi |> place_to_place_expr |> value_ctx_in sigma
+  in let* new_val = plug_value_ctx ctx Dead
+  in update sigma (root_of pi) new_val |> succ
 
 let step (globals : global_env) (sigma : store) (e : expr) : (store * expr) rt =
   let rec step (sigma : store) (e : expr) : (store * expr) rt =
@@ -148,12 +180,16 @@ let step (globals : global_env) (sigma : store) (e : expr) : (store * expr) rt =
       let* (_, value) = eval_place_expr sigma phi
       in if copyable value then (sigma, value_to_expr value) |> succ
       else (match place_expr_to_place phi with
-      | Some pi -> (moved pi sigma, value_to_expr value) |> succ
+      | Some pi ->
+        let* sigmaPrime = moved pi sigma
+        in (sigmaPrime, value_to_expr value) |> succ
       | None -> CannotMovePlaceExpr phi |> fail)
     | Drop phi ->
       let* (_, value) = eval_place_expr sigma phi
       in (match place_expr_to_place phi with
-      | Some pi -> (moved pi sigma, value_to_expr value) |> succ
+      | Some pi ->
+        let* sigmaPrime = moved pi sigma
+        in (sigmaPrime, value_to_expr value) |> succ
       | None -> CannotMovePlaceExpr phi |> fail)
     | Borrow (_, _, phi) ->
       let* (referent, _) = eval_place_expr sigma phi

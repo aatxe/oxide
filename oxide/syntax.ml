@@ -225,7 +225,12 @@ let binop_to_types (op : binop) : ty option * ty option * ty =
   | And | Or -> (Some bool, Some bool, bool)
   | Eq | Lt | Le | Ne | Ge | Gt -> (None, None, bool)
 
-type referent = unit
+type referent =
+  | RefId of var (* variable *)
+  | RefProjIdx of referent * int (* project index from tuple *)
+  | RefProjField of referent * field (* project field from struct *)
+  | RefIdx of referent * int (* index of n *)
+  | RefSlice of referent * int * int (* slice from n1 to n2 *)
 [@@deriving show]
 
 type preexpr =
@@ -268,15 +273,25 @@ and value =
 and stack_frame = (var * value) list [@@deriving show]
 
 type value_ctx =
-  | Hole
+  | Hole of int
   | Dead
-  | Prim of prim
+  | PrimVal of prim
   | FnVal of fn_var
   | ClosureVal of stack_frame * (var * ty) list * (ty option) * expr
-  | Tup of value_ctx list
-  | Array of value_ctx list
-  | Ptr of referent
+  | TupVal of value_ctx list
+  | ArrayVal of value_ctx list
+  | PtrVal of referent
 [@@deriving show]
+
+let rec value_to_value_ctx (v : value) : value_ctx =
+  match v with
+  | Dead -> Dead
+  | PrimVal prim -> PrimVal prim
+  | FnVal fn -> FnVal fn
+  | ClosureVal (frame, params, ret_ty, body) -> ClosureVal (frame, params, ret_ty, body)
+  | TupVal vals -> TupVal (List.map value_to_value_ctx vals)
+  | ArrayVal vals -> ArrayVal (List.map value_to_value_ctx vals)
+  | PtrVal referent -> PtrVal referent
 
 type store = stack_frame list [@@deriving show]
 

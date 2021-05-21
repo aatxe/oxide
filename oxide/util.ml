@@ -44,6 +44,22 @@ let rec drop_while (pred : 'a -> bool) (lst : 'a list) : 'a list =
   | hd :: tl when pred hd -> drop_while pred tl
   | lst -> lst
 
+(* splits the list at the given index, with the first element of the second portion being
+   the element at the index n *)
+let split_at (n : int) (lst : 'a list) : ('a list * 'a list) =
+   let rec work (i : int) (acc : 'a list) = function
+     | x :: l when i < n -> work (i + 1) (x :: acc) l
+     | rest -> (List.rev acc, rest)
+   in work 0 [] lst
+
+(* splits the list at the given index, with the first element of the second portion being
+   the element at the index f *)
+let split_at_assoc (f : 'a) (lst : ('a * 'b) list) : (('a * 'b) list * ('a * 'b) list) =
+   let rec work (acc : ('a * 'b) list) = function
+     | (idx, x) :: l when f == idx -> work ((idx, x) :: acc) l
+     | rest -> (List.rev acc, rest)
+   in work [] lst
+
 let flat_map (oper : 'a -> 'b list) (lst : 'a list) : 'b list =
   List.map oper lst |> List.flatten
 
