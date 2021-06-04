@@ -12,7 +12,7 @@ type prov_var = string [@@deriving show]
 type struct_var = string [@@deriving show]
 type field = string [@@deriving show]
 
-type subtype_modality = Combine | Override [@@deriving show]
+type subtype_modality = Combine | Noop [@@deriving show]
 type owned = Shared | Unique [@@deriving show]
 
 type env_var = owned * string [@@deriving show]

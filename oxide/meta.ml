@@ -370,10 +370,8 @@ let rec outlives (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env)
       let loans = list_union rep1 rep2
       in gamma |> loan_env_prov_update prov1 loans
     else CannotCombineProvsInDifferentFrames (prov1, prov2) |> fail
-    (* OL-OverrideLocalProvenances *)
-  | (Override, Some _, Some loans) ->
-    (* subst_prov_in_env prov2 prov1 gamma *)
-    gamma |> loan_env_prov_update prov1 loans
+    (* OL-LocalProvenances *)
+  | (Noop, Some _, Some _) -> gamma |> succ
     (* OL-AbsProvLocalProv *)
   | (_, None, Some loans) ->
     (* true if all the loans are reborrow loans from things that outlive the abstract provenance *)

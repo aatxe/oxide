@@ -365,13 +365,13 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
        (* T-Assign *)
        | Some pi ->
          let gamma1 = gamma1 |> kill_loans_for phi
-         in let* gammaPrime = subtype Override delta gamma1 ty_update ty_old
+         in let* gammaPrime = subtype Noop delta gamma1 ty_update ty_old
          in let* _ = ownership_safe sigma delta gammaPrime Unique phi
          in let* gammaPrime = gammaPrime |> var_env_type_update pi ty_update
          in Succ ((inferred, BaseTy Unit), gammaPrime)
        (* T-AssignDeref *)
        | None ->
-         let* gammaPrime = subtype Override delta gamma1 ty_update ty_old
+         let* gammaPrime = subtype Combine delta gamma1 ty_update ty_old
          in let* _ = ownership_safe sigma delta gammaPrime Unique phi
          in Succ ((inferred, BaseTy Unit), gammaPrime))
     (* T-Abort *)
