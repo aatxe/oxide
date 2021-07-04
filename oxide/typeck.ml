@@ -245,6 +245,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
     (* T-Borrow *)
     | Borrow (prov, omega, pi) ->
       let* loans = ownership_safe sigma delta gamma omega pi
+      in let* () = prov_not_in_closure gamma prov
       in let* ty = compute_ty_in omega delta gamma pi
       in if tyvar_env_prov_mem delta prov then CannotBorrowIntoAbstractProvenance prov |> fail
       else if prov |> loan_env_lookup gamma |> non_empty then
@@ -256,6 +257,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
       (match tc delta gamma e with
        | Succ ((_, BaseTy U32), gamma1) ->
          let* loans = ownership_safe sigma delta gamma1 omega pi
+         in let* () = prov_not_in_closure gamma1 prov
          in let* ty = compute_ty_in omega delta gamma1 pi
          in if tyvar_env_prov_mem delta prov then CannotBorrowIntoAbstractProvenance prov |> fail
          else if prov |> loan_env_lookup gamma |> non_empty then
@@ -271,6 +273,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
          (match tc delta gamma1 e2 with
           | Succ ((_, BaseTy U32), gamma2) ->
             let* loans = ownership_safe sigma delta gamma2 omega pi
+            in let* () = prov_not_in_closure gamma2 prov
             in let* ty = compute_ty_in omega delta gamma2 pi
             in if tyvar_env_prov_mem delta prov then CannotBorrowIntoAbstractProvenance prov |> fail
             else if prov |> loan_env_lookup gamma |> non_empty then

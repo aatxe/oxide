@@ -411,6 +411,28 @@ and free_provs (expr : expr) : provs =
   | TupStruct (_, provs, _, es) -> free_provs_many es |> List.append provs
 and free_provs_many (exprs : expr list) : provs = exprs |> List.map free_provs |> List.flatten
 
+let prov_not_in_closure (gamma : var_env) (prov : prov) : unit tc =
+  let tys = gamma |> stack_to_bindings |> List.map snd
+  in let rec check (ty : ty) : unit tc =
+    match snd ty with
+    | Fun (_, bound_provs, _, params, _, ret_ty, _) ->
+      let fprovs = [params |> List.map free_provs_ty |> List.flatten;
+                    free_provs_ty ret_ty] |> List.concat
+      in let prov_contains (pvs : provs) (pv : prov) =
+          pvs |> List.map snd |> List.mem (snd pv)
+      in let provs_in_func = List.filter (not >> prov_contains bound_provs) fprovs
+      in if prov_contains provs_in_func prov then
+        CannotBorrowIntoClosureProvenance prov |> fail
+      else Succ ()
+    | Any | Infer | BaseTy _ | TyVar _ -> Succ ()
+    | Ref (_, _, ty) | Array (ty, _) | Slice ty | Uninit ty
+    | Struct (_, _, _, Some ty) -> check ty
+    | Struct (name, _, _, None) ->
+      failwith $ "check_closure_restriction encountered untagged struct: " ^ name
+    | Tup tys -> tys |> for_each_rev check
+    | Rec fields -> fields |> List.map snd |> for_each_rev check
+  in for_each tys check
+
 let check_closure_restriction (gamma : var_env) (provs : provs) : unit tc =
   let tys = gamma |> stack_to_bindings |> List.map snd
   in let rec check (ty : ty) : unit tc =

@@ -477,6 +477,7 @@ type tc_error =
   | CannotCombineProvsInDifferentFrames of prov * prov
   | CannotBorrowIntoAbstractProvenance of prov
   | CannotBorrowIntoInUseProvenance of prov
+  | CannotBorrowIntoClosureProvenance of prov
   | InvalidArrayLen of ty * int
   | InvalidOperationOnType of path * ty
   | InvalidOperationOnTypeEP of expr_path * ty
