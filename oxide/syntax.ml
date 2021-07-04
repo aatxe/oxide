@@ -12,7 +12,7 @@ type prov_var = string [@@deriving show]
 type struct_var = string [@@deriving show]
 type field = string [@@deriving show]
 
-type subtype_modality = Combine | Noop [@@deriving show]
+type subtype_modality = Combine | CombineUnrestricted | Noop [@@deriving show]
 type owned = Shared | Unique [@@deriving show]
 
 type env_var = owned * string [@@deriving show]
@@ -488,6 +488,7 @@ type tc_error =
   | PlaceExprNotAPlace of place_expr
   | AbsProvsNotSubtype of prov * prov
   | CannotPromoteLocalProvToAbstract of prov * prov (* cannot promote local prov to abstract prov *)
+  | ProvsViolatedClosureRestriction of provs
   | EnvArityMismatch of string * env list * env_vars
   | ProvArityMismatch of string * provs * provs
   | TysArityMismatch of string * ty list * ty list

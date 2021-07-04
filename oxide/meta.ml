@@ -359,12 +359,95 @@ let frame_of (prov : prov) (gamma : var_env) : static_frame tc =
   let* frames = drop_frames_until prov gamma
   in List.hd frames |> succ
 
+let rec free_provs_ty (ty : ty) : provs =
+  match snd ty with
+  | Any | Infer | BaseTy _ | TyVar _ -> []
+  | Uninit ty -> free_provs_ty ty
+  | Ref (prov, _, ty) -> free_provs_ty ty |> List.cons prov
+  | Fun (_, provs, _, tys, env, ty, bounds) ->
+    [tys |> List.map free_provs_ty |> List.flatten;
+     free_provs_ty ty;
+     bounds |> List.map fst;
+     bounds |> List.map snd;
+     env |> env_to_tys |> List.map free_provs_ty |> List.flatten] |>
+    List.concat |> List.filter (fun pv -> provs |> List.map snd |> List.mem (snd pv) |> not)
+  | Array (ty, _) | Slice ty -> free_provs_ty ty
+  | Rec tys -> tys |> List.map (free_provs_ty >> snd) |> List.flatten
+  | Tup tys -> tys |> List.map free_provs_ty |> List.flatten
+  | Struct (_, provs, tys, _) -> tys |> List.map free_provs_ty |> List.cons provs |> List.flatten
+and free_provs (expr : expr) : provs =
+  match snd expr with
+  | Prim _ | Move _ | Drop _ | Fn _ | Abort _ | Ptr _ | Closure _ -> []
+  | BinOp (_, e1, e2) -> free_provs_many [e1; e2]
+  | Borrow (prov, _, _) -> [prov]
+  | BorrowIdx (prov, _, _, e) -> free_provs e |> List.cons prov
+  | BorrowSlice (prov, _, _, e1, e2) ->
+    [e1; e2] |> free_provs_many |> List.cons prov
+  | LetProv (provs, e) ->
+    free_provs e |> List.filter (fun prov -> provs |> contains prov |> not)
+  | Let (_, ty, e1, e2) ->
+    [e1; e2] |> List.map free_provs |> List.cons (free_provs_ty ty) |> List.flatten
+  | Assign (_, e) -> free_provs e
+  | Seq (e1, e2) -> free_provs_many [e1; e2]
+  | Fun (provs, _, params, ret_ty, _) ->
+    let free_in_params = params |> List.map (free_provs_ty >> snd) |> List.flatten
+    in let free_in_ret =
+      match ret_ty with
+      | Some ty -> free_provs_ty ty
+      | None -> []
+    in List.filter (fun prov -> provs |> contains prov |> not)
+                   (List.concat [free_in_params; free_in_ret])
+  | App (e1, _, provs, tys, es) ->
+    List.concat [free_provs e1; provs;
+                 List.map free_provs_ty tys |> List.flatten;
+                 free_provs_many es]
+  | Idx (_, e) -> free_provs e
+  | Branch (e1, e2, e3) ->
+    List.concat [free_provs e1; free_provs e2; free_provs e3]
+  | While (e1, e2) | For (_, e1, e2) -> free_provs_many [e1; e2]
+  | Tup es | Array es -> free_provs_many es
+  | RecStruct (_, provs, _, es) ->
+    es |> List.map (free_provs >> snd) |> List.cons provs |> List.flatten
+  | TupStruct (_, provs, _, es) -> free_provs_many es |> List.append provs
+and free_provs_many (exprs : expr list) : provs = exprs |> List.map free_provs |> List.flatten
+
+let check_closure_restriction (gamma : var_env) (provs : provs) : unit tc =
+  let tys = gamma |> stack_to_bindings |> List.map snd
+  in let rec check (ty : ty) : unit tc =
+    match snd ty with
+    | Fun (_, bound_provs, _, params, _, ret_ty, _) ->
+      let fprovs = [params |> List.map free_provs_ty |> List.flatten;
+                    free_provs_ty ret_ty] |> List.concat
+      in let prov_contains (pvs : provs) (pv : prov) =
+          pvs |> List.map snd |> List.mem (snd pv)
+      in let provs_in_func = List.filter (not >> prov_contains bound_provs) fprovs
+      in let all_in_func = List.for_all (prov_contains provs_in_func) provs
+      in let none_in_func = List.for_all (not >> prov_contains provs_in_func) provs
+      in if all_in_func then Succ ()
+      else if none_in_func then Succ ()
+      else ProvsViolatedClosureRestriction provs |> fail
+    | Any | Infer | BaseTy _ | TyVar _ -> Succ ()
+    | Ref (_, _, ty) | Array (ty, _) | Slice ty | Uninit ty
+    | Struct (_, _, _, Some ty) -> check ty
+    | Struct (name, _, _, None) ->
+      failwith $ "check_closure_restriction encountered untagged struct: " ^ name
+    | Tup tys -> tys |> for_each_rev check
+    | Rec fields -> fields |> List.map snd |> for_each_rev check
+  in for_each tys check
+
 (* checks that prov2 outlives prov1, erroring otherwise *)
 let rec outlives (mode : subtype_modality) (delta : tyvar_env) (gamma : var_env)
                  (prov1: prov) (prov2 : prov) : var_env tc =
   match (mode, loan_env_lookup_opt gamma prov1, loan_env_lookup_opt gamma prov2) with
-    (* OL-CombineLocalProvenances *)
   | (Combine, Some rep1, Some rep2) ->
+    let* prov1_frame = frame_of prov1 gamma
+    in if provs_in prov1_frame |> contains prov2 then
+      let* () = check_closure_restriction gamma [prov1; prov2]
+      in let loans = list_union rep1 rep2
+      in gamma |> loan_env_prov_update prov1 loans
+    else CannotCombineProvsInDifferentFrames (prov1, prov2) |> fail
+    (* OL-CombineLocalProvenances unrestricted *)
+  | (CombineUnrestricted, Some rep1, Some rep2) ->
     let* prov1_frame = frame_of prov1 gamma
     in if provs_in prov1_frame |> contains prov2 then
       let loans = list_union rep1 rep2
@@ -590,58 +673,6 @@ let valid_copy_impl (sigma : global_env) (def : struct_def) : unit tc =
      | Succ (Some ty) -> InvalidCopyImpl (name, ty) |> fail
      | Fail err -> Fail err)
   | Rec (false, _, _, _, _) | Tup (false, _, _, _, _) -> Succ ()
-
-let rec free_provs_ty (ty : ty) : provs =
-  match snd ty with
-  | Any | Infer | BaseTy _ | TyVar _ -> []
-  | Uninit ty -> free_provs_ty ty
-  | Ref (prov, _, ty) -> free_provs_ty ty |> List.cons prov
-  | Fun (_, provs, _, tys, env, ty, bounds) ->
-    [tys |> List.map free_provs_ty |> List.flatten;
-     free_provs_ty ty;
-     bounds |> List.map fst;
-     bounds |> List.map snd;
-     env |> env_to_tys |> List.map free_provs_ty |> List.flatten] |>
-    List.concat |> List.filter (fun pv -> provs |> List.map snd |> List.mem (snd pv) |> not)
-  | Array (ty, _) | Slice ty -> free_provs_ty ty
-  | Rec tys -> tys |> List.map (free_provs_ty >> snd) |> List.flatten
-  | Tup tys -> tys |> List.map free_provs_ty |> List.flatten
-  | Struct (_, provs, tys, _) -> tys |> List.map free_provs_ty |> List.cons provs |> List.flatten
-and free_provs (expr : expr) : provs =
-  match snd expr with
-  | Prim _ | Move _ | Drop _ | Fn _ | Abort _ | Ptr _ | Closure _ -> []
-  | BinOp (_, e1, e2) -> free_provs_many [e1; e2]
-  | Borrow (prov, _, _) -> [prov]
-  | BorrowIdx (prov, _, _, e) -> free_provs e |> List.cons prov
-  | BorrowSlice (prov, _, _, e1, e2) ->
-    [e1; e2] |> free_provs_many |> List.cons prov
-  | LetProv (provs, e) ->
-    free_provs e |> List.filter (fun prov -> provs |> contains prov |> not)
-  | Let (_, ty, e1, e2) ->
-    [e1; e2] |> List.map free_provs |> List.cons (free_provs_ty ty) |> List.flatten
-  | Assign (_, e) -> free_provs e
-  | Seq (e1, e2) -> free_provs_many [e1; e2]
-  | Fun (provs, _, params, ret_ty, _) ->
-    let free_in_params = params |> List.map (free_provs_ty >> snd) |> List.flatten
-    in let free_in_ret =
-      match ret_ty with
-      | Some ty -> free_provs_ty ty
-      | None -> []
-    in List.filter (fun prov -> provs |> contains prov |> not)
-                   (List.concat [free_in_params; free_in_ret])
-  | App (e1, _, provs, tys, es) ->
-    List.concat [free_provs e1; provs;
-                 List.map free_provs_ty tys |> List.flatten;
-                 free_provs_many es]
-  | Idx (_, e) -> free_provs e
-  | Branch (e1, e2, e3) ->
-    List.concat [free_provs e1; free_provs e2; free_provs e3]
-  | While (e1, e2) | For (_, e1, e2) -> free_provs_many [e1; e2]
-  | Tup es | Array es -> free_provs_many es
-  | RecStruct (_, provs, _, es) ->
-    es |> List.map (free_provs >> snd) |> List.cons provs |> List.flatten
-  | TupStruct (_, provs, _, es) -> free_provs_many es |> List.append provs
-and free_provs_many (exprs : expr list) : provs = exprs |> List.map free_provs |> List.flatten
 
 let rec used_provs (gamma : var_env) : provs =
   gamma |> stack_to_bindings |> flat_map (provs_used_in_ty >> snd)

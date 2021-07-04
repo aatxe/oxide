@@ -470,7 +470,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
             let* gammaFinal = subtype Combine deltaPrime gamma ret_ty ann_ret_ty
             in Succ (fn_ty ann_ret_ty, gammaFinal)
           | None -> Succ (fn_ty ret_ty, gamma))
-    (* T-App *)
+    (* T-AppFunction and T-AppClosure combined *)
     | App (fn, envs, new_provs, new_tys, args) ->
       (match tc delta gamma fn with
        | Succ ((_, Fun (evs, provs, tyvars, params, _, ret_ty, bounds)), gammaF) ->
@@ -487,7 +487,7 @@ let type_check (sigma : global_env) (delta : tyvar_env) (gamma : var_env)
          in let instantiated_bounds = subst_many_prov_in_bounds prov_sub bounds
          in let* gammaPrime = check_bounds delta gammaN instantiated_bounds
          in let types_mismatch ((expected, found) : ty * ty) : bool tc =
-           match subtype Combine delta gammaPrime found expected with
+           match subtype CombineUnrestricted delta gammaPrime found expected with
            | Succ _ -> Succ false
            | Fail (UnificationFailed _) -> Succ true
            | Fail err -> Fail err
