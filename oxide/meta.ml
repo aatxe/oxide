@@ -409,6 +409,7 @@ and free_provs (expr : expr) : provs =
   | RecStruct (_, provs, _, es) ->
     es |> List.map (free_provs >> snd) |> List.cons provs |> List.flatten
   | TupStruct (_, provs, _, es) -> free_provs_many es |> List.append provs
+  | Shift e | Framed e -> free_provs e
 and free_provs_many (exprs : expr list) : provs = exprs |> List.map free_provs |> List.flatten
 
 let prov_not_in_closure (gamma : var_env) (prov : prov) : unit tc =
@@ -775,6 +776,7 @@ let free_vars_helper (expr : expr) (should_include : var -> bool tc) : vars tc =
      | Tup exprs | Array exprs -> free_many exprs
      | RecStruct _ | TupStruct _ -> Succ [] (* FIXME: implement *)
      | Ptr _ | Closure _ -> Succ [] (* FIXME: does not occur in source expressions *)
+     | Shift e | Framed e -> free e
    and free_many (exprs : expr list) : vars tc =
      let next_free (expr : expr) (free_vars : var list) : vars tc =
        let* free = free expr
@@ -967,6 +969,12 @@ let struct_to_tagged (sigma : global_env) : global_env tc =
       let* tys = do_tys ctx tys
       in let* exprs = do_exprs ctx exprs
       in Succ (loc, TupStruct (sn, provs, tys, exprs))
+    | Shift e ->
+      let* e = do_expr ctx e
+      in Succ (loc, Shift e)
+    | Framed e ->
+      let* e = do_expr ctx e
+      in Succ (loc, Framed e)
   and do_ty (ctx : struct_var list) (ty : ty) : ty tc =
     let (loc, ty) = ty
     in match ty with

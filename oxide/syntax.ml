@@ -259,6 +259,8 @@ type preexpr =
   | TupStruct of struct_var * prov list * ty list * expr list
   | Ptr of referent
   | Closure of stack_frame * (var * ty) list * (ty option) * expr
+  | Shift of expr
+  | Framed of expr
 and expr = source_loc * preexpr
 [@@deriving show]
 and value =
@@ -268,30 +270,32 @@ and value =
   | ClosureVal of stack_frame * (var * ty) list * (ty option) * expr
   | TupVal of value list
   | ArrayVal of value list
+  | SliceVal of value list
   | PtrVal of referent
 [@@deriving show]
 and stack_frame = (var * value) list [@@deriving show]
 
 type value_ctx =
   | Hole of int
-  | Dead
-  | PrimVal of prim
-  | FnVal of fn_var
-  | ClosureVal of stack_frame * (var * ty) list * (ty option) * expr
-  | TupVal of value_ctx list
-  | ArrayVal of value_ctx list
-  | PtrVal of referent
+  | DeadCtx
+  | PrimValCtx of prim
+  | FnValCtx of fn_var
+  | ClosureValCtx of stack_frame * (var * ty) list * (ty option) * expr
+  | TupValCtx of value_ctx list
+  | ArrayValCtx of value_ctx list
+  | PtrValCtx of referent
 [@@deriving show]
 
 let rec value_to_value_ctx (v : value) : value_ctx =
   match v with
-  | Dead -> Dead
-  | PrimVal prim -> PrimVal prim
-  | FnVal fn -> FnVal fn
-  | ClosureVal (frame, params, ret_ty, body) -> ClosureVal (frame, params, ret_ty, body)
-  | TupVal vals -> TupVal (List.map value_to_value_ctx vals)
-  | ArrayVal vals -> ArrayVal (List.map value_to_value_ctx vals)
-  | PtrVal referent -> PtrVal referent
+  | Dead -> DeadCtx
+  | PrimVal prim -> PrimValCtx prim
+  | FnVal fn -> FnValCtx fn
+  | ClosureVal (frame, params, ret_ty, body) -> ClosureValCtx (frame, params, ret_ty, body)
+  | TupVal vals -> TupValCtx (List.map value_to_value_ctx vals)
+  | ArrayVal vals -> ArrayValCtx (List.map value_to_value_ctx vals)
+  | SliceVal vals -> ArrayValCtx (List.map value_to_value_ctx vals)
+  | PtrVal referent -> PtrValCtx referent
 
 type store = stack_frame list [@@deriving show]
 

@@ -12,6 +12,8 @@ type rt_error =
   | NotABoolean of prim
   | NotUnit of prim
   | CannotProj of expr_path_entry * value
+  | IndexOutOfBounds of int * value
+  | CannotDeref of value
 and 'a rt =
   | Succ of 'a
   | Fail of rt_error
@@ -47,6 +49,7 @@ let rec value_to_expr (value : value) : expr =
     (from_store, Closure (frame, params, ret_ty, body))
   | TupVal values -> (from_store, Tup (values |> List.map value_to_expr))
   | ArrayVal values -> (from_store, Array (values |> List.map value_to_expr))
+  | SliceVal values -> (from_store, Array (values |> List.map value_to_expr))
   | PtrVal referent -> (from_store, Ptr referent)
 
 let expr_to_value (_ : expr) : value rt = failwith "unimplemented"
@@ -124,37 +127,74 @@ let eval_place_expr (sigma : store) (phi : place_expr) : (referent * value) rt =
   let (root, path) = snd phi
   in eval_referent sigma path $ RefId root
 
-let rec value_to_value_ctx (v : value) : value_ctx =
-  match v with
-  | Dead -> Dead
-  | PrimVal prim -> PrimVal prim
-  | FnVal fn -> FnVal fn
-  | ClosureVal (frame, params, ret_ty, body) -> ClosureVal (frame, params, ret_ty, body)
-  | TupVal vals -> TupVal (List.map value_to_value_ctx vals)
-  | ArrayVal vals -> ArrayVal (List.map value_to_value_ctx vals)
-  | PtrVal referent -> PtrVal referent
-
 (* computes the value context for the value bound to phi in sigma *)
 let value_ctx_in (sigma : store) (phi : place_expr) : value_ctx rt =
   let (root, path) = snd phi
   in let rec work (path : expr_path) (v : value) : value_ctx rt =
     match (path, v) with
     | ([], _) -> Hole 0 |> succ
+    | (Deref :: rest_of_path, PtrVal rfrnt) -> failwith "unimplemented: deref of referent"
+    | (Deref :: _, v) -> CannotDeref v |> fail
     | (Index n :: rest_of_path, TupVal vs) ->
       (match List.nth_opt vs n with
-       | None -> failwith "unimplemented"
+       | None -> IndexOutOfBounds (n, v) |> fail
        | Some v ->
          let* ctx = work rest_of_path v
          in let (pre_vs, post_vs) = vs |> List.map value_to_value_ctx |> split_at n
          in let ctx_list = List.concat [pre_vs; [ctx]; List.tl post_vs]
-         in TupVal ctx_list |> succ)
+         in TupValCtx ctx_list |> succ)
     | (Index _ as idx :: _, v) -> CannotProj (idx, v) |> fail
     | (Field _ :: _, _) -> failwith "unimplemented: structs are not currently values"
   in lookup sigma root >>= work path
 
 (* plugs the holes in the value context using the given value *)
 let plug_value_ctx (ctx : value_ctx) (v : value) : value rt =
-  failwith "unimplemented"
+  match v with
+  | SliceVal vals ->
+    let rec plug (ctx : value_ctx) : value rt =
+      match ctx with
+      | Hole n -> List.nth vals n |> succ
+      | DeadCtx -> Dead |> succ
+      | PrimValCtx prim -> PrimVal prim |> succ
+      | ClosureValCtx (frame, params, ret_ty, body) ->
+        ClosureVal (frame, params, ret_ty, body) |> succ
+      | TupValCtx vals ->
+        let* vals = plug_many vals
+        in TupVal vals |> succ
+      | ArrayValCtx vals ->
+        let* vals = plug_many vals
+        in ArrayVal vals |> succ
+    and plug_many (ctxs : value_ctx list) : value list rt =
+      match ctxs with
+      | [] -> [] |> succ
+      | ctx :: ctxs ->
+        let* hd = plug ctx
+        in let* tl = plug_many ctxs
+        in hd :: tl |> succ
+    in plug ctx
+  | _ -> (* single-hole fill, there should only be one! *)
+    let rec plug (ctx : value_ctx) : value rt =
+      match ctx with
+      | Hole _ -> v |> succ
+      | DeadCtx -> Dead |> succ
+      | PrimValCtx prim -> PrimVal prim |> succ
+      | ClosureValCtx (frame, params, ret_ty, body) ->
+        ClosureVal (frame, params, ret_ty, body) |> succ
+      | TupValCtx vals ->
+        let* vals = plug_many vals
+        in TupVal vals |> succ
+      | ArrayValCtx vals ->
+        let* vals = plug_many vals
+        in ArrayVal vals |> succ
+    and plug_many (ctxs : value_ctx list) : value list rt =
+      match ctxs with
+      | [] -> [] |> succ
+      | ctx :: ctxs ->
+        let* hd = plug ctx
+        in let* tl = plug_many ctxs
+        in hd :: tl |> succ
+    in plug ctx
+
 
 (* replace pi's value in sigma with dead *)
 let moved (pi : place) (sigma : store) : store rt =
@@ -302,6 +342,24 @@ let step (globals : global_env) (sigma : store) (e : expr) : (store * expr) rt =
       let cons = (inferred, Seq (e2, e))
       in let alt : expr = (inferred, Prim Unit)
       in (sigma, (inferred, Branch (e1, cons, alt))) |> succ
+    | For (_, (_, Array []), _) -> (sigma, (inferred, Prim Unit)) |> succ
+    | For (x, (loc, Array (e :: es)), body) ->
+      let shiftBody = (inferred, Shift body)
+      in let nextFor = (inferred, For (x, (loc, Array es), body))
+      in let* v = expr_to_value e
+      in (extend sigma x v, (inferred, Seq (shiftBody, nextFor))) |> succ
+    | For (x, (_, Ptr rf), body) ->
+      (let* (_, slice) = eval_referent sigma [Deref] rf
+      in match slice with
+      | SliceVal [] -> (sigma, (inferred, Prim Unit)) |> succ
+      | SliceVal (v :: vs) ->
+        let shiftBody = (inferred, Shift body)
+        in let nextFor = (inferred, For (x, SliceVal vs |> value_to_expr, body))
+        in (extend sigma x v, (inferred, Seq (shiftBody, nextFor))) |> succ
+      | _ -> failwith "not a slice")
+    | For (x, e1, e2) ->
+      let* (sigmaPrime, e1Prime) = step sigma e1
+      in (sigmaPrime, (inferred, For (x, e1Prime, e2))) |> succ
     | Tup exprs ->
       let (already_values, to_be_evaluated) = partition is_value exprs
       in if is_empty to_be_evaluated then
